@@ -473,8 +473,14 @@ export const ordersPaid = mysqlTable(
     priceMinor: int('price_minor').notNull(),
     currency: varchar('currency', { length: 3 }).notNull(),
     paymentReference: varchar('payment_reference', { length: 120 }),
+    fulfillmentStatus: mysqlEnum('fulfillment_status', ['needs_action', 'fulfilled'])
+      .notNull()
+      .default('needs_action'),
+    fulfilledAt: timestamp('fulfilled_at', { mode: 'date' }),
+    fulfilledByDiscordUserId: varchar('fulfilled_by_discord_user_id', { length: 32 }),
     paidAt: timestamp('paid_at', { mode: 'date' }).defaultNow().notNull(),
     createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
   },
   (table) => ({
     orderSessionUnique: uniqueIndex('orders_paid_order_session_uq').on(table.orderSessionId),

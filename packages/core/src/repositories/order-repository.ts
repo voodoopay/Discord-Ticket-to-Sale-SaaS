@@ -27,6 +27,8 @@ export type OrderSessionPointsConfigSnapshot = {
   redeemCategoryKeys: string[];
 };
 
+export type PaidOrderFulfillmentStatus = 'needs_action' | 'fulfilled';
+
 export type OrderSessionRecord = {
   id: string;
   tenantId: string;
@@ -53,6 +55,24 @@ export type OrderSessionRecord = {
   checkoutUrl: string | null;
   checkoutUrlCrypto: string | null;
   checkoutTokenExpiresAt: Date;
+};
+
+export type PaidOrderRecord = {
+  id: string;
+  tenantId: string;
+  guildId: string;
+  orderSessionId: string;
+  wooOrderId: string;
+  status: string;
+  priceMinor: number;
+  currency: string;
+  paymentReference: string | null;
+  fulfillmentStatus: PaidOrderFulfillmentStatus;
+  fulfilledAt: Date | null;
+  fulfilledByDiscordUserId: string | null;
+  paidAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
 };
 
 function mapOrderSessionRow(row: typeof orderSessions.$inferSelect): OrderSessionRecord {
@@ -82,6 +102,26 @@ function mapOrderSessionRow(row: typeof orderSessions.$inferSelect): OrderSessio
     checkoutUrl: row.checkoutUrl,
     checkoutUrlCrypto: row.checkoutUrlCrypto,
     checkoutTokenExpiresAt: row.checkoutTokenExpiresAt,
+  };
+}
+
+function mapPaidOrderRow(row: typeof ordersPaid.$inferSelect): PaidOrderRecord {
+  return {
+    id: row.id,
+    tenantId: row.tenantId,
+    guildId: row.guildId,
+    orderSessionId: row.orderSessionId,
+    wooOrderId: row.wooOrderId,
+    status: row.status,
+    priceMinor: row.priceMinor,
+    currency: row.currency,
+    paymentReference: row.paymentReference ?? null,
+    fulfillmentStatus: row.fulfillmentStatus,
+    fulfilledAt: row.fulfilledAt ?? null,
+    fulfilledByDiscordUserId: row.fulfilledByDiscordUserId ?? null,
+    paidAt: row.paidAt,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
   };
 }
 
@@ -306,10 +346,11 @@ export class OrderRepository {
     priceMinor: number;
     currency: string;
     paymentReference: string | null;
-  }): Promise<boolean> {
+  }): Promise<string | null> {
+    const paidOrderId = ulid();
     try {
       await this.db.insert(ordersPaid).values({
-        id: ulid(),
+        id: paidOrderId,
         tenantId: input.tenantId,
         guildId: input.guildId,
         orderSessionId: input.orderSessionId,
@@ -318,8 +359,9 @@ export class OrderRepository {
         priceMinor: input.priceMinor,
         currency: input.currency,
         paymentReference: input.paymentReference,
+        updatedAt: new Date(),
       });
-      return true;
+      return paidOrderId;
     } catch (error) {
       if (
         typeof error === 'object' &&
@@ -327,11 +369,38 @@ export class OrderRepository {
         'code' in error &&
         (error as { code?: string }).code === 'ER_DUP_ENTRY'
       ) {
-        return false;
+        return null;
       }
 
       throw error;
     }
+  }
+
+  public async getPaidOrderById(paidOrderId: string): Promise<PaidOrderRecord | null> {
+    const row = await this.db.query.ordersPaid.findFirst({
+      where: eq(ordersPaid.id, paidOrderId),
+    });
+
+    if (!row) {
+      return null;
+    }
+
+    return mapPaidOrderRow(row);
+  }
+
+  public async markPaidOrderFulfilled(input: {
+    paidOrderId: string;
+    actorDiscordUserId: string;
+  }): Promise<void> {
+    await this.db
+      .update(ordersPaid)
+      .set({
+        fulfillmentStatus: 'fulfilled',
+        fulfilledAt: new Date(),
+        fulfilledByDiscordUserId: input.actorDiscordUserId,
+        updatedAt: new Date(),
+      })
+      .where(eq(ordersPaid.id, input.paidOrderId));
   }
 
   public async cacheOrderNotes(input: {

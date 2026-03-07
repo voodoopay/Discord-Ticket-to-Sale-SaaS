@@ -3,6 +3,7 @@ import { getEnv, logger } from '@voodoo/core';
 
 import { saleCommand } from './commands/sale.js';
 import { pointsCommand } from './commands/points.js';
+import { handlePaidOrderFulfillment } from './commands/paid-order-fulfillment.js';
 import { handleReferModal, referCommand } from './commands/refer.js';
 import {
   handleSaleAction,
@@ -81,6 +82,11 @@ async function handleInteraction(interaction: Interaction): Promise<void> {
 
     if (interaction.isButton() && interaction.customId === 'sale:cancel') {
       await handleSaleCancel(interaction);
+      return;
+    }
+
+    if (interaction.isButton() && interaction.customId.startsWith('paid-order:fulfillment:')) {
+      await handlePaidOrderFulfillment(interaction);
       return;
     }
   } catch (error) {

@@ -4,6 +4,7 @@ export async function postMessageToDiscordChannel(input: {
   botToken: string;
   channelId: string;
   content: string;
+  components?: Array<Record<string, unknown>>;
   allowedMentions?: {
     parse?: Array<'roles' | 'users' | 'everyone'>;
     users?: string[];
@@ -19,6 +20,7 @@ export async function postMessageToDiscordChannel(input: {
     },
     body: JSON.stringify({
       content: input.content,
+      components: input.components ?? [],
       allowed_mentions: input.allowedMentions ?? {
         parse: [],
       },

@@ -17,6 +17,7 @@ import { maskAnswers } from '../utils/mask.js';
 import { enqueueWebhookTask } from '../workers/webhook-queue.js';
 import { AdminService } from './admin-service.js';
 import { IntegrationService } from './integration-service.js';
+import { buildPaidOrderFulfillmentComponents } from './paid-order-service.js';
 import { calculateEarnFromAppliedDiscounts } from './points-calculator.js';
 import { PointsService } from './points-service.js';
 import { type ReferralRewardResult, ReferralService } from './referral-service.js';
@@ -774,7 +775,7 @@ export class WebhookService {
         ? `Tip Added: +\`${formatMinorAmount(orderSession.tipMinor, paidCurrency)}\``
         : 'Tip Added: (none)';
 
-    const created = await this.orderRepository.createPaidOrder({
+    const paidOrderId = await this.orderRepository.createPaidOrder({
       tenantId: orderSession.tenantId,
       guildId: orderSession.guildId,
       orderSessionId: orderSession.id,
@@ -785,7 +786,7 @@ export class WebhookService {
       paymentReference: order.number ?? null,
     });
 
-    if (!created) {
+    if (!paidOrderId) {
       logger.info(
         {
           provider: 'woocommerce',
@@ -876,6 +877,10 @@ export class WebhookService {
       preferredChannelId: config?.paidLogChannelId ?? null,
       fallbackChannelId: orderSession.ticketChannelId,
       content: message,
+      components: buildPaidOrderFulfillmentComponents({
+        paidOrderId,
+        fulfillmentStatus: 'needs_action',
+      }),
     });
     await this.postTicketPaidConfirmation({
       botTokens: botTokensResult.value,
@@ -1011,7 +1016,7 @@ export class WebhookService {
     const txidHash =
       paymentState.txidIn ?? paymentState.txidOut ?? paymentState.transactionId ?? '(none)';
 
-    const created = await this.orderRepository.createPaidOrder({
+    const paidOrderId = await this.orderRepository.createPaidOrder({
       tenantId: orderSession.tenantId,
       guildId: orderSession.guildId,
       orderSessionId: orderSession.id,
@@ -1022,7 +1027,7 @@ export class WebhookService {
       paymentReference,
     });
 
-    if (!created) {
+    if (!paidOrderId) {
       logger.info(
         {
           provider: 'voodoopay',
@@ -1096,6 +1101,10 @@ export class WebhookService {
       preferredChannelId: config?.paidLogChannelId ?? null,
       fallbackChannelId: orderSession.ticketChannelId,
       content: message,
+      components: buildPaidOrderFulfillmentComponents({
+        paidOrderId,
+        fulfillmentStatus: 'needs_action',
+      }),
     });
     await this.postTicketPaidConfirmation({
       botTokens: botTokensResult.value,
@@ -1371,6 +1380,7 @@ export class WebhookService {
     preferredChannelId: string | null;
     fallbackChannelId: string;
     content: string;
+    components?: Array<Record<string, unknown>>;
   }): Promise<void> {
     const targetChannels = [input.preferredChannelId, input.fallbackChannelId].filter(
       (channelId): channelId is string => Boolean(channelId),
@@ -1396,6 +1406,7 @@ export class WebhookService {
             botToken,
             channelId,
             content: fitDiscordMessage(input.content),
+            components: input.components,
           });
           return;
         } catch (error) {

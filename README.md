@@ -115,7 +115,7 @@ Copy `.env.example` to `.env` and fill values.
 - Woo webhook confirms payment (`processing`/`completed`).
 - Voodoo Pay callback endpoint can also finalize paid orders.
 - API verifies signature, dedupes, retries on failure, fetches Woo order notes.
-- Bot posts paid-order details to configured paid-log channel (sensitive fields masked).
+- Bot posts paid-order details to configured paid-log channel (sensitive fields masked) with a fulfillment button so staff can mark an order handled.
 
 ## Points Command
 
