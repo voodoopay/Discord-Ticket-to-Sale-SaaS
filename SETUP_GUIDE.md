@@ -249,9 +249,9 @@ module.exports = {
   apps: [
     {
       name: 'voodoo-web',
-      cwd: '/var/www/voodoo',
-      script: 'pnpm',
-      args: '--filter @voodoo/web-app start',
+      cwd: '/var/www/voodoo/apps/web-app',
+      script: 'node',
+      args: 'node_modules/next/dist/bin/next start -H 127.0.0.1 -p 3000',
       env: {
         NODE_ENV: 'production',
         PORT: 3000
@@ -283,7 +283,7 @@ module.exports = {
 EOF
 ```
 
-Start both processes:
+Start all processes:
 
 ```bash
 cd /var/www/voodoo
@@ -373,7 +373,8 @@ pnpm deploy:commands
 pnpm deploy:commands:nuke
 pm2 restart voodoo-web
 pm2 restart voodoo-bot
-pm2 restart voodoo-nuke
+pm2 start ecosystem.config.cjs --only voodoo-nuke --update-env
+pm2 save
 ```
 
 ---
@@ -409,7 +410,8 @@ pnpm deploy:commands
 pnpm deploy:commands:nuke
 pm2 restart voodoo-web
 pm2 restart voodoo-bot
-pm2 restart voodoo-nuke
+pm2 start ecosystem.config.cjs --only voodoo-nuke --update-env
+pm2 save
 ```
 
 ---
@@ -446,8 +448,15 @@ Expected:
   - Verify `DISCORD_TOKEN`
   - Check `pm2 logs voodoo-bot`
 
+- Web app keeps restarting and PM2 error log shows `/usr/bin/bash: --filter: invalid option`:
+  - Your PM2 web entry is still using `script: 'pnpm'` with `args: '--filter @voodoo/web-app start'`
+  - Replace it with the `node node_modules/next/dist/bin/next start -H 127.0.0.1 -p 3000` entry shown above
+  - Then run `pm2 delete voodoo-web && pm2 start ecosystem.config.cjs --only voodoo-web --update-env && pm2 save`
+
 - Nuke worker offline:
   - Verify `NUKE_DISCORD_TOKEN`
   - Verify `NUKE_DISCORD_CLIENT_ID`
+  - If PM2 says `Process or Namespace voodoo-nuke not found`, register it first with `pm2 start ecosystem.config.cjs --only voodoo-nuke --update-env`
+  - Run `pm2 save` after it starts successfully
   - Check `pm2 logs voodoo-nuke`
 
