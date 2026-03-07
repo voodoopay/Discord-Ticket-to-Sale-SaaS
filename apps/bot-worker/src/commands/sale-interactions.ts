@@ -27,7 +27,11 @@ import {
   type SaleDraft,
   type SaleDraftFormField,
 } from '../flows/sale-draft-store.js';
-import { buildCheckoutLinkLines, sendCheckoutMessage, startSaleFlowFromButton } from './sale-flow.js';
+import {
+  buildCheckoutLinksEmbed,
+  sendCheckoutMessage,
+  startSaleFlowFromButton,
+} from './sale-flow.js';
 
 const productRepository = new ProductRepository();
 const couponRepository = new CouponRepository();
@@ -86,7 +90,7 @@ type StepButton = {
 };
 type DraftFinalizeInteraction = {
   channel: ModalSubmitInteraction['channel'] | StringSelectMenuInteraction['channel'] | ButtonInteraction['channel'];
-  editReply: (payload: { content: string; components?: any[] }) => Promise<unknown>;
+  editReply: (payload: { content: string; components?: any[]; embeds?: any[] }) => Promise<unknown>;
   inGuild: () => boolean;
 };
 
@@ -398,13 +402,14 @@ async function finalizeDraft(input: {
           `Reason: ${reason}`,
           'Use the checkout link below instead.',
           `Order Session: \`${created.value.orderSessionId}\``,
-          '',
-          ...buildCheckoutLinkLines({
+        ].join('\n'),
+        components: [],
+        embeds: [
+          buildCheckoutLinksEmbed({
             checkoutUrl: created.value.checkoutUrl,
             checkoutOptions: created.value.checkoutOptions,
           }),
-        ].join('\n'),
-        components: [],
+        ],
       });
       return;
     }

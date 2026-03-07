@@ -1,5 +1,6 @@
 import {
   ActionRowBuilder,
+  EmbedBuilder,
   MessageFlags,
   PermissionFlagsBits,
   StringSelectMenuBuilder,
@@ -245,21 +246,15 @@ export async function sendCheckoutMessage(
     );
   }
 
-  const checkoutLinks = buildCheckoutLinkLines({
-    checkoutUrl: input.checkoutUrl,
-    checkoutOptions: input.checkoutOptions,
-  });
-
   await channel.send({
     content: [
       `Sale created for <@${input.customerDiscordUserId}>.`,
       `Order Session: \`${input.orderSessionId}\``,
       'Choose payment method below.',
       '',
-      ...checkoutLinks,
-      '',
       'Payment update will be posted here once paid. This may take up to 30 minutes. Do NOT pay again.',
     ].join('\n'),
+    embeds: [buildCheckoutLinksEmbed({ checkoutUrl: input.checkoutUrl, checkoutOptions: input.checkoutOptions })],
   });
 }
 
@@ -282,5 +277,12 @@ export function buildCheckoutLinkLines(input: {
   }
 
   return checkoutOptions.slice(0, 5).map((option) => `- ${toMaskedLink(option.label, option.url)}`);
+}
+
+export function buildCheckoutLinksEmbed(input: {
+  checkoutUrl: string;
+  checkoutOptions?: SaleCheckoutOption[];
+}): EmbedBuilder {
+  return new EmbedBuilder().setTitle('Payment Options').setDescription(buildCheckoutLinkLines(input).join('\n'));
 }
 
