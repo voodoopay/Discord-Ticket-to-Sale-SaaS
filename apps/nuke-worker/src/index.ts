@@ -4,6 +4,7 @@ import {
   Events,
   GatewayIntentBits,
   MessageFlags,
+  type AutocompleteInteraction,
   type ChatInputCommandInteraction,
   type Interaction,
 } from 'discord.js';
@@ -14,6 +15,7 @@ import { mapNukeError, nukeCommand, startNukeScheduler } from './commands/nuke.j
 type Command = {
   data: { name: string };
   execute: (interaction: ChatInputCommandInteraction) => Promise<void>;
+  autocomplete?: (interaction: AutocompleteInteraction) => Promise<void>;
 };
 
 function resolveNukeWorkerToken(): string {
@@ -54,6 +56,25 @@ async function sendInteractionFailure(interaction: Interaction, message: string)
 }
 
 async function handleInteraction(interaction: Interaction): Promise<void> {
+  if (interaction.isAutocomplete()) {
+    const command = commands.get(interaction.commandName);
+    if (!command?.autocomplete) {
+      await interaction.respond([]);
+      return;
+    }
+
+    try {
+      await command.autocomplete(interaction);
+    } catch (error) {
+      logger.error(
+        { err: error, commandName: interaction.commandName, guildId: interaction.guildId },
+        'nuke-worker autocomplete handler failed',
+      );
+      await interaction.respond([]);
+    }
+    return;
+  }
+
   if (!interaction.isChatInputCommand()) {
     return;
   }

@@ -2,10 +2,12 @@ import {
   ChannelType,
   PermissionFlagsBits,
   SlashCommandBuilder,
+  type AutocompleteInteraction,
   type ChatInputCommandInteraction,
 } from 'discord.js';
-import { AppError, NukeService, TenantRepository } from '@voodoo/core';
+import { AppError, NukeService, TenantRepository, logger } from '@voodoo/core';
 import { deferEphemeralReply, sendEphemeralReply } from '../utils/replies.js';
+import { getTimezoneAutocompleteChoices } from './nuke-timezones.js';
 
 const nukeService = new NukeService();
 const tenantRepository = new TenantRepository();
@@ -65,6 +67,79 @@ function checkInteractionPermissions(interaction: ChatInputCommandInteraction): 
   return { ok: true };
 }
 
+type NukeExecutionResult = {
+  status: 'success' | 'partial' | 'duplicate';
+  oldChannelId: string;
+  newChannelId: string | null;
+  oldChannelDeleted: boolean;
+  message: string;
+};
+
+function buildNukeResultMessage(result: NukeExecutionResult): string {
+  return [
+    result.message,
+    `Old Channel: \`${result.oldChannelId}\``,
+    result.newChannelId ? `New Channel: \`${result.newChannelId}\`` : 'New Channel: (none)',
+  ].join('\n');
+}
+
+async function respondToTimezoneAutocomplete(interaction: AutocompleteInteraction): Promise<void> {
+  const focused = interaction.options.getFocused(true);
+  if (focused.name !== 'timezone') {
+    await interaction.respond([]);
+    return;
+  }
+
+  await interaction.respond(getTimezoneAutocompleteChoices(String(focused.value ?? '')));
+}
+
+async function sendManualNukeCompletionNotice(
+  interaction: ChatInputCommandInteraction,
+  result: NukeExecutionResult,
+): Promise<void> {
+  if (!result.newChannelId) {
+    return;
+  }
+
+  const content = [
+    `<@${interaction.user.id}> ${result.message}`,
+    `Old Channel: \`${result.oldChannelId}\``,
+    `New Channel: <#${result.newChannelId}>`,
+  ].join('\n');
+
+  try {
+    const replacementChannel = await interaction.client.channels.fetch(result.newChannelId);
+    if (replacementChannel?.isTextBased() && 'send' in replacementChannel) {
+      await replacementChannel.send({ content });
+      return;
+    }
+  } catch (error) {
+    logger.warn(
+      {
+        err: error,
+        guildId: interaction.guildId,
+        oldChannelId: result.oldChannelId,
+        newChannelId: result.newChannelId,
+      },
+      'failed to post nuke completion notice in replacement channel',
+    );
+  }
+
+  try {
+    await interaction.user.send(content);
+  } catch (error) {
+    logger.warn(
+      {
+        err: error,
+        userId: interaction.user.id,
+        guildId: interaction.guildId,
+        newChannelId: result.newChannelId,
+      },
+      'failed to DM manual nuke completion notice',
+    );
+  }
+}
+
 export const nukeCommand = {
   data: new SlashCommandBuilder()
     .setName('nuke')
@@ -85,7 +160,8 @@ export const nukeCommand = {
           option
             .setName('timezone')
             .setDescription('IANA timezone (e.g., Europe/Berlin)')
-            .setRequired(true),
+            .setRequired(true)
+            .setAutocomplete(true),
         ),
     )
     .addSubcommand((subcommand) =>
@@ -181,6 +257,11 @@ export const nukeCommand = {
           return;
         }
 
+        await sendEphemeralReply(
+          interaction,
+          'Nuking this channel now. If it succeeds, I will post the result in the replacement channel.',
+        );
+
         const result = await nukeService.runNukeNow({
           tenantId: tenant.tenantId,
           guildId,
@@ -195,16 +276,12 @@ export const nukeCommand = {
           return;
         }
 
-        await sendEphemeralReply(
-          interaction,
-          [
-            result.value.message,
-            `Old Channel: \`${result.value.oldChannelId}\``,
-            result.value.newChannelId
-              ? `New Channel: \`${result.value.newChannelId}\``
-              : 'New Channel: (none)',
-          ].join('\n'),
-        );
+        if (result.value.oldChannelDeleted && result.value.newChannelId) {
+          await sendManualNukeCompletionNotice(interaction, result.value);
+          return;
+        }
+
+        await sendEphemeralReply(interaction, buildNukeResultMessage(result.value));
         return;
       }
 
@@ -212,6 +289,9 @@ export const nukeCommand = {
     } catch (error) {
       await sendEphemeralReply(interaction, mapNukeError(error));
     }
+  },
+  async autocomplete(interaction: AutocompleteInteraction): Promise<void> {
+    await respondToTimezoneAutocomplete(interaction);
   },
 };
 

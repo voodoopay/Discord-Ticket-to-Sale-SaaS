@@ -137,8 +137,10 @@ Copy `.env.example` to `.env` and fill values.
 
 - Runs from separate worker/token (`apps/nuke-worker`).
 - `/nuke schedule time:<HH:mm> timezone:<IANA>` sets daily nuke for the current channel.
+- The timezone field supports autocomplete, with `Europe/London` pinned to the top of the suggestions.
 - `/nuke disable` disables daily nuke for the current channel.
 - `/nuke now confirm:NUKE` clones current channel and deletes original channel immediately.
+- Manual `/nuke now` posts the final result into the replacement channel after a successful delete so the command does not fail when the original channel no longer exists.
 - Runtime permission checks require user `Manage Channels` or `Administrator`.
 - Bot must have `View Channel` + `Manage Channels`.
 

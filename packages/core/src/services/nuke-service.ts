@@ -3,7 +3,7 @@ import { err, ok, type Result } from 'neverthrow';
 import { ulid } from 'ulid';
 
 import { getEnv } from '../config/env.js';
-import { AppError, fromUnknownError } from '../domain/errors.js';
+import { AppError } from '../domain/errors.js';
 import { logger } from '../infra/logger.js';
 import { NukeRepository, type ChannelNukeScheduleRecord } from '../repositories/nuke-repository.js';
 import {
@@ -13,6 +13,7 @@ import {
   parseDailyTimeHhMm,
   resolveLocalDate,
 } from './nuke-schedule.js';
+import { toNukeAppError } from './nuke-discord-errors.js';
 
 type DiscordChannelPayload = {
   id: string;
@@ -92,7 +93,7 @@ export class NukeService {
         enabled: schedule.enabled,
       });
     } catch (error) {
-      return err(fromUnknownError(error));
+      return err(toNukeAppError(error));
     }
   }
 
@@ -111,7 +112,7 @@ export class NukeService {
       });
       return ok({ disabled });
     } catch (error) {
-      return err(fromUnknownError(error));
+      return err(toNukeAppError(error));
     }
   }
 
@@ -155,6 +156,7 @@ export class NukeService {
         status: 'success' | 'partial' | 'duplicate';
         oldChannelId: string;
         newChannelId: string | null;
+        oldChannelDeleted: boolean;
         message: string;
       },
       AppError
@@ -176,7 +178,7 @@ export class NukeService {
 
       return ok(result);
     } catch (error) {
-      return err(fromUnknownError(error));
+      return err(toNukeAppError(error));
     }
   }
 
@@ -242,6 +244,7 @@ export class NukeService {
     status: 'success' | 'partial' | 'duplicate';
     oldChannelId: string;
     newChannelId: string | null;
+    oldChannelDeleted: boolean;
     message: string;
   }> {
     const lockKey = `${input.guildId}:${input.channelId}`;
@@ -257,6 +260,7 @@ export class NukeService {
         status: 'duplicate',
         oldChannelId: input.channelId,
         newChannelId: null,
+        oldChannelDeleted: false,
         message: 'Another nuke run is already in progress for this channel.',
       };
     }
@@ -327,6 +331,7 @@ export class NukeService {
           status: 'duplicate',
           oldChannelId: input.channelId,
           newChannelId: null,
+          oldChannelDeleted: false,
           message: 'Nuke already executed for this idempotency key.',
         };
       }
@@ -367,6 +372,7 @@ export class NukeService {
           status: 'partial',
           oldChannelId: input.channelId,
           newChannelId: clonedChannel.id,
+          oldChannelDeleted: false,
           message:
             'Channel clone succeeded but deleting the original channel failed. Both channels currently exist.',
         };
@@ -390,27 +396,76 @@ export class NukeService {
             })
           : null;
 
-      await this.nukeRepository.finalizeSuccessfulNuke({
-        tenantId: input.tenantId,
-        guildId: input.guildId,
-        oldChannelId: input.channelId,
-        newChannelId: clonedChannel.id,
-        scheduleId: input.schedule?.id ?? null,
-        nextRunAtUtc,
-        lastLocalRunDate: localDate ?? null,
-        updatedByDiscordUserId: input.actorDiscordUserId,
-      });
+      try {
+        await this.nukeRepository.finalizeSuccessfulNuke({
+          tenantId: input.tenantId,
+          guildId: input.guildId,
+          oldChannelId: input.channelId,
+          newChannelId: clonedChannel.id,
+          scheduleId: input.schedule?.id ?? null,
+          nextRunAtUtc,
+          lastLocalRunDate: localDate ?? null,
+          updatedByDiscordUserId: input.actorDiscordUserId,
+        });
 
-      await this.nukeRepository.markRunSuccess({
-        runId,
-        oldChannelId: input.channelId,
-        newChannelId: clonedChannel.id,
-      });
+        await this.nukeRepository.markRunSuccess({
+          runId,
+          oldChannelId: input.channelId,
+          newChannelId: clonedChannel.id,
+        });
+      } catch (error) {
+        logger.error(
+          {
+            err: error,
+            tenantId: input.tenantId,
+            guildId: input.guildId,
+            oldChannelId: input.channelId,
+            newChannelId: clonedChannel.id,
+            runId,
+          },
+          'nuke bookkeeping failed after deleting the original channel',
+        );
+
+        try {
+          await this.nukeRepository.markRunPartial({
+            runId,
+            oldChannelId: input.channelId,
+            newChannelId: clonedChannel.id,
+            errorMessage:
+              error instanceof Error ? error.message : 'Nuke bookkeeping failed after channel deletion',
+          });
+        } catch (markPartialError) {
+          logger.error(
+            {
+              err: markPartialError,
+              runId,
+              oldChannelId: input.channelId,
+              newChannelId: clonedChannel.id,
+            },
+            'failed to mark nuke run partial after bookkeeping error',
+          );
+        }
+
+        await this.handleScheduleFailure({
+          schedule: input.schedule,
+          actorDiscordUserId: input.actorDiscordUserId,
+        });
+
+        return {
+          status: 'partial',
+          oldChannelId: input.channelId,
+          newChannelId: clonedChannel.id,
+          oldChannelDeleted: true,
+          message:
+            'Channel was recreated, but internal bookkeeping failed after deletion. Please check logs before continuing.',
+        };
+      }
 
       return {
         status: 'success',
         oldChannelId: input.channelId,
         newChannelId: clonedChannel.id,
+        oldChannelDeleted: true,
         message: `Channel nuked successfully. New channel: ${clonedChannel.id}`,
       };
     } catch (error) {
