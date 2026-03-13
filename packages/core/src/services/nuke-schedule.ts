@@ -87,7 +87,8 @@ export function computeNextRunAtUtc(input: {
   });
 
   const alreadyRanToday = input.lastLocalRunDate === today.toString();
-  if (alreadyRanToday || Temporal.ZonedDateTime.compare(candidate, zonedNow) <= 0) {
+  const sameLocalMinute = zonedNow.hour === hour && zonedNow.minute === minute;
+  if (alreadyRanToday || (!sameLocalMinute && Temporal.ZonedDateTime.compare(candidate, zonedNow) <= 0)) {
     candidate = buildLocalZonedDateTime({
       timezone,
       plainDate: today.add({ days: 1 }),

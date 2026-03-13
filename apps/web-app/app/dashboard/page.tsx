@@ -62,7 +62,7 @@ import {
   ensurePanelsOpen,
   type CatalogSectionId,
   type DashboardSectionId,
-  togglePanel,
+  toggleExclusivePanel,
 } from '@/lib/dashboard-panels';
 import { cn } from '@/lib/utils';
 
@@ -441,6 +441,16 @@ function compactSummary(...items: Array<string | false | null | undefined>): str
   return items.filter((item): item is string => Boolean(item));
 }
 
+function splitSummaryItems(summaryItems: string[]): {
+  primarySummaryItems: string[];
+  overflowSummaryItems: string[];
+} {
+  return {
+    primarySummaryItems: summaryItems.slice(0, 2),
+    overflowSummaryItems: summaryItems.slice(2),
+  };
+}
+
 type DashboardSectionHeaderProps = {
   action?: ReactNode;
   description: string;
@@ -462,6 +472,8 @@ function DashboardSectionHeader({
   summaryItems,
   title,
 }: DashboardSectionHeaderProps): ReactNode {
+  const { primarySummaryItems, overflowSummaryItems } = splitSummaryItems(summaryItems);
+
   return (
     <CardHeader className="gap-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
@@ -486,10 +498,23 @@ function DashboardSectionHeader({
             </span>
             <CardDescription>{description}</CardDescription>
             <span className="flex flex-wrap gap-2">
-              {summaryItems.map((item) => (
+              {primarySummaryItems.map((item) => (
                 <span
                   key={item}
                   className="rounded-full border border-border/60 bg-background/70 px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
+                >
+                  {item}
+                </span>
+              ))}
+              {overflowSummaryItems.length > 0 ? (
+                <span className="rounded-full border border-border/60 bg-background/70 px-2.5 py-1 text-[11px] font-medium text-muted-foreground sm:hidden">
+                  +{overflowSummaryItems.length} more
+                </span>
+              ) : null}
+              {overflowSummaryItems.map((item) => (
+                <span
+                  key={item}
+                  className="hidden rounded-full border border-border/60 bg-background/70 px-2.5 py-1 text-[11px] font-medium text-muted-foreground sm:inline-flex"
                 >
                   {item}
                 </span>
@@ -530,6 +555,8 @@ function CatalogStepPanel({
   summaryItems,
   title,
 }: CatalogStepPanelProps): ReactNode {
+  const { primarySummaryItems, overflowSummaryItems } = splitSummaryItems(summaryItems);
+
   return (
     <div className="overflow-hidden rounded-2xl border border-border/60 bg-secondary/15">
       <button
@@ -553,10 +580,23 @@ function CatalogStepPanel({
           </span>
           <p className="text-sm text-muted-foreground">{description}</p>
           <span className="flex flex-wrap gap-2">
-            {summaryItems.map((item) => (
+            {primarySummaryItems.map((item) => (
               <span
                 key={item}
                 className="rounded-full border border-border/60 bg-background/70 px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
+              >
+                {item}
+              </span>
+            ))}
+            {overflowSummaryItems.length > 0 ? (
+              <span className="rounded-full border border-border/60 bg-background/70 px-2.5 py-1 text-[11px] font-medium text-muted-foreground sm:hidden">
+                +{overflowSummaryItems.length} more
+              </span>
+            ) : null}
+            {overflowSummaryItems.map((item) => (
+              <span
+                key={item}
+                className="hidden rounded-full border border-border/60 bg-background/70 px-2.5 py-1 text-[11px] font-medium text-muted-foreground sm:inline-flex"
               >
                 {item}
               </span>
@@ -905,7 +945,7 @@ export default function DashboardPage() {
   );
 
   const toggleDashboardSection = useCallback((sectionId: DashboardSectionId) => {
-    setOpenDashboardSections((current) => togglePanel(current, sectionId));
+    setOpenDashboardSections((current) => toggleExclusivePanel(current, sectionId));
   }, []);
 
   const focusDashboardSection = useCallback((sectionId: DashboardSectionId) => {
@@ -913,7 +953,7 @@ export default function DashboardPage() {
   }, []);
 
   const toggleCatalogSection = useCallback((sectionId: CatalogSectionId) => {
-    setOpenCatalogSections((current) => togglePanel(current, sectionId));
+    setOpenCatalogSections((current) => toggleExclusivePanel(current, sectionId));
   }, []);
 
   const focusCatalogSection = useCallback(
@@ -1940,22 +1980,33 @@ export default function DashboardPage() {
       <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(45rem_30rem_at_10%_-10%,rgba(56,189,248,0.25),transparent),radial-gradient(40rem_30rem_at_90%_0%,rgba(20,184,166,0.2),transparent),radial-gradient(35rem_30rem_at_50%_120%,rgba(249,115,22,0.16),transparent)]" />
 
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
-        <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <header className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
           <div className="space-y-4" data-tutorial="dashboard-title">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-              <div className="inline-flex w-fit items-center rounded-[1.25rem] border border-border/60 bg-card/80 px-4 py-3 shadow-lg shadow-black/5 backdrop-blur">
-                <Image
-                  src={lightModeLogo}
-                  alt="Dashboard logo"
-                  priority
-                  className="h-7 w-auto dark:hidden"
-                />
-                <Image
-                  src={darkModeLogo}
-                  alt="Dashboard logo"
-                  priority
-                  className="hidden h-7 w-auto dark:block"
-                />
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-5">
+              <div className="flex flex-col gap-3">
+                <div className="inline-flex w-fit items-center rounded-[1.5rem] border border-border/60 bg-card/80 px-5 py-4 shadow-lg shadow-black/5 backdrop-blur">
+                  <Image
+                    src={lightModeLogo}
+                    alt="Dashboard logo"
+                    priority
+                    className="h-10 w-auto dark:hidden sm:h-12"
+                  />
+                  <Image
+                    src={darkModeLogo}
+                    alt="Dashboard logo"
+                    priority
+                    className="hidden h-10 w-auto dark:block sm:h-12"
+                  />
+                </div>
+                <a
+                  href="https://voodoopay.online/"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex min-h-11 w-fit items-center gap-2 rounded-full border border-border/60 bg-card/80 px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <Globe className="size-4" />
+                  Visit main website
+                </a>
               </div>
               <Badge
                 variant="secondary"
@@ -1969,25 +2020,28 @@ export default function DashboardPage() {
                 Ticket Commerce Control Center
               </h1>
               <p className="max-w-3xl text-sm text-muted-foreground sm:text-base">
-                Open only the section you need, work top to bottom, and keep merchant setup focused
-                without bouncing across a crowded page.
+                Open one section at a time, move top to bottom, and keep merchant setup focused
+                without bouncing around a crowded page.
               </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
             <Button
               type="button"
               variant="outline"
+              className="min-h-11 w-full sm:w-auto"
               data-tutorial="run-tutorial-button"
               onClick={() => runDashboardTutorial({ markSeen: true })}
             >
               Run Tutorial
             </Button>
-            <Badge variant={isSuperAdmin ? 'default' : 'outline'} className="px-3 py-1">
-              {isSuperAdmin ? 'Super Admin Session' : 'Tenant Session'}
-            </Badge>
-            <ModeToggle />
+            <div className="flex items-center justify-between gap-2 sm:justify-end">
+              <Badge variant={isSuperAdmin ? 'default' : 'outline'} className="px-3 py-1">
+                {isSuperAdmin ? 'Super Admin Session' : 'Tenant Session'}
+              </Badge>
+              <ModeToggle />
+            </div>
           </div>
         </header>
 

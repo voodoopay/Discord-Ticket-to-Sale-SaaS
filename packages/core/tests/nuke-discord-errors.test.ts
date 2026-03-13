@@ -24,4 +24,22 @@ describe('toNukeAppError', () => {
     expect(error.code).toBe('NUKE_DISCORD_TARGET_MISSING');
     expect(error.statusCode).toBe(404);
   });
+
+  it('keeps Discord 5xx failures actionable for the worker', () => {
+    const error = toNukeAppError(
+      new Error('Discord API POST /guilds/123/channels failed (500): {"message":"Server Error"}'),
+    );
+
+    expect(error.code).toBe('NUKE_DISCORD_API_ERROR');
+    expect(error.statusCode).toBe(500);
+    expect(error.message).toContain('Discord rejected the nuke request');
+  });
+
+  it('maps Discord network failures to a specific worker error', () => {
+    const error = toNukeAppError(new Error('fetch failed'));
+
+    expect(error).toBeInstanceOf(AppError);
+    expect(error.code).toBe('NUKE_DISCORD_NETWORK_ERROR');
+    expect(error.statusCode).toBe(503);
+  });
 });

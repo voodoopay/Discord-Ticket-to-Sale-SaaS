@@ -29,6 +29,17 @@ export function togglePanel<TPanel extends string>(
   return [...current, panel];
 }
 
+export function toggleExclusivePanel<TPanel extends string>(
+  current: readonly TPanel[],
+  panel: TPanel,
+): TPanel[] {
+  if (current.includes(panel)) {
+    return [];
+  }
+
+  return [panel];
+}
+
 export function ensurePanelOpen<TPanel extends string>(
   current: readonly TPanel[],
   panel: TPanel,

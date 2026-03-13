@@ -40,6 +40,17 @@ describe('nuke schedule helpers', () => {
     expect(next.toISOString()).toBe('2026-03-05T21:15:00.000Z');
   });
 
+  it('keeps the current day when the schedule is created during the target minute', () => {
+    const now = new Date('2026-03-13T20:25:30.000Z');
+    const next = computeNextRunAtUtc({
+      timezone: 'Europe/London',
+      timeHhMm: '20:25',
+      now,
+    });
+
+    expect(next.toISOString()).toBe('2026-03-13T20:25:00.000Z');
+  });
+
   it('computes next run next day when already ran today', () => {
     const now = new Date('2026-03-04T09:00:00.000Z');
     const next = computeNextRunAtUtc({

@@ -122,14 +122,9 @@ export class NukeService {
     }
 
     const pollIntervalMs = Math.max(5_000, Math.floor(input.pollIntervalMs));
+    this.queueSchedulerTick();
     this.schedulerTimer = setInterval(() => {
-      if (this.schedulerTickInFlight) {
-        return;
-      }
-      this.schedulerTickInFlight = true;
-      void this.runDueSchedules().finally(() => {
-        this.schedulerTickInFlight = false;
-      });
+      this.queueSchedulerTick();
     }, pollIntervalMs);
     this.schedulerTimer.unref?.();
   }
@@ -141,6 +136,17 @@ export class NukeService {
     clearInterval(this.schedulerTimer);
     this.schedulerTimer = null;
     this.schedulerTickInFlight = false;
+  }
+
+  private queueSchedulerTick(): void {
+    if (this.schedulerTickInFlight) {
+      return;
+    }
+
+    this.schedulerTickInFlight = true;
+    void this.runDueSchedules().finally(() => {
+      this.schedulerTickInFlight = false;
+    });
   }
 
   public async runNukeNow(input: {
@@ -535,22 +541,46 @@ export class NukeService {
   }
 
   private async cloneChannel(source: DiscordChannelPayload): Promise<DiscordChannelPayload> {
-    const payload = {
-      name: source.name,
-      type: source.type,
-      topic: source.topic ?? undefined,
-      parent_id: source.parent_id ?? undefined,
-      nsfw: source.nsfw ?? undefined,
-      rate_limit_per_user: source.rate_limit_per_user ?? undefined,
-      position: source.position ?? undefined,
-      permission_overwrites: source.permission_overwrites ?? undefined,
-    };
+    const request = (includePosition: boolean) =>
+      this.discordRequest<DiscordChannelPayload>({
+        method: 'POST',
+        path: `/guilds/${source.guild_id}/channels`,
+        body: {
+          name: source.name,
+          type: source.type,
+          topic: source.topic ?? undefined,
+          parent_id: source.parent_id ?? undefined,
+          nsfw: source.nsfw ?? undefined,
+          rate_limit_per_user: source.rate_limit_per_user ?? undefined,
+          position: includePosition ? source.position ?? undefined : undefined,
+          permission_overwrites: source.permission_overwrites ?? undefined,
+        },
+      });
 
-    return this.discordRequest<DiscordChannelPayload>({
-      method: 'POST',
-      path: `/guilds/${source.guild_id}/channels`,
-      body: payload,
-    });
+    try {
+      return await request(true);
+    } catch (error) {
+      const canRetryWithoutPosition =
+        source.position != null &&
+        error instanceof Error &&
+        /^Discord API POST \/guilds\/.+\/channels failed \((?:400|500)\)/u.test(error.message);
+
+      if (!canRetryWithoutPosition) {
+        throw error;
+      }
+
+      logger.warn(
+        {
+          guildId: source.guild_id,
+          sourceChannelId: source.id,
+          sourceChannelPosition: source.position,
+          errorMessage: error.message,
+        },
+        'retrying nuke channel clone without explicit position',
+      );
+
+      return request(false);
+    }
   }
 
   private async deleteChannel(channelId: string): Promise<void> {
@@ -585,10 +615,11 @@ export class NukeService {
     body?: unknown;
   }): Promise<T> {
     const token = this.getNukeBotToken();
+    const apiBaseUrl = this.env.DISCORD_API_BASE_URL.replace(/\/+$/u, '');
 
     return pRetry(
       async () => {
-        const response = await fetch(`https://discord.com/api/v10${input.path}`, {
+        const response = await fetch(`${apiBaseUrl}${input.path}`, {
           method: input.method,
           headers: {
             Authorization: `Bot ${token}`,

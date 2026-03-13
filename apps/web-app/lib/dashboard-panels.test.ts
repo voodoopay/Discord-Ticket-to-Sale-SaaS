@@ -7,6 +7,7 @@ import {
   DEFAULT_OPEN_DASHBOARD_SECTIONS,
   ensurePanelOpen,
   ensurePanelsOpen,
+  toggleExclusivePanel,
   togglePanel,
 } from './dashboard-panels';
 
@@ -37,6 +38,16 @@ describe('togglePanel', () => {
 
   it('removes an open panel', () => {
     expect(togglePanel(['workspace', 'sales'], 'sales')).toEqual(['workspace']);
+  });
+});
+
+describe('toggleExclusivePanel', () => {
+  it('replaces the open list with the selected panel', () => {
+    expect(toggleExclusivePanel(['workspace', 'sales'], 'catalog')).toEqual(['catalog']);
+  });
+
+  it('collapses the panel when it is already open', () => {
+    expect(toggleExclusivePanel(['workspace'], 'workspace')).toEqual([]);
   });
 });
 

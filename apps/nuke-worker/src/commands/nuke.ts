@@ -299,8 +299,18 @@ export function startNukeScheduler(client: unknown, pollIntervalMs: number): voi
   nukeService.startSchedulerLoop(client, { pollIntervalMs });
 }
 
+const ACTIONABLE_INTERNAL_NUKE_CODES = new Set([
+  'NUKE_BOT_TOKEN_MISSING',
+  'NUKE_DISCORD_API_ERROR',
+  'NUKE_DISCORD_NETWORK_ERROR',
+]);
+
 export function mapNukeError(error: unknown): string {
   if (error instanceof AppError) {
+    if (ACTIONABLE_INTERNAL_NUKE_CODES.has(error.code)) {
+      return error.message;
+    }
+
     if (error.statusCode >= 500) {
       return 'Nuke command failed due to an internal worker error. Please try again and check logs.';
     }
