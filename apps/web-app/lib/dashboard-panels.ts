@@ -51,6 +51,10 @@ export function ensurePanelOpen<TPanel extends string>(
   return [...current, panel];
 }
 
+export function focusPanel<TPanel extends string>(panel: TPanel): TPanel[] {
+  return [panel];
+}
+
 export function ensurePanelsOpen<TPanel extends string>(
   current: readonly TPanel[],
   panels: readonly TPanel[],

@@ -7,6 +7,7 @@ import {
   DEFAULT_OPEN_DASHBOARD_SECTIONS,
   ensurePanelOpen,
   ensurePanelsOpen,
+  focusPanel,
   toggleExclusivePanel,
   togglePanel,
 } from './dashboard-panels';
@@ -74,5 +75,11 @@ describe('ensurePanelsOpen', () => {
     expect(
       ensurePanelsOpen(['payments', 'workspace'], ['workspace', 'catalog', 'coupons']),
     ).toEqual(['payments', 'workspace', 'catalog', 'coupons']);
+  });
+});
+
+describe('focusPanel', () => {
+  it('focuses a single panel and closes the rest', () => {
+    expect(focusPanel('catalog')).toEqual(['catalog']);
   });
 });

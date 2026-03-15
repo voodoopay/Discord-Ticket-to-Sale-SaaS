@@ -27,6 +27,8 @@ export type ChannelNukeScheduleRecord = {
   updatedAt: Date;
 };
 
+const LOCK_LEASE_TIMESTAMP_TOLERANCE_MS = 999;
+
 function mapScheduleRow(row: typeof channelNukeSchedules.$inferSelect): ChannelNukeScheduleRecord {
   return {
     id: row.id,
@@ -44,6 +46,32 @@ function mapScheduleRow(row: typeof channelNukeSchedules.$inferSelect): ChannelN
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
+}
+
+function hasMatchingActiveLockLease(input: {
+  ownerId: string;
+  requestedLeaseUntil: Date;
+  now: Date;
+  refreshed:
+    | {
+        ownerId: string;
+        leaseUntil: Date;
+      }
+    | undefined
+    | null;
+}): boolean {
+  if (!input.refreshed || input.refreshed.ownerId !== input.ownerId) {
+    return false;
+  }
+
+  const refreshedLeaseUntilMs = input.refreshed.leaseUntil.getTime();
+  if (refreshedLeaseUntilMs <= input.now.getTime()) {
+    return false;
+  }
+
+  // MySQL TIMESTAMP columns default to second precision, so a successful write can
+  // read back up to 999 ms earlier than the JavaScript Date we originally sent.
+  return refreshedLeaseUntilMs >= input.requestedLeaseUntil.getTime() - LOCK_LEASE_TIMESTAMP_TOLERANCE_MS;
 }
 
 export class NukeRepository {
@@ -212,11 +240,13 @@ export class NukeRepository {
     const refreshed = await this.db.query.channelNukeLocks.findFirst({
       where: eq(channelNukeLocks.lockKey, input.lockKey),
     });
-    if (!refreshed) {
-      return false;
-    }
 
-    return refreshed.ownerId === input.ownerId && refreshed.leaseUntil.getTime() >= input.leaseUntil.getTime();
+    return hasMatchingActiveLockLease({
+      ownerId: input.ownerId,
+      requestedLeaseUntil: input.leaseUntil,
+      now,
+      refreshed,
+    });
   }
 
   public async releaseLock(input: {
@@ -246,11 +276,13 @@ export class NukeRepository {
     const refreshed = await this.db.query.channelNukeLocks.findFirst({
       where: eq(channelNukeLocks.lockKey, input.lockKey),
     });
-    if (!refreshed) {
-      return false;
-    }
 
-    return refreshed.ownerId === input.ownerId && refreshed.leaseUntil.getTime() >= input.leaseUntil.getTime();
+    return hasMatchingActiveLockLease({
+      ownerId: input.ownerId,
+      requestedLeaseUntil: input.leaseUntil,
+      now,
+      refreshed,
+    });
   }
 
   public async createRun(input: {

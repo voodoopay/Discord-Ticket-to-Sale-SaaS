@@ -427,6 +427,7 @@ Expected:
 - Both PM2 apps are `online`
 - Domain responds with HTTP success code
 - `/dashboard` opens in browser
+- Dashboard shows the mobile-first setup flow strip and compact current-context card
 - Dashboard sections expand/collapse correctly and the catalog builder shows the four guided steps
 
 ---
@@ -460,4 +461,9 @@ Expected:
   - If PM2 says `Process or Namespace voodoo-nuke not found`, register it first with `pm2 start ecosystem.config.cjs --only voodoo-nuke --update-env`
   - Run `pm2 save` after it starts successfully
   - Check `pm2 logs voodoo-nuke`
+
+- Nuke worker logs `Nuke lock could not be renewed.` on every scheduled/manual run:
+  - Pull the latest code and redeploy the worker build
+  - Restart `voodoo-nuke`
+  - This symptom was caused by MySQL timestamp precision truncating the stored lock lease
 

@@ -70,6 +70,7 @@ Copy `.env.example` to `.env` and fill values.
 - Dashboard header now supports branded light/dark logos from the repo `assets` folder.
 - Dashboard header now includes a direct link to `https://voodoopay.online/` and uses a larger branded logo treatment.
 - Dashboard navigation now keeps regular merchant work in a one-section-at-a-time flow so mobile setup feels less crowded.
+- Dashboard now opens with a mobile-first setup flow strip and compact current-context card so merchants can jump straight to Workspace, Sales, Payments, Coupons, or Catalog without scanning the whole page.
 - Dashboard navigation now uses collapsible section cards, and catalog management uses four guided step panels so merchants can review products, manage category questions, edit product details, and handle variations without keeping the full builder open at once.
 - Server settings now include a `tip enabled` toggle (ask customer for optional GBP tip before checkout link generation).
 - Server settings now include rewards configuration:
@@ -147,6 +148,7 @@ Copy `.env.example` to `.env` and fill values.
 - `/nuke now confirm:NUKE` clones current channel and deletes original channel immediately.
 - Manual `/nuke now` posts the final result into the replacement channel after a successful delete so the command does not fail when the original channel no longer exists.
 - The nuke worker now polls due schedules immediately on startup and retries channel creation without an explicit `position` if Discord rejects the first clone request.
+- Nuke lock renewal now tolerates MySQL second-level timestamp precision so scheduled and manual nukes do not fail with `Nuke lock could not be renewed.` on otherwise healthy setups.
 - Runtime permission checks require user `Manage Channels` or `Administrator`.
 - Bot must have `View Channel` + `Manage Channels`.
 

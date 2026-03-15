@@ -58,8 +58,8 @@ import {
   DASHBOARD_SECTION_IDS,
   DEFAULT_OPEN_CATALOG_SECTIONS,
   DEFAULT_OPEN_DASHBOARD_SECTIONS,
-  ensurePanelOpen,
   ensurePanelsOpen,
+  focusPanel,
   type CatalogSectionId,
   type DashboardSectionId,
   toggleExclusivePanel,
@@ -441,14 +441,8 @@ function compactSummary(...items: Array<string | false | null | undefined>): str
   return items.filter((item): item is string => Boolean(item));
 }
 
-function splitSummaryItems(summaryItems: string[]): {
-  primarySummaryItems: string[];
-  overflowSummaryItems: string[];
-} {
-  return {
-    primarySummaryItems: summaryItems.slice(0, 2),
-    overflowSummaryItems: summaryItems.slice(2),
-  };
+function buildSummaryPreview(summaryItems: string[], maxItems = 3): string {
+  return summaryItems.slice(0, maxItems).join(' • ');
 }
 
 type DashboardSectionHeaderProps = {
@@ -458,6 +452,7 @@ type DashboardSectionHeaderProps = {
   isOpen: boolean;
   onToggle: (sectionId: DashboardSectionId) => void;
   sectionId: DashboardSectionId;
+  stepLabel?: string;
   summaryItems: string[];
   title: string;
 };
@@ -469,66 +464,47 @@ function DashboardSectionHeader({
   isOpen,
   onToggle,
   sectionId,
+  stepLabel,
   summaryItems,
   title,
 }: DashboardSectionHeaderProps): ReactNode {
-  const { primarySummaryItems, overflowSummaryItems } = splitSummaryItems(summaryItems);
+  const summaryPreview = buildSummaryPreview(summaryItems);
 
   return (
-    <CardHeader className="gap-4">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
+    <CardHeader className="p-4 sm:p-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
         <button
           type="button"
-          className="group flex w-full flex-1 items-start gap-4 rounded-2xl border border-border/60 bg-secondary/20 p-4 text-left transition-colors hover:bg-secondary/35"
+          className="group flex w-full flex-1 items-start gap-3 rounded-[1.5rem] border border-border/60 bg-secondary/15 p-4 text-left transition-colors hover:border-primary/30 hover:bg-secondary/25"
           onClick={() => onToggle(sectionId)}
           aria-expanded={isOpen}
         >
-          <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-border/60 bg-background/80 shadow-sm">
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-[1.25rem] border border-border/60 bg-background/85 shadow-sm">
             <Icon className="size-4 text-primary" />
           </span>
-          <span className="min-w-0 flex-1 space-y-3">
+          <span className="min-w-0 flex-1">
             <span className="flex flex-wrap items-center gap-2">
-              <CardTitle className="text-lg">{title}</CardTitle>
-              <Badge
-                variant={isOpen ? 'default' : 'outline'}
-                className="rounded-full px-2.5 py-0.5 text-[11px]"
-              >
-                {isOpen ? 'Open' : 'Closed'}
-              </Badge>
-            </span>
-            <CardDescription>{description}</CardDescription>
-            <span className="flex flex-wrap gap-2">
-              {primarySummaryItems.map((item) => (
-                <span
-                  key={item}
-                  className="rounded-full border border-border/60 bg-background/70 px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
-                >
-                  {item}
-                </span>
-              ))}
-              {overflowSummaryItems.length > 0 ? (
-                <span className="rounded-full border border-border/60 bg-background/70 px-2.5 py-1 text-[11px] font-medium text-muted-foreground sm:hidden">
-                  +{overflowSummaryItems.length} more
+              {stepLabel ? (
+                <span className="inline-flex items-center rounded-full border border-border/60 bg-background/80 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  Step {stepLabel}
                 </span>
               ) : null}
-              {overflowSummaryItems.map((item) => (
-                <span
-                  key={item}
-                  className="hidden rounded-full border border-border/60 bg-background/70 px-2.5 py-1 text-[11px] font-medium text-muted-foreground sm:inline-flex"
-                >
-                  {item}
-                </span>
-              ))}
+              <CardTitle className="text-base sm:text-lg">{title}</CardTitle>
             </span>
+            <CardDescription className="mt-1.5 text-sm leading-6">{description}</CardDescription>
+            {summaryPreview ? (
+              <span className="mt-2 block text-xs font-medium text-muted-foreground">
+                {summaryPreview}
+              </span>
+            ) : null}
           </span>
-          <span className="inline-flex shrink-0 items-center gap-2 rounded-full border border-border/60 bg-background/70 px-3 py-1 text-xs font-medium text-muted-foreground">
-            {isOpen ? 'Hide' : 'Open'}
+          <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background/75 text-muted-foreground">
             <ChevronDown
               className={cn('size-4 transition-transform duration-200', isOpen ? 'rotate-180' : '')}
             />
           </span>
         </button>
-        {action ? <div className="flex items-center justify-end lg:pt-2">{action}</div> : null}
+        {action ? <div className="flex justify-end sm:self-start">{action}</div> : null}
       </div>
     </CardHeader>
   );
@@ -555,63 +531,88 @@ function CatalogStepPanel({
   summaryItems,
   title,
 }: CatalogStepPanelProps): ReactNode {
-  const { primarySummaryItems, overflowSummaryItems } = splitSummaryItems(summaryItems);
+  const summaryPreview = buildSummaryPreview(summaryItems);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border/60 bg-secondary/15">
+    <div className="overflow-hidden rounded-[1.5rem] border border-border/60 bg-secondary/15">
       <button
         type="button"
-        className="flex w-full items-start gap-4 px-4 py-4 text-left transition-colors hover:bg-secondary/25"
+        className="flex w-full items-start gap-3 px-4 py-4 text-left transition-colors hover:bg-secondary/25"
         onClick={() => onToggle(sectionId)}
         aria-expanded={isOpen}
       >
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl border border-border/60 bg-background/80 text-xs font-semibold text-primary shadow-sm">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-[1.15rem] border border-border/60 bg-background/85 text-xs font-semibold text-primary shadow-sm">
           {stepLabel}
         </span>
-        <span className="min-w-0 flex-1 space-y-2">
-          <span className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-semibold text-foreground">{title}</span>
-            <Badge
-              variant={isOpen ? 'secondary' : 'outline'}
-              className="rounded-full px-2.5 py-0.5 text-[11px]"
-            >
-              {isOpen ? 'Expanded' : 'Collapsed'}
-            </Badge>
-          </span>
-          <p className="text-sm text-muted-foreground">{description}</p>
-          <span className="flex flex-wrap gap-2">
-            {primarySummaryItems.map((item) => (
-              <span
-                key={item}
-                className="rounded-full border border-border/60 bg-background/70 px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
-              >
-                {item}
-              </span>
-            ))}
-            {overflowSummaryItems.length > 0 ? (
-              <span className="rounded-full border border-border/60 bg-background/70 px-2.5 py-1 text-[11px] font-medium text-muted-foreground sm:hidden">
-                +{overflowSummaryItems.length} more
-              </span>
-            ) : null}
-            {overflowSummaryItems.map((item) => (
-              <span
-                key={item}
-                className="hidden rounded-full border border-border/60 bg-background/70 px-2.5 py-1 text-[11px] font-medium text-muted-foreground sm:inline-flex"
-              >
-                {item}
-              </span>
-            ))}
-          </span>
+        <span className="min-w-0 flex-1">
+          <span className="text-sm font-semibold text-foreground">{title}</span>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>
+          {summaryPreview ? (
+            <span className="mt-2 block text-xs font-medium text-muted-foreground">
+              {summaryPreview}
+            </span>
+          ) : null}
         </span>
-        <ChevronDown
-          className={cn(
-            'mt-1 size-4 shrink-0 text-muted-foreground transition-transform',
-            isOpen ? 'rotate-180' : '',
-          )}
-        />
+        <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background/75 text-muted-foreground">
+          <ChevronDown
+            className={cn('size-4 transition-transform', isOpen ? 'rotate-180' : '')}
+          />
+        </span>
       </button>
       {isOpen ? <div className="border-t border-border/60 px-4 py-4">{children}</div> : null}
     </div>
+  );
+}
+
+type DashboardQuickStepProps = {
+  active: boolean;
+  onClick: () => void;
+  stateLabel: string;
+  stateTone: 'neutral' | 'ready';
+  stepLabel: string;
+  summary: string;
+  title: string;
+};
+
+function DashboardQuickStepButton({
+  active,
+  onClick,
+  stateLabel,
+  stateTone,
+  stepLabel,
+  summary,
+  title,
+}: DashboardQuickStepProps): ReactNode {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        'min-w-[15rem] snap-start rounded-[1.5rem] border p-4 text-left transition duration-150 md:min-w-0',
+        active
+          ? 'border-primary/45 bg-background/95 shadow-lg shadow-primary/10'
+          : 'border-border/60 bg-card/75 hover:border-primary/30 hover:bg-background/90',
+      )}
+    >
+      <span className="flex items-start justify-between gap-3">
+        <span className="inline-flex size-9 items-center justify-center rounded-full border border-border/60 bg-secondary/40 text-xs font-semibold text-primary">
+          {stepLabel}
+        </span>
+        <span
+          className={cn(
+            'inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold',
+            stateTone === 'ready'
+              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200'
+              : 'border-border/60 bg-background/75 text-muted-foreground',
+          )}
+        >
+          {stateLabel}
+        </span>
+      </span>
+      <span className="mt-3 block text-sm font-semibold text-foreground">{title}</span>
+      <span className="mt-2 block text-xs leading-5 text-muted-foreground">{summary}</span>
+    </button>
   );
 }
 
@@ -943,13 +944,89 @@ export default function DashboardPage() {
     editingVariantIndex !== null ? 'Editing one price option' : 'Ready for a new price option',
     editingProductId ? 'Save updates when pricing is ready' : 'Finish here to create the product',
   );
+  const primaryDashboardSteps = [
+    {
+      sectionId: 'workspace' as const,
+      stepLabel: '01',
+      title: 'Workspace',
+      summary: buildSummaryPreview(workspaceSummaryItems, 2),
+      stateLabel: serverReady ? 'Ready' : tenantId && guildId ? 'Invite bot' : 'Start here',
+      stateTone: serverReady ? ('ready' as const) : ('neutral' as const),
+    },
+    {
+      sectionId: 'sales' as const,
+      stepLabel: '02',
+      title: 'Sales',
+      summary: buildSummaryPreview(salesSummaryItems, 2),
+      stateLabel:
+        paidLogChannelId || selectedStaffRoleIds.length > 0 ? 'Configured' : 'Add settings',
+      stateTone:
+        paidLogChannelId || selectedStaffRoleIds.length > 0
+          ? ('ready' as const)
+          : ('neutral' as const),
+    },
+    {
+      sectionId: 'payments' as const,
+      stepLabel: '03',
+      title: 'Payments',
+      summary: buildSummaryPreview(paymentSummaryItems, 2),
+      stateLabel:
+        normalizedCheckoutDomain && voodooMerchantWalletAddress.trim()
+          ? 'Configured'
+          : 'Add payment data',
+      stateTone:
+        normalizedCheckoutDomain && voodooMerchantWalletAddress.trim()
+          ? ('ready' as const)
+          : ('neutral' as const),
+    },
+    {
+      sectionId: 'coupons' as const,
+      stepLabel: '04',
+      title: 'Coupons',
+      summary: buildSummaryPreview(couponSummaryItems, 2),
+      stateLabel:
+        coupons.length > 0 ? 'Configured' : couponCodeInput.trim() ? 'Draft open' : 'Optional',
+      stateTone: coupons.length > 0 ? ('ready' as const) : ('neutral' as const),
+    },
+    {
+      sectionId: 'catalog' as const,
+      stepLabel: '05',
+      title: 'Catalog',
+      summary: buildSummaryPreview(catalogSummaryItems, 2),
+      stateLabel:
+        products.length > 0
+          ? 'Live'
+          : productName.trim() || variants.length > 0
+            ? 'Draft open'
+            : 'Build now',
+      stateTone: products.length > 0 ? ('ready' as const) : ('neutral' as const),
+    },
+  ];
+  const contextStatusTitle = state.loading
+    ? 'Saving changes'
+    : state.error
+      ? 'Action needs attention'
+      : state.response
+        ? 'Last action succeeded'
+        : serverReady
+          ? 'Server is ready'
+          : tenantId && guildId
+            ? 'Install the bot to continue'
+            : 'Pick a workspace and server';
+  const contextStatusDetail = state.loading
+    ? 'Waiting for the latest API response.'
+    : state.error
+      ? state.error
+      : state.response
+        ? 'Open Latest Action if you want to review the full response again.'
+        : buildSummaryPreview(workspaceSummaryItems);
 
   const toggleDashboardSection = useCallback((sectionId: DashboardSectionId) => {
     setOpenDashboardSections((current) => toggleExclusivePanel(current, sectionId));
   }, []);
 
   const focusDashboardSection = useCallback((sectionId: DashboardSectionId) => {
-    setOpenDashboardSections((current) => ensurePanelOpen(current, sectionId));
+    setOpenDashboardSections(focusPanel(sectionId));
   }, []);
 
   const toggleCatalogSection = useCallback((sectionId: CatalogSectionId) => {
@@ -959,7 +1036,7 @@ export default function DashboardPage() {
   const focusCatalogSection = useCallback(
     (sectionId: CatalogSectionId) => {
       focusDashboardSection('catalog');
-      setOpenCatalogSections((current) => ensurePanelOpen(current, sectionId));
+      setOpenCatalogSections(focusPanel(sectionId));
     },
     [focusDashboardSection],
   );
@@ -1979,71 +2056,165 @@ export default function DashboardPage() {
       ) : null}
       <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(45rem_30rem_at_10%_-10%,rgba(56,189,248,0.25),transparent),radial-gradient(40rem_30rem_at_90%_0%,rgba(20,184,166,0.2),transparent),radial-gradient(35rem_30rem_at_50%_120%,rgba(249,115,22,0.16),transparent)]" />
 
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
-        <header className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
-          <div className="space-y-4" data-tutorial="dashboard-title">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-5">
-              <div className="flex flex-col gap-3">
-                <div className="inline-flex w-fit items-center rounded-[1.5rem] border border-border/60 bg-card/80 px-5 py-4 shadow-lg shadow-black/5 backdrop-blur">
-                  <Image
-                    src={lightModeLogo}
-                    alt="Dashboard logo"
-                    priority
-                    className="h-10 w-auto dark:hidden sm:h-12"
-                  />
-                  <Image
-                    src={darkModeLogo}
-                    alt="Dashboard logo"
-                    priority
-                    className="hidden h-10 w-auto dark:block sm:h-12"
-                  />
-                </div>
-                <a
-                  href="https://voodoopay.online/"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex min-h-11 w-fit items-center gap-2 rounded-full border border-border/60 bg-card/80 px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  <Globe className="size-4" />
-                  Visit main website
-                </a>
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
+        <header className="space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="inline-flex items-center gap-3 rounded-full border border-border/60 bg-card/85 px-4 py-2 shadow-sm backdrop-blur">
+              <Image
+                src={lightModeLogo}
+                alt="Dashboard logo"
+                priority
+                className="h-8 w-auto dark:hidden"
+              />
+              <Image
+                src={darkModeLogo}
+                alt="Dashboard logo"
+                priority
+                className="hidden h-8 w-auto dark:block"
+              />
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  Voodoo Pay
+                </p>
+                <p className="truncate text-sm font-semibold text-foreground">Merchant Dashboard</p>
               </div>
-              <Badge
-                variant="secondary"
-                className="w-fit border border-border/60 bg-card/80 px-3 py-1 text-[11px] uppercase"
-              >
-                Merchant Dashboard
-              </Badge>
             </div>
-            <div className="space-y-2">
-              <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-                Ticket Commerce Control Center
-              </h1>
-              <p className="max-w-3xl text-sm text-muted-foreground sm:text-base">
-                Open one section at a time, move top to bottom, and keep merchant setup focused
-                without bouncing around a crowded page.
-              </p>
-            </div>
+            <ModeToggle />
           </div>
 
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-            <Button
-              type="button"
-              variant="outline"
-              className="min-h-11 w-full sm:w-auto"
-              data-tutorial="run-tutorial-button"
-              onClick={() => runDashboardTutorial({ markSeen: true })}
-            >
-              Run Tutorial
-            </Button>
-            <div className="flex items-center justify-between gap-2 sm:justify-end">
-              <Badge variant={isSuperAdmin ? 'default' : 'outline'} className="px-3 py-1">
-                {isSuperAdmin ? 'Super Admin Session' : 'Tenant Session'}
-              </Badge>
-              <ModeToggle />
-            </div>
-          </div>
+          <Card className="border-border/70 bg-card/80 shadow-lg shadow-black/10 backdrop-blur">
+            <CardContent className="flex flex-col gap-4 p-5 sm:p-6 lg:flex-row lg:items-end lg:justify-between">
+              <div className="space-y-3" data-tutorial="dashboard-title">
+                <Badge
+                  variant="secondary"
+                  className="w-fit border border-border/60 bg-background/75 px-3 py-1 text-[11px] uppercase"
+                >
+                  Merchant Dashboard
+                </Badge>
+                <div className="space-y-2">
+                  <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl lg:text-4xl">
+                    Simple setup, one section at a time.
+                  </h1>
+                  <p className="max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
+                    Pick the workspace and Discord server first, then work through the cards below.
+                    The dashboard is mobile-first and keeps one main section open at a time so the
+                    flow stays easy to follow.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap lg:max-w-sm lg:justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-11 w-full sm:w-auto"
+                  data-tutorial="run-tutorial-button"
+                  onClick={() => runDashboardTutorial({ markSeen: true })}
+                >
+                  Run Tutorial
+                </Button>
+                <Button asChild type="button" variant="outline" className="min-h-11 w-full sm:w-auto">
+                  <a href="https://voodoopay.online/" target="_blank" rel="noreferrer">
+                    <Globe className="size-4" />
+                    Visit Website
+                  </a>
+                </Button>
+                <Badge
+                  variant={isSuperAdmin ? 'default' : 'outline'}
+                  className="min-h-11 justify-center px-3 py-1.5"
+                >
+                  {isSuperAdmin ? 'Super Admin Session' : 'Tenant Session'}
+                </Badge>
+              </div>
+            </CardContent>
+          </Card>
         </header>
+
+        <section className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(18rem,0.85fr)]">
+          <Card className="border-border/70 bg-card/75 shadow-lg shadow-black/10 backdrop-blur">
+            <CardHeader className="p-4 pb-0 sm:p-5 sm:pb-0">
+              <CardTitle className="text-lg">Setup Flow</CardTitle>
+              <CardDescription>
+                Use this as a simple checklist. Tap a step to jump straight to the section you
+                want.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-4 pt-4 sm:p-5 sm:pt-4">
+              <div className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-1 xl:grid xl:grid-cols-5 xl:overflow-visible">
+                {primaryDashboardSteps.map((step) => (
+                  <DashboardQuickStepButton
+                    key={step.sectionId}
+                    active={openDashboardSections.includes(step.sectionId)}
+                    onClick={() => focusDashboardSection(step.sectionId)}
+                    stateLabel={step.stateLabel}
+                    stateTone={step.stateTone}
+                    stepLabel={step.stepLabel}
+                    summary={step.summary}
+                    title={step.title}
+                  />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/70 bg-card/75 shadow-lg shadow-black/10 backdrop-blur">
+            <CardHeader className="p-4 pb-0 sm:p-5 sm:pb-0">
+              <CardTitle className="text-lg">Current Context</CardTitle>
+              <CardDescription>
+                A compact status card for mobile so you always know what this dashboard is working
+                against.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3 p-4 pt-4 sm:p-5 sm:pt-4">
+              <div className="space-y-2 rounded-[1.5rem] border border-border/60 bg-background/70 p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Workspace
+                </p>
+                <p className="text-sm font-semibold text-foreground">
+                  {selectedTenantName || 'No workspace selected yet'}
+                </p>
+              </div>
+
+              <div className="space-y-2 rounded-[1.5rem] border border-border/60 bg-background/70 p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Discord Server
+                </p>
+                <p className="text-sm font-semibold text-foreground">
+                  {selectedDiscordGuild?.name ?? 'No Discord server selected yet'}
+                </p>
+              </div>
+
+              <div className="space-y-2 rounded-[1.5rem] border border-border/60 bg-background/70 p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Status
+                </p>
+                <p className="text-sm font-semibold text-foreground">{contextStatusTitle}</p>
+                <p className="text-xs leading-5 text-muted-foreground">{contextStatusDetail}</p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={openDashboardSections.includes('latest-action') ? 'default' : 'outline'}
+                  onClick={() => focusDashboardSection('latest-action')}
+                >
+                  Latest Action
+                </Button>
+                {isSuperAdmin ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={openDashboardSections.includes('super-admin') ? 'default' : 'outline'}
+                    onClick={() => focusDashboardSection('super-admin')}
+                  >
+                    Super Admin
+                  </Button>
+                ) : null}
+              </div>
+            </CardContent>
+          </Card>
+        </section>
 
         <section className="grid gap-4">
           <Card className="border-border/70 bg-card/75 shadow-lg shadow-black/10 backdrop-blur">
@@ -2052,6 +2223,7 @@ export default function DashboardPage() {
               isOpen={openDashboardSections.includes('workspace')}
               onToggle={toggleDashboardSection}
               icon={Store}
+              stepLabel="01"
               title="Workspace & Server"
               description="Start here. Choose the merchant workspace and Discord server before editing any setup below."
               summaryItems={workspaceSummaryItems}
@@ -2281,6 +2453,7 @@ export default function DashboardPage() {
               isOpen={openDashboardSections.includes('sales')}
               onToggle={toggleDashboardSection}
               icon={Settings2}
+              stepLabel="02"
               title="Sales Settings"
               description="Channels, staff access, tips, rewards, and customer points for the selected server."
               summaryItems={salesSummaryItems}
@@ -2834,6 +3007,7 @@ export default function DashboardPage() {
               isOpen={openDashboardSections.includes('payments')}
               onToggle={toggleDashboardSection}
               icon={Wallet}
+              stepLabel="03"
               title="Payment Setup"
               description="Merchant wallet, checkout domain, callback secret, and optional crypto gateway settings."
               summaryItems={paymentSummaryItems}
@@ -3100,6 +3274,7 @@ export default function DashboardPage() {
               isOpen={openDashboardSections.includes('coupons')}
               onToggle={toggleDashboardSection}
               icon={Wallet}
+              stepLabel="04"
               title="Coupons"
               description="Create fixed discounts and optionally scope them to products or price variations."
               summaryItems={couponSummaryItems}
@@ -3387,6 +3562,7 @@ export default function DashboardPage() {
               isOpen={openDashboardSections.includes('catalog')}
               onToggle={toggleDashboardSection}
               icon={Globe}
+              stepLabel="05"
               title="Catalog Builder"
               description="Create categories, shared checkout questions, products, and price options in one guided flow."
               summaryItems={catalogSummaryItems}
