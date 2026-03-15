@@ -24,6 +24,7 @@ import {
 import Image from 'next/image';
 import {
   type ComponentType,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
   useCallback,
   useEffect,
@@ -638,6 +639,14 @@ function toQuestionDrafts(fields: ProductFormFieldRecord[]): QuestionDraft[] {
 }
 
 export default function DashboardPage() {
+  const setupFlowStripDragStateRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    scrollLeft: number;
+    horizontalDrag: boolean | null;
+  } | null>(null);
+  const suppressSetupFlowClickRef = useRef(false);
   const [tenantId, setTenantId] = useState('');
   const [guildId, setGuildId] = useState('');
   const [myTenants, setMyTenants] = useState<TenantSummary[]>([]);
@@ -1040,6 +1049,75 @@ export default function DashboardPage() {
     },
     [focusDashboardSection],
   );
+
+  const handleSetupFlowPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) {
+      return;
+    }
+
+    setupFlowStripDragStateRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      scrollLeft: event.currentTarget.scrollLeft,
+      horizontalDrag: null,
+    };
+    suppressSetupFlowClickRef.current = false;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }, []);
+
+  const handleSetupFlowPointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const dragState = setupFlowStripDragStateRef.current;
+    if (!dragState || dragState.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const deltaX = event.clientX - dragState.startX;
+    const deltaY = event.clientY - dragState.startY;
+
+    if (dragState.horizontalDrag === null) {
+      if (Math.abs(deltaX) < 6 && Math.abs(deltaY) < 6) {
+        return;
+      }
+
+      dragState.horizontalDrag = Math.abs(deltaX) > Math.abs(deltaY);
+    }
+
+    if (!dragState.horizontalDrag) {
+      return;
+    }
+
+    suppressSetupFlowClickRef.current = true;
+    event.preventDefault();
+    event.currentTarget.scrollLeft = dragState.scrollLeft - deltaX;
+  }, []);
+
+  const resetSetupFlowDragState = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const dragState = setupFlowStripDragStateRef.current;
+    if (!dragState || dragState.pointerId !== event.pointerId) {
+      return;
+    }
+
+    try {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+    } catch {
+      // Ignore stale pointer capture release attempts.
+    }
+
+    setupFlowStripDragStateRef.current = null;
+    window.setTimeout(() => {
+      suppressSetupFlowClickRef.current = false;
+    }, 0);
+  }, []);
+
+  const handleSetupFlowClickCapture = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!suppressSetupFlowClickRef.current) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+  }, []);
 
   const focusTutorialStep = useCallback(
     (stepId: string) => {
@@ -2140,7 +2218,14 @@ export default function DashboardPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="p-4 pt-4 sm:p-5 sm:pt-4">
-              <div className="dashboard-step-strip -mx-1 flex gap-3 overflow-x-auto px-1 pb-1 xl:grid xl:grid-cols-5 xl:overflow-visible">
+              <div
+                className="dashboard-step-strip -mx-1 flex gap-3 overflow-x-auto px-1 pb-1 xl:grid xl:grid-cols-5 xl:overflow-visible"
+                onClickCapture={handleSetupFlowClickCapture}
+                onPointerCancel={resetSetupFlowDragState}
+                onPointerDown={handleSetupFlowPointerDown}
+                onPointerMove={handleSetupFlowPointerMove}
+                onPointerUp={resetSetupFlowDragState}
+              >
                 {primaryDashboardSteps.map((step) => (
                   <DashboardQuickStepButton
                     key={step.sectionId}
