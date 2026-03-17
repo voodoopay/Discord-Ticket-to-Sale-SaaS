@@ -65,6 +65,8 @@ Copy `.env.example` to `.env` and fill values.
 - A Discord server is now bound to exactly one workspace at a time; reconnecting a server moves it to the current workspace mapping.
 - Dashboard now includes a Telegram group link command generator for the selected workspace + Discord server.
 - Telegram groups reuse the selected Discord server store configuration instead of duplicating catalog, coupon, points, or integration data.
+- Telegram sales now hand off from the group into a private DM with the bot so product choices, customer answers, coupon codes, and checkout links are no longer exposed to the whole group.
+- Telegram checkout buttons now use short redirect URLs from the web app, which avoids sending giant raw crypto checkout links into Telegram group or DM messages.
 - Server settings now use Discord channel/role selectors instead of manual ID fields.
 - Dashboard now includes a first-launch interactive tutorial prompt with explicit `Run Tutorial` and `Skip Tutorial` actions.
 - Tutorial completion/skip state is persisted using a long-lived marker cookie plus local storage fallback.
@@ -112,6 +114,7 @@ Copy `.env.example` to `.env` and fill values.
 - Referral rewards are auto-granted on first paid order for claimed customer emails, using category eligibility + purchased variant reward snapshots.
 - Bot creates `order_session` and posts payment buttons in the ticket (`Pay`, and optionally `Pay with Crypto`).
 - Checkout amount now reflects basket total minus coupon plus tip.
+- Telegram `/sale` now starts in the linked group and immediately moves the sensitive sale flow into a private DM with the selected customer.
 - Dashboard Voodoo integration now supports Hosted Multi-Coin mode with enable/disable toggle and wallet inputs.
 - Hosted Multi-Coin wallet mapping:
   - BTC -> `btc`

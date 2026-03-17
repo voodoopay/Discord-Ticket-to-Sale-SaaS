@@ -36,7 +36,8 @@ export type SaleDraft = {
   tenantId: string;
   guildId: string;
   ticketChannelId: string;
-  controlMessageId: number;
+  controlChatId: string | null;
+  controlMessageId: number | null;
   customerLabel: string;
   staffDiscordUserId: string;
   customerDiscordUserId: string;
@@ -85,7 +86,6 @@ export function createSaleDraft(input: {
   tenantId: string;
   guildId: string;
   ticketChannelId: string;
-  controlMessageId: number;
   customerLabel: string;
   staffDiscordUserId: string;
   customerDiscordUserId: string;
@@ -97,7 +97,8 @@ export function createSaleDraft(input: {
     tenantId: input.tenantId,
     guildId: input.guildId,
     ticketChannelId: input.ticketChannelId,
-    controlMessageId: input.controlMessageId,
+    controlChatId: null,
+    controlMessageId: null,
     customerLabel: input.customerLabel,
     staffDiscordUserId: input.staffDiscordUserId,
     customerDiscordUserId: input.customerDiscordUserId,
@@ -165,6 +166,27 @@ export function listSaleDraftsForChat(ticketChannelId: string): SaleDraft[] {
     }
 
     if (draft.ticketChannelId === ticketChannelId) {
+      drafts.push(refreshDraftExpiry(draft));
+    }
+  }
+
+  for (const draft of drafts) {
+    draftStore.set(draft.id, draft);
+  }
+
+  return drafts;
+}
+
+export function listSaleDraftsForControlChat(controlChatId: string): SaleDraft[] {
+  const drafts: SaleDraft[] = [];
+
+  for (const [draftId, draft] of draftStore.entries()) {
+    if (draft.expiresAt < Date.now()) {
+      draftStore.delete(draftId);
+      continue;
+    }
+
+    if (draft.controlChatId === controlChatId) {
       drafts.push(refreshDraftExpiry(draft));
     }
   }

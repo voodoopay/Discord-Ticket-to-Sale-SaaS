@@ -2,6 +2,8 @@ import { AppError, OrderRepository } from '@voodoo/core';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
+import { parseCheckoutRedirectMethod, resolveCheckoutRedirectUrl } from '@/lib/checkout-redirect';
+
 const orderRepository = new OrderRepository();
 
 function escapeHtml(value: string): string {
@@ -14,7 +16,7 @@ function escapeHtml(value: string): string {
 }
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   context: { params: Promise<{ orderSessionId: string }> },
 ): Promise<NextResponse> {
   try {
@@ -32,12 +34,19 @@ export async function GET(
       return NextResponse.json({ error: `Order session is ${session.status}` }, { status: 409 });
     }
 
-    if (!session.checkoutUrl) {
+    const method = parseCheckoutRedirectMethod(request.nextUrl.searchParams.get('method'));
+    const targetUrl = resolveCheckoutRedirectUrl({
+      method,
+      checkoutUrl: session.checkoutUrl,
+      checkoutUrlCrypto: session.checkoutUrlCrypto,
+    });
+
+    if (!targetUrl) {
       return NextResponse.json({ error: 'Checkout URL unavailable for this session' }, { status: 404 });
     }
 
-    const safeUrl = escapeHtml(session.checkoutUrl);
-    const jsUrl = JSON.stringify(session.checkoutUrl);
+    const safeUrl = escapeHtml(targetUrl);
+    const jsUrl = JSON.stringify(targetUrl);
     const html = [
       '<!doctype html>',
       '<html lang="en">',

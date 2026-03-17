@@ -3,6 +3,7 @@ import {
   CouponRepository,
   ProductRepository,
   SaleService,
+  getEnv,
   type SaleCheckoutOption,
   toTelegramScopedId,
 } from '@voodoo/core';
@@ -12,12 +13,17 @@ import {
   clearSaleDraftsForChat,
   createSaleDraft,
   getSaleDraft,
-  listSaleDraftsForChat,
+  listSaleDraftsForControlChat,
   removeSaleDraft,
   updateSaleDraft,
   type SaleDraft,
   type SaleDraftFormField,
 } from '../flows/sale-draft-store.js';
+import {
+  buildTelegramBotDeepLink,
+  buildTelegramCheckoutRedirectUrl,
+  parseTelegramSaleStartPayload,
+} from '../lib/sale-links.js';
 import {
   formatTelegramUserLabel,
   getLinkedStoreForChat,
@@ -25,17 +31,22 @@ import {
   isTelegramGroupChat,
 } from '../lib/telegram.js';
 
+const env = getEnv();
 const productRepository = new ProductRepository();
 const couponRepository = new CouponRepository();
 const saleService = new SaleService();
 const displayLabelCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
 function canInteractWithDraft(draft: SaleDraft, userId: string): boolean {
-  return draft.customerDiscordUserId === userId || draft.staffDiscordUserId === userId;
+  return draft.customerDiscordUserId === userId;
 }
 
 function normalizeCategoryLabel(category: string): string {
   return category.trim() || 'Uncategorized';
+}
+
+function isTelegramPrivateChat(chatType: string | undefined): boolean {
+  return chatType === 'private';
 }
 
 function compareVariantForDisplay(
@@ -56,8 +67,12 @@ function compareProductNameForDisplay(
   return nameCompare !== 0 ? nameCompare : left.productId.localeCompare(right.productId);
 }
 
-function getTicketChatId(draft: SaleDraft): string {
-  return draft.ticketChannelId.slice(3);
+function getControlChatId(draft: SaleDraft): string {
+  if (!draft.controlChatId) {
+    throw new Error('Sale draft is not linked to a Telegram DM yet.');
+  }
+
+  return draft.controlChatId.slice(3);
 }
 
 async function editDraftMessage(input: {
@@ -66,8 +81,12 @@ async function editDraftMessage(input: {
   content: string;
   keyboard?: InlineKeyboard;
 }): Promise<void> {
+  if (input.draft.controlMessageId == null) {
+    throw new Error('Sale draft does not have an active Telegram DM control message.');
+  }
+
   try {
-    await input.api.editMessageText(getTicketChatId(input.draft), input.draft.controlMessageId, input.content, {
+    await input.api.editMessageText(getControlChatId(input.draft), input.draft.controlMessageId, input.content, {
       ...(input.keyboard ? { reply_markup: input.keyboard } : {}),
     });
   } catch (error) {
@@ -178,27 +197,41 @@ async function rebuildFormFieldsFromBasket(draft: SaleDraft): Promise<SaleDraftF
 async function sendCheckoutMessage(input: {
   api: Api;
   draft: SaleDraft;
-  checkoutUrl: string;
   checkoutOptions?: SaleCheckoutOption[];
   orderSessionId: string;
 }): Promise<void> {
   const options =
     input.checkoutOptions && input.checkoutOptions.length > 0
       ? input.checkoutOptions
-      : [{ method: 'pay' as const, label: 'Pay', url: input.checkoutUrl }];
+      : [{ method: 'pay' as const, label: 'Pay', url: buildTelegramCheckoutRedirectUrl({
+        botPublicUrl: env.BOT_PUBLIC_URL,
+        orderSessionId: input.orderSessionId,
+        method: 'pay',
+      }) }];
+  const redirectOptions = options.map((option) => ({
+    label: option.label,
+    url: buildTelegramCheckoutRedirectUrl({
+      botPublicUrl: env.BOT_PUBLIC_URL,
+      orderSessionId: input.orderSessionId,
+      method: option.method,
+    }),
+  }));
   await input.api.sendMessage(
-    getTicketChatId(input.draft),
+    getControlChatId(input.draft),
     [
       `Sale created for ${input.draft.customerLabel}.`,
       `Order Session: ${input.orderSessionId}`,
       'Choose payment method below.',
       '',
-      'Payment update will be posted here once paid. This may take up to 30 minutes. Do NOT pay again.',
+      'Paid and fulfilled status updates will be posted in the linked Telegram group. This may take up to 30 minutes. Do NOT pay again.',
     ].join('\n'),
     {
       reply_markup: buildKeyboard(
-        options.map((option) => ({
-          label: options.length === 1 && option.method === 'pay' ? 'Click Here To Pay' : option.label,
+        redirectOptions.map((option, index) => ({
+          label:
+            redirectOptions.length === 1 && index === 0
+              ? 'Click Here To Pay'
+              : option.label,
           url: option.url,
         })),
       ),
@@ -237,7 +270,6 @@ async function finalizeDraft(input: { api: Api; draft: SaleDraft }): Promise<voi
   await sendCheckoutMessage({
     api: input.api,
     draft: input.draft,
-    checkoutUrl: created.value.checkoutUrl,
     checkoutOptions: created.value.checkoutOptions,
     orderSessionId: created.value.orderSessionId,
   });
@@ -697,10 +729,51 @@ async function handleTipInput(api: Api, draft: SaleDraft, value: string): Promis
   await maybePromptPointsBeforeFinalize({ api, draft });
 }
 
+export async function handleSaleStartCommand(ctx: Context): Promise<boolean> {
+  if (!ctx.chat || !ctx.from || !isTelegramPrivateChat(ctx.chat.type)) {
+    return false;
+  }
+
+  const payload =
+    'match' in ctx && typeof (ctx as Context & { match?: unknown }).match === 'string'
+      ? ((ctx as Context & { match?: string }).match ?? '').trim()
+      : '';
+  const draftId = parseTelegramSaleStartPayload(payload);
+  if (!draftId) {
+    return false;
+  }
+
+  const draft = getSaleDraft(draftId);
+  if (!draft) {
+    await ctx.reply('This sale link expired. Ask an admin to start the sale again in the Telegram group.');
+    return true;
+  }
+
+  if (!canInteractWithDraft(draft, toTelegramScopedId(String(ctx.from.id)))) {
+    await ctx.reply('This private sale link is only valid for the selected customer.');
+    return true;
+  }
+
+  const controlMessage = await ctx.reply(
+    [
+      'Private sale started.',
+      'This chat now handles product selection, checkout, coupon codes, customer details, and payment links privately.',
+    ].join('\n'),
+  );
+
+  draft.controlChatId = toTelegramScopedId(String(ctx.chat.id));
+  draft.controlMessageId = controlMessage.message_id;
+  draft.pendingInput = null;
+  updateSaleDraft(draft);
+
+  await renderCategorySelectionStep(ctx.api, draft);
+  return true;
+}
+
 export async function handleSaleCommand(ctx: Context): Promise<void> {
   if (!ctx.chat || !ctx.from || !ctx.message || !('text' in ctx.message)) return;
   if (!isTelegramGroupChat(ctx.chat.type)) {
-    await ctx.reply('Use /sale inside a linked Telegram group chat.');
+    await ctx.reply('Use /sale inside a linked Telegram group chat. The bot will then move the sale into a private DM.');
     return;
   }
 
@@ -723,19 +796,37 @@ export async function handleSaleCommand(ctx: Context): Promise<void> {
   const customer =
     ctx.message.reply_to_message?.from && !ctx.message.reply_to_message.from.is_bot ? ctx.message.reply_to_message.from : ctx.from;
   clearSaleDraftsForChat(toTelegramScopedId(String(ctx.chat.id)));
-  const message = await ctx.reply('Preparing sale flow...');
   const draft = createSaleDraft({
     tenantId: linkedStore.tenantId,
     guildId: linkedStore.guildId,
     ticketChannelId: toTelegramScopedId(String(ctx.chat.id)),
-    controlMessageId: message.message_id,
     customerLabel: formatTelegramUserLabel(customer),
     staffDiscordUserId: toTelegramScopedId(String(ctx.from.id)),
     customerDiscordUserId: toTelegramScopedId(String(customer.id)),
     tipEnabled: configResult.value.tipEnabled,
     defaultCurrency: configResult.value.defaultCurrency,
   });
-  await renderCategorySelectionStep(ctx.api, draft);
+  let continueUrl: string;
+
+  try {
+    continueUrl = buildTelegramBotDeepLink(env.TELEGRAM_BOT_USERNAME, `sale_${draft.id}`);
+  } catch (error) {
+    removeSaleDraft(draft.id);
+    await ctx.reply(error instanceof Error ? error.message : 'TELEGRAM_BOT_USERNAME is required for Telegram DM sales.');
+    return;
+  }
+
+  await ctx.reply(
+    [
+      `Private sale started for ${draft.customerLabel}.`,
+      'Continue in a private chat with the bot to keep product selection, details, and payment links out of the group.',
+      'If Telegram shows a START button in the DM, press it to continue.',
+      'Only the selected customer can continue this sale.',
+    ].join('\n'),
+    {
+      reply_markup: buildKeyboard([{ label: 'Continue in DM', url: continueUrl }]),
+    },
+  );
 }
 
 export async function handleSaleCallbackQuery(ctx: Context): Promise<boolean> {
@@ -751,8 +842,12 @@ export async function handleSaleCallbackQuery(ctx: Context): Promise<boolean> {
     await ctx.answerCallbackQuery({ text: 'Sale draft expired. Start /sale again.', show_alert: true });
     return true;
   }
+  if (!draft.controlChatId || draft.controlChatId !== toTelegramScopedId(String(ctx.chat.id))) {
+    await ctx.answerCallbackQuery({ text: 'This sale is handled in the customer DM only.', show_alert: true });
+    return true;
+  }
   if (!canInteractWithDraft(draft, toTelegramScopedId(String(ctx.from.id)))) {
-    await ctx.answerCallbackQuery({ text: 'Only the selected customer or starting staff member can use these controls.', show_alert: true });
+    await ctx.answerCallbackQuery({ text: 'Only the selected customer can use these private sale controls.', show_alert: true });
     return true;
   }
   await ctx.answerCallbackQuery();
@@ -800,7 +895,7 @@ export async function handleSaleTextMessage(ctx: Context): Promise<boolean> {
   if (!ctx.chat || !ctx.from || !ctx.message || !('text' in ctx.message)) return false;
   const actor = ctx.from;
   if (!actor) return false;
-  const draft = listSaleDraftsForChat(toTelegramScopedId(String(ctx.chat.id))).find(
+  const draft = listSaleDraftsForControlChat(toTelegramScopedId(String(ctx.chat.id))).find(
     (candidate) => candidate.pendingInput !== null && canInteractWithDraft(candidate, toTelegramScopedId(String(actor.id))),
   );
   if (!draft || !draft.pendingInput) return false;

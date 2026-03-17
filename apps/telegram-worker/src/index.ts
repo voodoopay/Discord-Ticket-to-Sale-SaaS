@@ -5,7 +5,12 @@ import { handleConnectCommand } from './commands/connect.js';
 import { handlePaidOrderFulfillmentCallback } from './commands/paid-order-fulfillment.js';
 import { handlePointsCommand, handlePendingPointsMessage } from './commands/points.js';
 import { handleReferCommand, handlePendingReferMessage } from './commands/refer.js';
-import { handleSaleCallbackQuery, handleSaleCommand, handleSaleTextMessage } from './commands/sale.js';
+import {
+  handleSaleCallbackQuery,
+  handleSaleCommand,
+  handleSaleStartCommand,
+  handleSaleTextMessage,
+} from './commands/sale.js';
 
 const env = getEnv();
 
@@ -20,12 +25,16 @@ bot.catch((error) => {
 });
 
 bot.command('start', async (ctx) => {
+  if (await handleSaleStartCommand(ctx)) {
+    return;
+  }
+
   await ctx.reply(
     [
       'Telegram commerce bot is online.',
       'Commands:',
       '/connect <token> - Link this Telegram group to a dashboard store',
-      '/sale - Start the sale flow in this group (reply to a customer message to target them)',
+      '/sale - Start the sale in the group, then continue privately in DM',
       '/points - Check a customer points balance',
       '/refer - Submit a referral from this linked group',
     ].join('\n'),
@@ -64,7 +73,7 @@ bot.on('message:text', async (ctx) => {
 void bot.api
   .setMyCommands([
     { command: 'connect', description: 'Link this Telegram group to a dashboard store' },
-    { command: 'sale', description: 'Start the sale flow in this linked group' },
+    { command: 'sale', description: 'Start the sale in the group, then continue in DM' },
     { command: 'points', description: 'Check a customer points balance' },
     { command: 'refer', description: 'Submit a referral from this linked group' },
   ])

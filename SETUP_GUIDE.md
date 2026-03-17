@@ -234,7 +234,7 @@ pnpm deploy:commands
 pnpm deploy:commands:nuke
 ```
 
-Telegram does not require slash-command deployment. After the dashboard is online, generate a Telegram link command from `Workspace & Server`, add the Telegram bot to the target group, and run `/connect <token>` as a Telegram group admin.
+Telegram does not require slash-command deployment. After the dashboard is online, generate a Telegram link command from `Workspace & Server`, add the Telegram bot to the target group, and run `/connect <token>` as a Telegram group admin. `TELEGRAM_BOT_USERNAME` is also required because `/sale` now hands customers off from the group into a private DM with the bot.
 
 ---
 
