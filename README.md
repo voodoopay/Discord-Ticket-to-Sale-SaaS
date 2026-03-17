@@ -1,6 +1,6 @@
 ﻿# Ticket-to-Sale SaaS
 
-Multi-tenant Discord bot + web dashboard for ticket-based sales with WooCommerce and Voodoo Pay payment confirmation.
+Multi-tenant Discord + Telegram bot stack with a web dashboard for ticket-based sales, referrals, points, and WooCommerce/Voodoo Pay payment confirmation.
 
 ## Stack
 
@@ -14,6 +14,7 @@ Multi-tenant Discord bot + web dashboard for ticket-based sales with WooCommerce
 
 - `apps/web-app`: Next.js dashboard + REST/webhook API routes.
 - `apps/bot-worker`: Discord interaction worker with `/sale`, `/points`, and component/modal flows.
+- `apps/telegram-worker`: Telegram group worker with `/connect`, `/sale`, `/points`, `/refer`, and paid-order fulfillment callbacks.
 - `apps/nuke-worker`: separate-token Discord worker for `/nuke` scheduling and channel nukes.
 - `packages/core`: shared domain/config/security/services/repositories.
 - `drizzle/migrations`: SQL migrations.
@@ -22,12 +23,14 @@ Multi-tenant Discord bot + web dashboard for ticket-based sales with WooCommerce
 
 - `DISCORD_TOKEN`
 - `DISCORD_CLIENT_ID`
+- `TELEGRAM_BOT_TOKEN`
 - `DATABASE_URL`
 
 Recommended for production:
 
 - `DISCORD_CLIENT_SECRET`
 - `DISCORD_REDIRECT_URI`
+- `TELEGRAM_BOT_USERNAME`
 - `SESSION_SECRET`
 - `ENCRYPTION_KEY`
 - `CHECKOUT_SIGNING_SECRET`
@@ -60,6 +63,8 @@ Copy `.env.example` to `.env` and fill values.
 - Dashboard page: `/dashboard`
 - Dashboard now loads Discord servers from OAuth (manage-server capable guilds), auto-checks bot installation, and auto-links selected server to workspace.
 - A Discord server is now bound to exactly one workspace at a time; reconnecting a server moves it to the current workspace mapping.
+- Dashboard now includes a Telegram group link command generator for the selected workspace + Discord server.
+- Telegram groups reuse the selected Discord server store configuration instead of duplicating catalog, coupon, points, or integration data.
 - Server settings now use Discord channel/role selectors instead of manual ID fields.
 - Dashboard now includes a first-launch interactive tutorial prompt with explicit `Run Tutorial` and `Skip Tutorial` actions.
 - Tutorial completion/skip state is persisted using a long-lived marker cookie plus local storage fallback.

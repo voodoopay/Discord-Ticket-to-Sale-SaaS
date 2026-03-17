@@ -64,6 +64,24 @@ export function buildPaidOrderFulfillmentComponents(input: {
   ];
 }
 
+export function buildPaidOrderFulfillmentTelegramReplyMarkup(input: {
+  paidOrderId: string;
+  fulfillmentStatus: PaidOrderFulfillmentStatus;
+}): Record<string, unknown> {
+  const presentation = getPaidOrderFulfillmentButtonPresentation(input.fulfillmentStatus);
+
+  return {
+    inline_keyboard: [
+      [
+        {
+          text: presentation.label,
+          callback_data: buildPaidOrderFulfillmentCustomId(input.paidOrderId),
+        },
+      ],
+    ],
+  };
+}
+
 export class PaidOrderService {
   private readonly orderRepository = new OrderRepository();
 

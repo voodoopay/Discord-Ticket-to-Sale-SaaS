@@ -14,6 +14,7 @@ import {
   products,
   productVariants,
   referralClaims,
+  telegramChatLinks,
   tenantGuilds,
   tenantIntegrationsVoodooPay,
   tenantIntegrationsWoo,
@@ -454,6 +455,7 @@ export class TenantRepository {
       await tx.delete(tenantIntegrationsWoo).where(eq(tenantIntegrationsWoo.tenantId, input.tenantId));
 
       await tx.delete(guildConfigs).where(eq(guildConfigs.tenantId, input.tenantId));
+      await tx.delete(telegramChatLinks).where(eq(telegramChatLinks.tenantId, input.tenantId));
       await tx.delete(tenantGuilds).where(eq(tenantGuilds.tenantId, input.tenantId));
       await tx.delete(tenantMembers).where(eq(tenantMembers.tenantId, input.tenantId));
       await tx.delete(auditLogs).where(eq(auditLogs.tenantId, input.tenantId));

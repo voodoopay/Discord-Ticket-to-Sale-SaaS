@@ -85,6 +85,13 @@
       "when": 1772900352893,
       "tag": "0011_good_colleen_wing",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "5",
+      "when": 1773600166154,
+      "tag": "0012_add_telegram_chat_links",
+      "breakpoints": true
     }
   ]
 }

@@ -6,6 +6,7 @@ import { fromUnknownError, validationError } from '../domain/errors.js';
 import { PointsRepository } from '../repositories/points-repository.js';
 import { type OrderSessionRecord } from '../repositories/order-repository.js';
 import { ReferralRepository, type ReferralClaimRecord } from '../repositories/referral-repository.js';
+import { formatUserReference } from '../utils/platform-ids.js';
 import { PointsService } from './points-service.js';
 
 const emailSchema = z.string().trim().min(3).max(320).email();
@@ -301,7 +302,7 @@ export class ReferralService {
       amount_gbp: (input.rewardMinor / 100).toFixed(2),
       referred_email: input.referredEmail,
       referrer_email: input.referrerEmail,
-      referrer_mention: `<@${input.referrerDiscordUserId}>`,
+      referrer_mention: formatUserReference(input.referrerDiscordUserId),
       order_session_id: input.orderSessionId,
     };
 

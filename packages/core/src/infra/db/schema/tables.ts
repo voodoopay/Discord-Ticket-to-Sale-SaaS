@@ -90,6 +90,26 @@ export const tenantGuilds = mysqlTable(
   }),
 );
 
+export const telegramChatLinks = mysqlTable(
+  'telegram_chat_links',
+  {
+    id: varchar('id', { length: 26 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 26 }).notNull(),
+    guildId: varchar('guild_id', { length: 32 }).notNull(),
+    chatId: varchar('chat_id', { length: 32 }).notNull(),
+    chatTitle: varchar('chat_title', { length: 120 }).notNull(),
+    linkedByDiscordUserId: varchar('linked_by_discord_user_id', { length: 32 }),
+    createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
+  },
+  (table) => ({
+    chatIdUnique: uniqueIndex('telegram_chat_links_chat_id_uq').on(table.chatId),
+    tenantGuildUnique: uniqueIndex('telegram_chat_links_tenant_guild_uq').on(table.tenantId, table.guildId),
+    tenantGuildIdx: index('telegram_chat_links_tenant_guild_idx').on(table.tenantId, table.guildId),
+    tenantCreatedIdx: index('telegram_chat_links_tenant_created_idx').on(table.tenantId, table.createdAt),
+  }),
+);
+
 export const guildConfigs = mysqlTable(
   'guild_configs',
   {

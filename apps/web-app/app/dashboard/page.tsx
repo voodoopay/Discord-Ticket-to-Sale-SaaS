@@ -666,6 +666,9 @@ export default function DashboardPage() {
 
   const [showCreateWorkspace, setShowCreateWorkspace] = useState(false);
   const [createTenantName, setCreateTenantName] = useState('');
+  const [telegramLinkCommand, setTelegramLinkCommand] = useState('');
+  const [telegramLinkExpiresAt, setTelegramLinkExpiresAt] = useState('');
+  const [telegramBotUsername, setTelegramBotUsername] = useState('');
 
   const [paidLogChannelId, setPaidLogChannelId] = useState('');
   const [selectedStaffRoleIds, setSelectedStaffRoleIds] = useState<string[]>([]);
@@ -2254,6 +2257,9 @@ export default function DashboardPage() {
                       onChange={(event) => {
                         setTenantId(event.target.value);
                         setLinkedContextKeys({});
+                        setTelegramLinkCommand('');
+                        setTelegramLinkExpiresAt('');
+                        setTelegramBotUsername('');
                       }}
                       disabled={myTenants.length === 0}
                     >
@@ -2279,6 +2285,9 @@ export default function DashboardPage() {
                       onChange={(event) => {
                         setGuildId(event.target.value);
                         setLinkedContextKeys({});
+                        setTelegramLinkCommand('');
+                        setTelegramLinkExpiresAt('');
+                        setTelegramBotUsername('');
                       }}
                       disabled={discordGuilds.length === 0}
                     >
@@ -2337,6 +2346,63 @@ export default function DashboardPage() {
                     <Trash2 className="size-4" />
                     Delete Workspace
                   </Button>
+                </div>
+
+                <div className="rounded-lg border border-border/60 bg-secondary/35 p-3">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">Telegram Group Link</p>
+                      <p className="text-sm text-muted-foreground">
+                        Link one Telegram group to the selected Discord-configured store without
+                        duplicating catalog or checkout settings.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={state.loading || !tenantId || !guildId}
+                      onClick={() =>
+                        runAction(async () => {
+                          const { workspaceId, discordServerId } = requireWorkspaceAndServer();
+                          const payload = (await apiCall(
+                            `/api/guilds/${encodeURIComponent(discordServerId)}/telegram-link-token`,
+                            'POST',
+                            { tenantId: workspaceId },
+                          )) as {
+                            botUsername?: string | null;
+                            command?: string;
+                            expiresAt?: string;
+                          };
+
+                          setTelegramLinkCommand(payload.command ?? '');
+                          setTelegramLinkExpiresAt(payload.expiresAt ?? '');
+                          setTelegramBotUsername((payload.botUsername ?? '').trim());
+                          return payload;
+                        })
+                      }
+                    >
+                      Generate Telegram Command
+                    </Button>
+                  </div>
+
+                  {telegramLinkCommand ? (
+                    <div className="mt-3 space-y-2">
+                      <Label htmlFor="telegram-link-command">Telegram Admin Command</Label>
+                      <Input id="telegram-link-command" readOnly value={telegramLinkCommand} />
+                      <p className="text-xs text-muted-foreground">
+                        1. Add{' '}
+                        {telegramBotUsername ? `@${telegramBotUsername}` : 'your Telegram bot'} to
+                        the target group.
+                        <br />
+                        2. Send the command above as a Telegram group admin.
+                        <br />
+                        3. This token expires{' '}
+                        {telegramLinkExpiresAt
+                          ? `at ${new Date(telegramLinkExpiresAt).toLocaleString()}.`
+                          : 'soon.'}
+                      </p>
+                    </div>
+                  ) : null}
                 </div>
 
                 {showCreateWorkspace ? (

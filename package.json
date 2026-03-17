@@ -7,11 +7,11 @@
     "node": "24.13.0"
   },
   "scripts": {
-    "dev": "concurrently -n web,bot,nuke -c cyan,magenta,yellow \"pnpm --filter @voodoo/web-app dev\" \"pnpm --filter @voodoo/bot-worker dev\" \"pnpm --filter @voodoo/nuke-worker dev\"",
+    "dev": "concurrently -n web,bot,telegram,nuke -c cyan,magenta,green,yellow \"pnpm --filter @voodoo/web-app dev\" \"pnpm --filter @voodoo/bot-worker dev\" \"pnpm --filter @voodoo/telegram-worker dev\" \"pnpm --filter @voodoo/nuke-worker dev\"",
     "lint": "eslint . --ext .ts,.tsx --max-warnings=0",
     "typecheck": "pnpm -r run typecheck",
     "test": "vitest run",
-    "build": "pnpm --filter @voodoo/core build && pnpm --filter @voodoo/bot-worker build && pnpm --filter @voodoo/nuke-worker build && pnpm --filter @voodoo/web-app build",
+    "build": "pnpm --filter @voodoo/core build && pnpm --filter @voodoo/bot-worker build && pnpm --filter @voodoo/telegram-worker build && pnpm --filter @voodoo/nuke-worker build && pnpm --filter @voodoo/web-app build",
     "migrate": "drizzle-kit migrate --config=drizzle.config.ts",
     "setup": "pnpm migrate && pnpm deploy:commands",
     "deploy:commands": "pnpm --filter @voodoo/bot-worker deploy:commands",

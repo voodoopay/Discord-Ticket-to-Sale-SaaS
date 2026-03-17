@@ -186,6 +186,8 @@ Paste and update values:
 ```env
 DISCORD_TOKEN=YOUR_DISCORD_BOT_TOKEN
 DISCORD_CLIENT_ID=YOUR_DISCORD_CLIENT_ID
+TELEGRAM_BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN
+TELEGRAM_BOT_USERNAME=YOUR_TELEGRAM_BOT_USERNAME
 NUKE_DISCORD_TOKEN=YOUR_NUKE_BOT_TOKEN
 NUKE_DISCORD_CLIENT_ID=YOUR_NUKE_BOT_CLIENT_ID
 NUKE_POLL_INTERVAL_MS=30000
@@ -231,6 +233,8 @@ pnpm deploy:commands
 pnpm deploy:commands:nuke
 ```
 
+Telegram does not require slash-command deployment. After the dashboard is online, generate a Telegram link command from `Workspace & Server`, add the Telegram bot to the target group, and run `/connect <token>` as a Telegram group admin.
+
 ---
 
 ## 11. Run App with PM2
@@ -263,6 +267,16 @@ module.exports = {
       cwd: '/var/www/voodoo',
       script: 'node',
       args: 'apps/bot-worker/dist/index.js',
+      env: {
+        NODE_ENV: 'production'
+      },
+      env_file: '/var/www/voodoo/.env'
+    },
+    {
+      name: 'voodoo-telegram',
+      cwd: '/var/www/voodoo',
+      script: 'node',
+      args: 'apps/telegram-worker/dist/index.js',
       env: {
         NODE_ENV: 'production'
       },
@@ -303,6 +317,7 @@ Useful logs:
 ```bash
 pm2 logs voodoo-web --lines 100
 pm2 logs voodoo-bot --lines 100
+pm2 logs voodoo-telegram --lines 100
 pm2 logs voodoo-nuke --lines 100
 ```
 
@@ -373,6 +388,7 @@ pnpm deploy:commands
 pnpm deploy:commands:nuke
 pm2 restart voodoo-web
 pm2 restart voodoo-bot
+pm2 restart voodoo-telegram
 pm2 start ecosystem.config.cjs --only voodoo-nuke --update-env
 pm2 save
 ```
@@ -410,6 +426,7 @@ pnpm deploy:commands
 pnpm deploy:commands:nuke
 pm2 restart voodoo-web
 pm2 restart voodoo-bot
+pm2 restart voodoo-telegram
 pm2 start ecosystem.config.cjs --only voodoo-nuke --update-env
 pm2 save
 ```
@@ -449,6 +466,11 @@ Expected:
 - Bot offline:
   - Verify `DISCORD_TOKEN`
   - Check `pm2 logs voodoo-bot`
+
+- Telegram bot offline:
+  - Verify `TELEGRAM_BOT_TOKEN`
+  - Check `pm2 logs voodoo-telegram`
+  - Generate a fresh dashboard link command and reconnect the group with `/connect <token>`
 
 - Web app keeps restarting and PM2 error log shows `/usr/bin/bash: --filter: invalid option`:
   - Your PM2 web entry is still using `script: 'pnpm'` with `args: '--filter @voodoo/web-app start'`

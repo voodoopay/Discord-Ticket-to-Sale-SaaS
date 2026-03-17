@@ -8,16 +8,21 @@ import { AppError, fromUnknownError } from '../domain/errors.js';
 import type { WooOrderNote, WooOrderPayload } from '../domain/types.js';
 import { logger } from '../infra/logger.js';
 import { postMessageToDiscordChannel, sendDirectMessageToDiscordUser } from '../integrations/discord-rest.js';
+import { postMessageToTelegramChat, sendDirectMessageToTelegramUser } from '../integrations/telegram-rest.js';
 import { OrderRepository, type OrderSessionRecord } from '../repositories/order-repository.js';
 import { ProductRepository } from '../repositories/product-repository.js';
 import { TenantRepository } from '../repositories/tenant-repository.js';
 import { verifyVoodooCallbackToken } from '../security/voodoo-callback-token.js';
 import { isPaidWooStatus, verifyWooWebhookSignature } from '../security/webhook-signature.js';
 import { maskAnswers } from '../utils/mask.js';
+import { formatUserReference, parsePlatformScopedId } from '../utils/platform-ids.js';
 import { enqueueWebhookTask } from '../workers/webhook-queue.js';
 import { AdminService } from './admin-service.js';
 import { IntegrationService } from './integration-service.js';
-import { buildPaidOrderFulfillmentComponents } from './paid-order-service.js';
+import {
+  buildPaidOrderFulfillmentComponents,
+  buildPaidOrderFulfillmentTelegramReplyMarkup,
+} from './paid-order-service.js';
 import { calculateEarnFromAppliedDiscounts } from './points-calculator.js';
 import { PointsService } from './points-service.js';
 import { type ReferralRewardResult, ReferralService } from './referral-service.js';
@@ -881,6 +886,10 @@ export class WebhookService {
         paidOrderId,
         fulfillmentStatus: 'needs_action',
       }),
+      telegramReplyMarkup: buildPaidOrderFulfillmentTelegramReplyMarkup({
+        paidOrderId,
+        fulfillmentStatus: 'needs_action',
+      }),
     });
     await this.postTicketPaidConfirmation({
       botTokens: botTokensResult.value,
@@ -1105,6 +1114,10 @@ export class WebhookService {
         paidOrderId,
         fulfillmentStatus: 'needs_action',
       }),
+      telegramReplyMarkup: buildPaidOrderFulfillmentTelegramReplyMarkup({
+        paidOrderId,
+        fulfillmentStatus: 'needs_action',
+      }),
     });
     await this.postTicketPaidConfirmation({
       botTokens: botTokensResult.value,
@@ -1265,7 +1278,7 @@ export class WebhookService {
       content: input.referralResult.thankYouMessage,
     });
     dmStatusLine = dm.sent
-      ? `Thank-you DM: sent to <@${input.referralResult.referrerDiscordUserId}>`
+      ? `Thank-you DM: sent to ${formatUserReference(input.referralResult.referrerDiscordUserId)}`
       : `Thank-you DM: failed (${dm.errorMessage ?? 'unknown'})`;
 
     if (!input.referralLogChannelId) {
@@ -1315,6 +1328,28 @@ export class WebhookService {
     userId: string;
     content: string;
   }): Promise<{ sent: boolean; errorMessage: string | null }> {
+    const scopedUserId = parsePlatformScopedId(input.userId);
+    if (scopedUserId.platform === 'telegram') {
+      const telegramBotToken = this.getTelegramBotToken();
+      if (!telegramBotToken) {
+        return { sent: false, errorMessage: 'no Telegram bot token available' };
+      }
+
+      try {
+        await sendDirectMessageToTelegramUser({
+          botToken: telegramBotToken,
+          userId: scopedUserId.rawId,
+          content: input.content,
+        });
+        return { sent: true, errorMessage: null };
+      } catch (error) {
+        return {
+          sent: false,
+          errorMessage: error instanceof Error ? error.message : 'dm send failed',
+        };
+      }
+    }
+
     const uniqueTokens = [...new Set(input.botTokens.map((token) => token.trim()).filter(Boolean))];
     if (uniqueTokens.length === 0) {
       return { sent: false, errorMessage: 'no bot token available' };
@@ -1344,18 +1379,24 @@ export class WebhookService {
   }
 
   private async getBotTokenCandidates(): Promise<Result<string[], AppError>> {
+    const candidates: string[] = [];
+
     const resolved = await this.adminService.getResolvedBotToken();
-    if (resolved.isErr()) {
-      return err(resolved.error);
+    if (resolved.isOk()) {
+      candidates.push(resolved.value.trim());
     }
 
-    const candidates = [resolved.value.trim()];
     const envToken = this.env.DISCORD_TOKEN.trim();
-    if (envToken && !candidates.includes(envToken)) {
+    if (envToken && envToken !== 'MISSING_DISCORD_TOKEN' && !candidates.includes(envToken)) {
       candidates.push(envToken);
     }
 
     return ok(candidates.filter(Boolean));
+  }
+
+  private getTelegramBotToken(): string | null {
+    const token = this.env.TELEGRAM_BOT_TOKEN.trim();
+    return token.length > 0 ? token : null;
   }
 
   private isDiscordUnauthorized(error: unknown): boolean {
@@ -1381,6 +1422,7 @@ export class WebhookService {
     fallbackChannelId: string;
     content: string;
     components?: Array<Record<string, unknown>>;
+    telegramReplyMarkup?: Record<string, unknown>;
   }): Promise<void> {
     const targetChannels = [input.preferredChannelId, input.fallbackChannelId].filter(
       (channelId): channelId is string => Boolean(channelId),
@@ -1392,19 +1434,52 @@ export class WebhookService {
     }
 
     const uniqueTokens = [...new Set(input.botTokens.map((token) => token.trim()).filter(Boolean))];
-    if (uniqueTokens.length === 0) {
-      throw new AbortError('No bot token available for paid-order log message');
-    }
+    const telegramBotToken = this.getTelegramBotToken();
 
     let lastError: unknown = null;
-    for (const botToken of uniqueTokens) {
-      let tokenUnauthorized = false;
+    for (const channelId of uniqueChannels) {
+      const scopedChannelId = parsePlatformScopedId(channelId);
 
-      for (const channelId of uniqueChannels) {
+      if (scopedChannelId.platform === 'telegram') {
+        try {
+          if (!telegramBotToken) {
+            throw new AbortError('No Telegram bot token available for paid-order log message');
+          }
+
+          await postMessageToTelegramChat({
+            botToken: telegramBotToken,
+            chatId: scopedChannelId.rawId,
+            content: input.content,
+            replyMarkup: input.telegramReplyMarkup,
+          });
+          return;
+        } catch (error) {
+          lastError = error;
+          logger.warn(
+            {
+              provider: 'webhook-paid-log',
+              channelId: scopedChannelId.rawId,
+              platform: scopedChannelId.platform,
+              unauthorized: false,
+              errorMessage: error instanceof Error ? error.message : 'unknown',
+            },
+            'failed to post paid log to channel',
+          );
+        }
+
+        continue;
+      }
+
+      if (uniqueTokens.length === 0) {
+        lastError = new AbortError('No bot token available for paid-order log message');
+        continue;
+      }
+
+      for (const botToken of uniqueTokens) {
         try {
           await postMessageToDiscordChannel({
             botToken,
-            channelId,
+            channelId: scopedChannelId.rawId,
             content: fitDiscordMessage(input.content),
             components: input.components,
           });
@@ -1414,21 +1489,14 @@ export class WebhookService {
           logger.warn(
             {
               provider: 'webhook-paid-log',
-              channelId,
+              channelId: scopedChannelId.rawId,
+              platform: scopedChannelId.platform,
               unauthorized: this.isDiscordUnauthorized(error),
               errorMessage: error instanceof Error ? error.message : 'unknown',
             },
             'failed to post paid log to channel',
           );
-          if (this.isDiscordUnauthorized(error)) {
-            tokenUnauthorized = true;
-            break;
-          }
         }
-      }
-
-      if (tokenUnauthorized) {
-        continue;
       }
     }
 
@@ -1461,6 +1529,24 @@ export class WebhookService {
         : `Updated Points Balance: ${input.updatedPointsBalance} point(s)`,
     ].join('\n');
 
+    const scopedChannelId = parsePlatformScopedId(input.ticketChannelId);
+    if (scopedChannelId.platform === 'telegram') {
+      const telegramBotToken = this.getTelegramBotToken();
+      if (!telegramBotToken) {
+        throw new AbortError('No Telegram bot token available for ticket paid confirmation');
+      }
+
+      await postMessageToTelegramChat({
+        botToken: telegramBotToken,
+        chatId: scopedChannelId.rawId,
+        content: message.replace(
+          `Payment received for <@${input.customerDiscordId}>. Thank you.`,
+          `Payment received for ${formatUserReference(input.customerDiscordId)}. Thank you.`,
+        ),
+      });
+      return;
+    }
+
     const uniqueTokens = [...new Set(input.botTokens.map((token) => token.trim()).filter(Boolean))];
     if (uniqueTokens.length === 0) {
       throw new AbortError('No bot token available for ticket paid confirmation');
@@ -1471,7 +1557,7 @@ export class WebhookService {
       try {
         await postMessageToDiscordChannel({
           botToken,
-          channelId: input.ticketChannelId,
+          channelId: scopedChannelId.rawId,
           content: fitDiscordMessage(message),
         });
         return;
