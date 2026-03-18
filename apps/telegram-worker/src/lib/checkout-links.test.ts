@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildTelegramCheckoutButtonLabel,
-  buildTelegramCheckoutCopyPayloads,
+  buildTelegramCheckoutLinkFiles,
 } from './checkout-links.js';
 
 describe('telegram checkout links', () => {
@@ -26,9 +26,9 @@ describe('telegram checkout links', () => {
     ).toBe('Pay with Crypto');
   });
 
-  it('uses a normal Telegram message when the raw checkout URL fits safely', () => {
+  it('builds an exact one-line checkout link file for a normal pay URL', () => {
     expect(
-      buildTelegramCheckoutCopyPayloads([
+      buildTelegramCheckoutLinkFiles([
         {
           method: 'pay',
           label: 'Pay',
@@ -37,23 +37,20 @@ describe('telegram checkout links', () => {
       ]),
     ).toEqual([
       {
-        kind: 'message',
         label: 'Pay',
-        text: [
-          'Pay raw checkout link:',
-          'https://checkout.voodoo-pay.uk/pay.php?vd_token=abc123',
-          '',
-          'If Telegram breaks checkout, copy this exact link into Chrome or Safari.',
-        ].join('\n'),
+        text: 'https://checkout.voodoo-pay.uk/pay.php?vd_token=abc123\n',
+        fileName: 'pay-checkout-link.txt',
+        caption:
+          'Pay exact checkout link. Open this file, copy the single URL inside it, and paste it into Chrome or Safari.',
       },
     ]);
   });
 
-  it('falls back to a text file when the raw checkout URL is too long for a safe Telegram message', () => {
+  it('builds an exact one-line checkout link file for a long crypto URL', () => {
     const longUrl = `https://checkout.voodoo-pay.uk/crypto/hosted.php?payment_token=${'x'.repeat(5000)}`;
 
     expect(
-      buildTelegramCheckoutCopyPayloads([
+      buildTelegramCheckoutLinkFiles([
         {
           method: 'crypto',
           label: 'Pay with Crypto',
@@ -62,12 +59,11 @@ describe('telegram checkout links', () => {
       ]),
     ).toEqual([
       {
-        kind: 'file',
         label: 'Pay with Crypto',
         text: `${longUrl}\n`,
         fileName: 'pay-with-crypto-checkout-link.txt',
         caption:
-          'Pay with Crypto raw checkout link. Open the file, copy the exact URL, and paste it into Chrome or Safari if Telegram breaks checkout.',
+          'Pay with Crypto exact checkout link. Open this file, copy the single URL inside it, and paste it into Chrome or Safari.',
       },
     ]);
   });

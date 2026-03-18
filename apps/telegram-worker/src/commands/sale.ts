@@ -25,7 +25,7 @@ import {
 } from '../lib/sale-links.js';
 import {
   buildTelegramCheckoutButtonLabel,
-  buildTelegramCheckoutCopyPayloads,
+  buildTelegramCheckoutLinkFiles,
 } from '../lib/checkout-links.js';
 import {
   formatTelegramUserLabel,
@@ -215,7 +215,7 @@ async function sendCheckoutMessage(input: {
       `Order Session: ${input.orderSessionId}`,
       'Choose payment method below.',
       'Telegram now uses the exact provider checkout URL here, with no web wrapper.',
-      'If Telegram opens it incorrectly, long-press the payment button and copy the link into Chrome or Safari.',
+      'If Telegram opens it incorrectly, use the attached checkout-link file and copy the single URL inside it into Chrome or Safari.',
       '',
       'Paid and fulfilled status updates will be posted in the linked Telegram group. This may take up to 30 minutes. Do NOT pay again.',
     ].join('\n'),
@@ -233,22 +233,13 @@ async function sendCheckoutMessage(input: {
     },
   );
 
-  const copyPayloads = buildTelegramCheckoutCopyPayloads(options);
-  for (const payload of copyPayloads) {
-    if (payload.kind === 'message') {
-      await input.api.sendMessage(getControlChatId(input.draft), payload.text, {
-        link_preview_options: {
-          is_disabled: true,
-        },
-      });
-      continue;
-    }
-
+  const linkFiles = buildTelegramCheckoutLinkFiles(options);
+  for (const linkFile of linkFiles) {
     await input.api.sendDocument(
       getControlChatId(input.draft),
-      new InputFile(Buffer.from(payload.text, 'utf8'), payload.fileName),
+      new InputFile(Buffer.from(linkFile.text, 'utf8'), linkFile.fileName),
       {
-        caption: payload.caption,
+        caption: linkFile.caption,
       },
     );
   }

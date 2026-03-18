@@ -1,20 +1,11 @@
 import type { SaleCheckoutOption } from '@voodoo/core';
 
-const TELEGRAM_SAFE_TEXT_MESSAGE_LIMIT = 3900;
-
-export type TelegramCheckoutCopyPayload =
-  | {
-      kind: 'message';
-      label: string;
-      text: string;
-    }
-  | {
-      kind: 'file';
-      label: string;
-      text: string;
-      fileName: string;
-      caption: string;
-    };
+export type TelegramCheckoutLinkFile = {
+  label: string;
+  text: string;
+  fileName: string;
+  caption: string;
+};
 
 export function buildTelegramCheckoutButtonLabel(input: {
   label: string;
@@ -28,31 +19,13 @@ export function buildTelegramCheckoutButtonLabel(input: {
   return input.label;
 }
 
-export function buildTelegramCheckoutCopyPayloads(
-  options: SaleCheckoutOption[],
-): TelegramCheckoutCopyPayload[] {
+export function buildTelegramCheckoutLinkFiles(options: SaleCheckoutOption[]): TelegramCheckoutLinkFile[] {
   return options.map((option) => {
-    const text = [
-      `${option.label} raw checkout link:`,
-      option.url,
-      '',
-      'If Telegram breaks checkout, copy this exact link into Chrome or Safari.',
-    ].join('\n');
-
-    if (text.length <= TELEGRAM_SAFE_TEXT_MESSAGE_LIMIT) {
-      return {
-        kind: 'message',
-        label: option.label,
-        text,
-      };
-    }
-
     return {
-      kind: 'file',
       label: option.label,
       text: `${option.url}\n`,
       fileName: `${slugifyTelegramCheckoutLabel(option.label)}-checkout-link.txt`,
-      caption: `${option.label} raw checkout link. Open the file, copy the exact URL, and paste it into Chrome or Safari if Telegram breaks checkout.`,
+      caption: `${option.label} exact checkout link. Open this file, copy the single URL inside it, and paste it into Chrome or Safari.`,
     };
   });
 }

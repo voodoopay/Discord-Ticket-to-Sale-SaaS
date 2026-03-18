@@ -66,7 +66,7 @@ Copy `.env.example` to `.env` and fill values.
 - Dashboard now includes a Telegram group link command generator for the selected workspace + Discord server.
 - Telegram groups reuse the selected Discord server store configuration instead of duplicating catalog, coupon, points, or integration data.
 - Telegram sales now hand off from the group into a private DM with the bot so product choices, customer answers, coupon codes, and checkout links are no longer exposed to the whole group.
-- Telegram checkout buttons now use the exact provider checkout URLs from the sale session, and the bot also sends a copyable fallback so customers can open the same raw link in Chrome or Safari if Telegram misbehaves.
+- Telegram checkout buttons now use the exact provider checkout URLs from the sale session, and the bot also attaches exact one-line checkout-link `.txt` files so customers can copy the URL cleanly into Chrome or Safari if Telegram misbehaves.
 - Server settings now use Discord channel/role selectors instead of manual ID fields.
 - Dashboard now includes a first-launch interactive tutorial prompt with explicit `Run Tutorial` and `Skip Tutorial` actions.
 - Tutorial completion/skip state is persisted using a long-lived marker cookie plus local storage fallback.
