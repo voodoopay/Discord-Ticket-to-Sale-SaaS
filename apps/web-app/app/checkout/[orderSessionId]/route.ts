@@ -105,9 +105,9 @@ function buildLaunchActionUrl(request: NextRequest): string {
   return query.length > 0 ? `${request.nextUrl.pathname}?${query}` : request.nextUrl.pathname;
 }
 
-function buildCheckoutRedirectResponse(targetUrl: string): NextResponse {
+function buildCheckoutRedirectResponse(targetUrl: string, status = 307): NextResponse {
   return NextResponse.redirect(targetUrl, {
-    status: 307,
+    status,
     headers: {
       'Cache-Control': 'no-store',
     },
@@ -149,7 +149,7 @@ export async function POST(
 ): Promise<NextResponse> {
   try {
     const { targetUrl } = await resolveCheckoutTarget(request, context);
-    return buildCheckoutRedirectResponse(targetUrl);
+    return buildCheckoutRedirectResponse(targetUrl, 303);
   } catch (error) {
     return handleRouteError(error);
   }

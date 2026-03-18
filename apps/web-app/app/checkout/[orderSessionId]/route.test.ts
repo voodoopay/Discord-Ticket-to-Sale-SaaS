@@ -69,7 +69,7 @@ describe('checkout redirect route', () => {
     expect(await response.text()).toContain('Continue to Crypto Checkout');
   });
 
-  it('launches the crypto checkout URL when the Telegram handoff form is submitted', async () => {
+  it('launches the crypto checkout URL with a GET-friendly redirect when the Telegram handoff form is submitted', async () => {
     getOrderSessionById.mockResolvedValue({
       checkoutTokenExpiresAt: new Date(Date.now() + 60_000),
       status: 'pending_payment',
@@ -86,7 +86,7 @@ describe('checkout redirect route', () => {
       },
     );
 
-    expect(response.status).toBe(307);
+    expect(response.status).toBe(303);
     expect(response.headers.get('location')).toBe(
       'https://checkout.voodoo-pay.uk/crypto/hosted.php?payment_token=crypto-token',
     );
