@@ -66,7 +66,9 @@ describe('checkout redirect route', () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toContain('text/html');
-    expect(await response.text()).toContain('Continue to Crypto Checkout');
+    const html = await response.text();
+    expect(html).toContain('Continue to Crypto Checkout');
+    expect(html).toContain('Copy checkout link');
   });
 
   it('launches the crypto checkout URL with a GET-friendly redirect when the Telegram handoff form is submitted', async () => {

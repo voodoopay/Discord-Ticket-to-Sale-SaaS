@@ -2,6 +2,7 @@ import { AppError, OrderRepository } from '@voodoo/core';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
+import { buildAndroidIntentUrl } from '../../../lib/checkout-launch';
 import { parseCheckoutRedirectMethod, resolveCheckoutRedirectUrl } from '../../../lib/checkout-redirect';
 
 const orderRepository = new OrderRepository();
@@ -20,8 +21,11 @@ function buildTelegramLaunchPage(input: {
   buttonLabel: string;
   heading: string;
 }): string {
+  const androidIntentUrl = buildAndroidIntentUrl(input.targetUrl);
   const safeTargetUrl = escapeHtml(input.targetUrl);
+  const safeAndroidIntentUrl = escapeHtml(androidIntentUrl);
   const jsTargetUrl = JSON.stringify(input.targetUrl);
+  const jsAndroidIntentUrl = JSON.stringify(androidIntentUrl);
   const safeButtonLabel = escapeHtml(input.buttonLabel);
   const safeHeading = escapeHtml(input.heading);
 
@@ -39,19 +43,56 @@ function buildTelegramLaunchPage(input: {
     '    section { width: min(100%, 420px); background: #121c23; border: 1px solid #21303b; border-radius: 20px; padding: 24px; box-shadow: 0 18px 40px rgba(0, 0, 0, 0.24); }',
     '    h1 { margin: 0 0 12px; font-size: 1.4rem; line-height: 1.2; }',
     '    p { margin: 0 0 20px; color: #b7c3ce; line-height: 1.5; }',
-    '    button { width: 100%; border: 0; border-radius: 14px; padding: 16px; font: inherit; font-weight: 700; background: #12c8df; color: #04151d; }',
+    '    .actions { display: grid; gap: 12px; }',
+    '    button, a.action-link { width: 100%; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 14px; padding: 16px; font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }',
+    '    .primary { background: #12c8df; color: #04151d; }',
+    '    .secondary { background: #1d2a33; color: #e8eef5; border: 1px solid #314552; }',
+    '    .hint { margin-top: 14px; font-size: 0.94rem; color: #8ea1af; }',
     '  </style>',
     '</head>',
     '<body>',
     '  <main>',
     '    <section>',
     `      <h1>${safeHeading}</h1>`,
-    '      <p>Telegram may pre-open checkout links. Tap once below to launch the live checkout session.</p>',
-    `      <button type="button" id="checkout-launch">${safeButtonLabel}</button>`,
+    '      <p>Telegram’s in-app browser can break checkout. Open this in your browser instead, or copy the link and paste it into Chrome or Safari.</p>',
+    '      <div class="actions">',
+    `        <a class="action-link primary" id="checkout-launch" href="${safeAndroidIntentUrl}" rel="noreferrer">${safeButtonLabel}</a>`,
+    '        <button type="button" class="secondary" id="copy-checkout-link">Copy checkout link</button>',
+    '      </div>',
+    '      <p class="hint" id="checkout-copy-status">If the first button stays inside Telegram, copy the link and open it in your normal browser.</p>',
     `      <noscript><p style="margin-top: 12px;"><a href="${safeTargetUrl}" rel="noreferrer">Open checkout</a></p></noscript>`,
     '    </section>',
     '  </main>',
-    `  <script>document.getElementById('checkout-launch')?.addEventListener('click', () => { window.location.assign(${jsTargetUrl}); });</script>`,
+    '  <script>',
+    `    const checkoutUrl = ${jsTargetUrl};`,
+    `    const androidIntentUrl = ${jsAndroidIntentUrl};`,
+    "    const isAndroid = /Android/i.test(navigator.userAgent || '');",
+    "    const launchLink = document.getElementById('checkout-launch');",
+    "    const copyButton = document.getElementById('copy-checkout-link');",
+    "    const copyStatus = document.getElementById('checkout-copy-status');",
+    '    if (launchLink && !isAndroid) {',
+    "      launchLink.setAttribute('href', checkoutUrl);",
+    '    }',
+    "    launchLink?.addEventListener('click', (event) => {",
+    '      event.preventDefault();',
+    '      if (isAndroid) {',
+    '        window.location.assign(androidIntentUrl);',
+    '        return;',
+    '      }',
+    "      const popup = window.open(checkoutUrl, '_blank', 'noopener,noreferrer');",
+    '      if (!popup) {',
+    '        window.location.assign(checkoutUrl);',
+    '      }',
+    '    });',
+    "    copyButton?.addEventListener('click', async () => {",
+    '      try {',
+    '        await navigator.clipboard.writeText(checkoutUrl);',
+    "        if (copyStatus) copyStatus.textContent = 'Checkout link copied. Paste it into Chrome or Safari.';",
+    '      } catch {',
+    "        if (copyStatus) copyStatus.textContent = 'Copy failed here. Long-press the button and copy the checkout link manually.';",
+    '      }',
+    '    });',
+    '  </script>',
     '</body>',
     '</html>',
   ].join('\n');
