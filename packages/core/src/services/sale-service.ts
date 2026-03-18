@@ -69,6 +69,14 @@ export type SaleCheckoutOption = {
   url: string;
 };
 
+export function buildVoodooPayHostedCryptoCheckoutUrl(input: {
+  checkoutDomain: string;
+  paymentToken: string;
+  addFees: boolean;
+}): string {
+  return `https://${input.checkoutDomain}/crypto/hosted.php?payment_token=${input.paymentToken.trim()}&add_fees=${input.addFees ? '1' : '0'}`;
+}
+
 type SaleSessionResult = {
   orderSessionId: string;
   checkoutUrl: string;
@@ -924,10 +932,13 @@ export class SaleService {
         );
       }
 
-      const checkoutUrl = new URL(`https://${checkoutDomain}/crypto/hosted.php`);
-      checkoutUrl.searchParams.set('payment_token', responsePayload.payment_token.trim());
-      checkoutUrl.searchParams.set('add_fees', input.integration.cryptoAddFees ? '1' : '0');
-      return ok(checkoutUrl.toString());
+      return ok(
+        buildVoodooPayHostedCryptoCheckoutUrl({
+          checkoutDomain,
+          paymentToken: responsePayload.payment_token,
+          addFees: input.integration.cryptoAddFees,
+        }),
+      );
     } catch (error) {
       return err(fromUnknownError(error, 'VOODOO_PAY_MULTICOIN_CHECKOUT_FAILED'));
     }

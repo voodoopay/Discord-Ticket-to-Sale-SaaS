@@ -7,7 +7,7 @@ import {
   type SaleCheckoutOption,
   toTelegramScopedId,
 } from '@voodoo/core';
-import { type Api, type Context, InlineKeyboard, InputFile } from 'grammy';
+import { type Api, type Context, InlineKeyboard } from 'grammy';
 
 import {
   clearSaleDraftsForChat,
@@ -23,10 +23,7 @@ import {
   buildTelegramBotDeepLink,
   parseTelegramSaleStartPayload,
 } from '../lib/sale-links.js';
-import {
-  buildTelegramCheckoutButtonLabel,
-  buildTelegramCheckoutLinkFiles,
-} from '../lib/checkout-links.js';
+import { buildTelegramCheckoutButtonLabel } from '../lib/checkout-links.js';
 import {
   formatTelegramUserLabel,
   getLinkedStoreForChat,
@@ -215,7 +212,6 @@ async function sendCheckoutMessage(input: {
       `Order Session: ${input.orderSessionId}`,
       'Choose payment method below.',
       'Telegram now uses the exact provider checkout URL here, with no web wrapper.',
-      'If Telegram opens it incorrectly, use the attached checkout-link file and copy the single URL inside it into Chrome or Safari.',
       '',
       'Paid and fulfilled status updates will be posted in the linked Telegram group. This may take up to 30 minutes. Do NOT pay again.',
     ].join('\n'),
@@ -232,17 +228,6 @@ async function sendCheckoutMessage(input: {
       ),
     },
   );
-
-  const linkFiles = buildTelegramCheckoutLinkFiles(options);
-  for (const linkFile of linkFiles) {
-    await input.api.sendDocument(
-      getControlChatId(input.draft),
-      new InputFile(Buffer.from(linkFile.text, 'utf8'), linkFile.fileName),
-      {
-        caption: linkFile.caption,
-      },
-    );
-  }
 }
 
 async function finalizeDraft(input: { api: Api; draft: SaleDraft }): Promise<void> {
