@@ -437,23 +437,23 @@ In dashboard:
 1. Save Woo base URL, webhook secret, API key, API secret
 2. Copy generated webhook URL
 
-Also in dashboard `Server Settings`, configure join-gate if you want new members to be verified before they can see the full server:
-1. Enable join-gate
-2. Pick the fallback verify channel
-3. Pick the verified role
-4. Pick the verification ticket category
-5. Pick the current-customer lookup channel
-6. Pick the new-customer/referral lookup channel
+Join-gate is configured in Discord only, not in the web dashboard. After the server is linked and the join-gate bot is in the server, run this in Discord:
 
-After saving those values, run these commands in the target Discord server:
-- `/join-gate install`
+```text
+/join-gate setup fallback_channel:#verify verified_role:@verified ticket_category:Verification current_lookup_channel:#current-customers new_lookup_channel:#new-customers
+```
+
+Then run:
 - `/join-gate sync`
+- `/join-gate install`
 - `/join-gate status`
 
 The join-gate worker is default-deny until a super admin activates it for the server:
 - Run `/join-gate authorized` to confirm whether the server already has an allowlist entry
 - Run `/join-gate grant user:@someone` to activate the server for the first allowed Discord user
 - Use `/join-gate revoke user:@someone` later if you need to remove extra `/join-gate` access
+
+To turn it off again later, run `/join-gate disable`.
 
 Without that activation step, automatic new-member verification stays locked for the server.
 

@@ -1,20 +1,38 @@
 import {
+  ChannelType,
   MessageFlags,
   PermissionFlagsBits,
   SlashCommandBuilder,
   type ChatInputCommandInteraction,
 } from 'discord.js';
 import {
+  AppError,
+  type GuildConfigRecord,
   type JoinGateAuthorizedUserSummary,
   JoinGateAccessService,
   TenantRepository,
   getEnv,
+  validateJoinGateConfig,
 } from '@voodoo/core';
 
 import { mapJoinGateError, runJoinGateInstall, runJoinGateStatus, runJoinGateSync } from '../join-gate-runtime.js';
 
 const tenantRepository = new TenantRepository();
 const joinGateAccessService = new JoinGateAccessService();
+
+const DEFAULT_REFERRAL_THANK_YOU_TEMPLATE =
+  'Thanks for your referral. You earned {points} point(s) ({amount_gbp} GBP) after {referred_email} paid.';
+const DEFAULT_REFERRAL_SUBMISSION_TEMPLATE =
+  'Referral submitted successfully. We will reward points automatically after the first paid order.';
+
+type JoinGateConfigWriteInput = {
+  joinGateEnabled: boolean;
+  joinGateFallbackChannelId: string | null;
+  joinGateVerifiedRoleId: string | null;
+  joinGateTicketCategoryId: string | null;
+  joinGateCurrentLookupChannelId: string | null;
+  joinGateNewLookupChannelId: string | null;
+};
 
 function isSuperAdminUser(discordUserId: string): boolean {
   return getEnv().superAdminDiscordIds.includes(discordUserId);
@@ -30,6 +48,80 @@ function getJoinGateLockedMessage(authorizedUserCount: number): string {
 
 function getSuperAdminOnlyAccessMessage(): string {
   return 'Only the configured super admin Discord ID can manage `/join-gate` access.';
+}
+
+function buildBaseGuildConfigRecord(input: {
+  tenantId: string;
+  guildId: string;
+  existingConfig: GuildConfigRecord | null;
+}): Omit<GuildConfigRecord, 'id'> {
+  return {
+    tenantId: input.tenantId,
+    guildId: input.guildId,
+    paidLogChannelId: input.existingConfig?.paidLogChannelId ?? null,
+    staffRoleIds: input.existingConfig?.staffRoleIds ?? [],
+    defaultCurrency: input.existingConfig?.defaultCurrency ?? 'GBP',
+    tipEnabled: input.existingConfig?.tipEnabled ?? false,
+    pointsEarnCategoryKeys: input.existingConfig?.pointsEarnCategoryKeys ?? [],
+    pointsRedeemCategoryKeys: input.existingConfig?.pointsRedeemCategoryKeys ?? [],
+    pointValueMinor: input.existingConfig?.pointValueMinor ?? 1,
+    referralRewardMinor: input.existingConfig?.referralRewardMinor ?? 0,
+    referralRewardCategoryKeys: input.existingConfig?.referralRewardCategoryKeys ?? [],
+    referralLogChannelId: input.existingConfig?.referralLogChannelId ?? null,
+    referralThankYouTemplate:
+      input.existingConfig?.referralThankYouTemplate ?? DEFAULT_REFERRAL_THANK_YOU_TEMPLATE,
+    referralSubmissionTemplate:
+      input.existingConfig?.referralSubmissionTemplate ?? DEFAULT_REFERRAL_SUBMISSION_TEMPLATE,
+    ticketMetadataKey: input.existingConfig?.ticketMetadataKey ?? 'isTicket',
+    joinGateEnabled: input.existingConfig?.joinGateEnabled ?? false,
+    joinGateFallbackChannelId: input.existingConfig?.joinGateFallbackChannelId ?? null,
+    joinGateVerifiedRoleId: input.existingConfig?.joinGateVerifiedRoleId ?? null,
+    joinGateTicketCategoryId: input.existingConfig?.joinGateTicketCategoryId ?? null,
+    joinGateCurrentLookupChannelId: input.existingConfig?.joinGateCurrentLookupChannelId ?? null,
+    joinGateNewLookupChannelId: input.existingConfig?.joinGateNewLookupChannelId ?? null,
+  };
+}
+
+async function saveJoinGateConfig(input: {
+  guildId: string;
+  config: JoinGateConfigWriteInput;
+}): Promise<GuildConfigRecord> {
+  const tenant = await tenantRepository.getTenantByGuildId(input.guildId);
+  if (!tenant) {
+    throw new AppError('JOIN_GATE_GUILD_NOT_CONNECTED', 'This server is not connected to a tenant/workspace.', 404);
+  }
+
+  const validation = validateJoinGateConfig(input.config);
+  if (validation.isErr()) {
+    throw validation.error;
+  }
+
+  const existingConfig = await tenantRepository.getGuildConfig({
+    tenantId: tenant.tenantId,
+    guildId: input.guildId,
+  });
+  const baseConfig = buildBaseGuildConfigRecord({
+    tenantId: tenant.tenantId,
+    guildId: input.guildId,
+    existingConfig,
+  });
+
+  return tenantRepository.upsertGuildConfig({
+    ...baseConfig,
+    ...input.config,
+  });
+}
+
+function buildJoinGateSetupSavedMessage(config: GuildConfigRecord): string {
+  return [
+    'Join gate configuration saved for this server.',
+    `Fallback verify channel: <#${config.joinGateFallbackChannelId}>`,
+    `Verified role: <@&${config.joinGateVerifiedRoleId}>`,
+    `Ticket category: <#${config.joinGateTicketCategoryId}>`,
+    `Current-customer lookup: <#${config.joinGateCurrentLookupChannelId}>`,
+    `New-customer lookup: <#${config.joinGateNewLookupChannelId}>`,
+    'Next steps: run `/join-gate sync`, then `/join-gate install`, then `/join-gate status`.',
+  ].join('\n');
 }
 
 export function buildJoinGateAuthorizedUsersMessage(
@@ -55,6 +147,48 @@ export const joinGateCommand = {
     .setName('join-gate')
     .setDescription('Manage the member join verification gate for this server')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName('setup')
+        .setDescription('Configure join-gate channels, role, and category from Discord')
+        .addChannelOption((option) =>
+          option
+            .setName('fallback_channel')
+            .setDescription('Text channel unverified members can still see')
+            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+            .setRequired(true),
+        )
+        .addRoleOption((option) =>
+          option
+            .setName('verified_role')
+            .setDescription('Role granted after successful verification')
+            .setRequired(true),
+        )
+        .addChannelOption((option) =>
+          option
+            .setName('ticket_category')
+            .setDescription('Category where private verification tickets are created')
+            .addChannelTypes(ChannelType.GuildCategory)
+            .setRequired(true),
+        )
+        .addChannelOption((option) =>
+          option
+            .setName('current_lookup_channel')
+            .setDescription('Lookup channel for current-customer email matches')
+            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+            .setRequired(true),
+        )
+        .addChannelOption((option) =>
+          option
+            .setName('new_lookup_channel')
+            .setDescription('Lookup channel for new-customer or referral email matches')
+            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+            .setRequired(true),
+        ),
+    )
+    .addSubcommand((subcommand) =>
+      subcommand.setName('disable').setDescription('Disable join gate and clear its Discord-side configuration'),
+    )
     .addSubcommand((subcommand) =>
       subcommand.setName('status').setDescription('Show join-gate setup, index, and permission status'),
     )
@@ -204,6 +338,50 @@ export const joinGateCommand = {
           });
           return;
         }
+      }
+
+      if (subcommand === 'setup') {
+        const fallbackChannel = interaction.options.getChannel('fallback_channel', true);
+        const verifiedRole = interaction.options.getRole('verified_role', true);
+        const ticketCategory = interaction.options.getChannel('ticket_category', true);
+        const currentLookupChannel = interaction.options.getChannel('current_lookup_channel', true);
+        const newLookupChannel = interaction.options.getChannel('new_lookup_channel', true);
+
+        const config = await saveJoinGateConfig({
+          guildId: interaction.guild.id,
+          config: {
+            joinGateEnabled: true,
+            joinGateFallbackChannelId: fallbackChannel.id,
+            joinGateVerifiedRoleId: verifiedRole.id,
+            joinGateTicketCategoryId: ticketCategory.id,
+            joinGateCurrentLookupChannelId: currentLookupChannel.id,
+            joinGateNewLookupChannelId: newLookupChannel.id,
+          },
+        });
+
+        await interaction.editReply({
+          content: buildJoinGateSetupSavedMessage(config),
+        });
+        return;
+      }
+
+      if (subcommand === 'disable') {
+        await saveJoinGateConfig({
+          guildId: interaction.guild.id,
+          config: {
+            joinGateEnabled: false,
+            joinGateFallbackChannelId: null,
+            joinGateVerifiedRoleId: null,
+            joinGateTicketCategoryId: null,
+            joinGateCurrentLookupChannelId: null,
+            joinGateNewLookupChannelId: null,
+          },
+        });
+
+        await interaction.editReply({
+          content: 'Join gate is disabled for this server. Its Discord-side configuration has been cleared.',
+        });
+        return;
       }
 
       if (subcommand === 'status') {

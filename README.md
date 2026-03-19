@@ -66,13 +66,10 @@ Copy `.env.example` to `.env` and fill values.
 - `apps/join-gate-worker` is a separate Discord application/token dedicated to first-join verification.
 - Enable the privileged Discord intents `Server Members Intent` and `Message Content Intent` for the join-gate application before deploying it.
 - New members are prompted in DM first; if DMs are closed, they use the configured fallback verify channel panel instead.
-- Server settings now include join-gate controls for:
-  - fallback verify channel
-  - verified role
-  - private verification ticket category
-  - current-customer lookup channel
-  - new-customer/referral lookup channel
+- Join-gate setup is Discord-only. It is configured through `/join-gate` slash commands, not through the web dashboard.
 - The join-gate worker indexes emails from the two configured lookup channels, opens a private staff/member ticket on a confirmed match, grants the verified role, and kicks after 3 failed email attempts.
+- Run `/join-gate setup fallback_channel:#verify verified_role:@verified ticket_category:Verification current_lookup_channel:#current-customers new_lookup_channel:#new-customers` to configure join-gate for a server.
+- Run `/join-gate disable` to turn join-gate off and clear the stored Discord-side join-gate settings for that server.
 - Run `/join-gate install` after configuring the fallback channel to post or refresh the verification panel.
 - Run `/join-gate sync` after changing lookup channel history to rebuild the email index immediately.
 - Run `/join-gate status` to confirm missing configuration, missing permissions, and current indexed email counts.
@@ -105,7 +102,6 @@ Copy `.env.example` to `.env` and fill values.
 - Dashboard navigation now keeps regular merchant work in a one-section-at-a-time flow so mobile setup feels less crowded.
 - Dashboard now opens with a mobile-first setup flow strip and compact current-context card so merchants can jump straight to Workspace, Sales, Payments, Coupons, or Catalog without scanning the whole page.
 - Dashboard navigation now uses collapsible section cards, and catalog management uses four guided step panels so merchants can review products, manage category questions, edit product details, and handle variations without keeping the full builder open at once.
-- Server settings now include join-gate configuration for first-join verification, lookup channels, verified-role unlock, and verification ticket routing.
 - Server settings now include a `tip enabled` toggle (ask customer for optional GBP tip before checkout link generation).
 - Server settings now include rewards configuration:
   - `point value` (minor currency based)

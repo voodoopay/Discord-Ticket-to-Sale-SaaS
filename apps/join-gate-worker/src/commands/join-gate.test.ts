@@ -30,15 +30,19 @@ vi.mock('@voodoo/core', () => {
     public async revokeUserAccess(): Promise<never> {
       throw new Error('Mock revokeUserAccess not implemented');
     }
-
-    public async getGuildActivationState(): Promise<never> {
-      throw new Error('Mock getGuildActivationState not implemented');
-    }
   }
 
   class TenantRepository {
     public async getTenantByGuildId(): Promise<never> {
       throw new Error('Mock getTenantByGuildId not implemented');
+    }
+
+    public async getGuildConfig(): Promise<never> {
+      throw new Error('Mock getGuildConfig not implemented');
+    }
+
+    public async upsertGuildConfig(): Promise<never> {
+      throw new Error('Mock upsertGuildConfig not implemented');
     }
   }
 
@@ -59,6 +63,11 @@ vi.mock('@voodoo/core', () => {
       warn: vi.fn(),
     },
     resetEnvForTests: () => undefined,
+    validateJoinGateConfig: () => ({
+      isErr: () => false,
+      isOk: () => true,
+      value: undefined,
+    }),
   };
 });
 
@@ -92,12 +101,26 @@ function createOkResult<T>(value: T): { isErr: () => false; isOk: () => true; va
 
 function createInteractionMock(input?: {
   userId?: string;
-  subcommand?: 'status' | 'sync' | 'install' | 'authorized' | 'grant' | 'revoke';
+  subcommand?: 'setup' | 'disable' | 'status' | 'sync' | 'install' | 'authorized' | 'grant' | 'revoke';
   targetUserId?: string;
+  channelIds?: {
+    fallback?: string;
+    ticketCategory?: string;
+    currentLookup?: string;
+    newLookup?: string;
+  };
+  roleId?: string;
 }): InteractionMocks {
   const deferReply = vi.fn(async () => undefined);
   const editReply = vi.fn(async () => undefined);
   const reply = vi.fn(async () => undefined);
+
+  const channelIds = {
+    fallback: input?.channelIds?.fallback ?? 'channel-fallback',
+    ticketCategory: input?.channelIds?.ticketCategory ?? 'channel-category',
+    currentLookup: input?.channelIds?.currentLookup ?? 'channel-current',
+    newLookup: input?.channelIds?.newLookup ?? 'channel-new',
+  };
 
   const interaction = {
     deferred: false,
@@ -109,6 +132,23 @@ function createInteractionMock(input?: {
     options: {
       getSubcommand: vi.fn().mockReturnValue(input?.subcommand ?? 'status'),
       getUser: vi.fn().mockReturnValue({ id: input?.targetUserId ?? 'user-2' }),
+      getChannel: vi.fn((name: string) => {
+        if (name === 'fallback_channel') {
+          return { id: channelIds.fallback };
+        }
+        if (name === 'ticket_category') {
+          return { id: channelIds.ticketCategory };
+        }
+        if (name === 'current_lookup_channel') {
+          return { id: channelIds.currentLookup };
+        }
+        if (name === 'new_lookup_channel') {
+          return { id: channelIds.newLookup };
+        }
+
+        return null;
+      }),
+      getRole: vi.fn().mockReturnValue({ id: input?.roleId ?? 'role-verified' }),
     },
     reply,
     user: { id: input?.userId ?? 'user-1' },
@@ -224,6 +264,159 @@ describe('join-gate command', () => {
 
     expect(editReply).toHaveBeenCalledWith({
       content: 'Granted `/join-gate` access for <@user-3> in this server.',
+    });
+  });
+
+  it('saves join-gate setup entirely through slash-command options', async () => {
+    process.env.SUPER_ADMIN_DISCORD_IDS = 'owner-1';
+    resetEnvForTests();
+
+    vi.spyOn(TenantRepository.prototype, 'getTenantByGuildId').mockResolvedValue({
+      tenantId: 'tenant-1',
+    } as Awaited<ReturnType<TenantRepository['getTenantByGuildId']>>);
+    vi.spyOn(TenantRepository.prototype, 'getGuildConfig').mockResolvedValue(null);
+    const upsertSpy = vi
+      .spyOn(TenantRepository.prototype, 'upsertGuildConfig')
+      .mockResolvedValue({
+        id: 'cfg-1',
+        tenantId: 'tenant-1',
+        guildId: 'guild-1',
+        paidLogChannelId: null,
+        staffRoleIds: [],
+        defaultCurrency: 'GBP',
+        tipEnabled: false,
+        pointsEarnCategoryKeys: [],
+        pointsRedeemCategoryKeys: [],
+        pointValueMinor: 1,
+        referralRewardMinor: 0,
+        referralRewardCategoryKeys: [],
+        referralLogChannelId: null,
+        referralThankYouTemplate:
+          'Thanks for your referral. You earned {points} point(s) ({amount_gbp} GBP) after {referred_email} paid.',
+        referralSubmissionTemplate:
+          'Referral submitted successfully. We will reward points automatically after the first paid order.',
+        ticketMetadataKey: 'isTicket',
+        joinGateEnabled: true,
+        joinGateFallbackChannelId: 'channel-fallback',
+        joinGateVerifiedRoleId: 'role-verified',
+        joinGateTicketCategoryId: 'channel-category',
+        joinGateCurrentLookupChannelId: 'channel-current',
+        joinGateNewLookupChannelId: 'channel-new',
+      } as Awaited<ReturnType<TenantRepository['upsertGuildConfig']>>);
+
+    const { interaction, editReply } = createInteractionMock({
+      userId: 'owner-1',
+      subcommand: 'setup',
+    });
+
+    await joinGateCommand.execute(interaction);
+
+    expect(upsertSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 'tenant-1',
+        guildId: 'guild-1',
+        joinGateEnabled: true,
+        joinGateFallbackChannelId: 'channel-fallback',
+        joinGateVerifiedRoleId: 'role-verified',
+        joinGateTicketCategoryId: 'channel-category',
+        joinGateCurrentLookupChannelId: 'channel-current',
+        joinGateNewLookupChannelId: 'channel-new',
+      }),
+    );
+    expect(editReply).toHaveBeenCalledWith({
+      content: [
+        'Join gate configuration saved for this server.',
+        'Fallback verify channel: <#channel-fallback>',
+        'Verified role: <@&role-verified>',
+        'Ticket category: <#channel-category>',
+        'Current-customer lookup: <#channel-current>',
+        'New-customer lookup: <#channel-new>',
+        'Next steps: run `/join-gate sync`, then `/join-gate install`, then `/join-gate status`.',
+      ].join('\n'),
+    });
+  });
+
+  it('disables join-gate through slash commands without the web dashboard', async () => {
+    process.env.SUPER_ADMIN_DISCORD_IDS = 'owner-1';
+    resetEnvForTests();
+
+    vi.spyOn(TenantRepository.prototype, 'getTenantByGuildId').mockResolvedValue({
+      tenantId: 'tenant-1',
+    } as Awaited<ReturnType<TenantRepository['getTenantByGuildId']>>);
+    vi.spyOn(TenantRepository.prototype, 'getGuildConfig').mockResolvedValue({
+      id: 'cfg-1',
+      tenantId: 'tenant-1',
+      guildId: 'guild-1',
+      paidLogChannelId: null,
+      staffRoleIds: [],
+      defaultCurrency: 'GBP',
+      tipEnabled: false,
+      pointsEarnCategoryKeys: [],
+      pointsRedeemCategoryKeys: [],
+      pointValueMinor: 1,
+      referralRewardMinor: 0,
+      referralRewardCategoryKeys: [],
+      referralLogChannelId: null,
+      referralThankYouTemplate:
+        'Thanks for your referral. You earned {points} point(s) ({amount_gbp} GBP) after {referred_email} paid.',
+      referralSubmissionTemplate:
+        'Referral submitted successfully. We will reward points automatically after the first paid order.',
+      ticketMetadataKey: 'isTicket',
+      joinGateEnabled: true,
+      joinGateFallbackChannelId: 'channel-fallback',
+      joinGateVerifiedRoleId: 'role-verified',
+      joinGateTicketCategoryId: 'channel-category',
+      joinGateCurrentLookupChannelId: 'channel-current',
+      joinGateNewLookupChannelId: 'channel-new',
+    } as Awaited<ReturnType<TenantRepository['getGuildConfig']>>);
+    const upsertSpy = vi
+      .spyOn(TenantRepository.prototype, 'upsertGuildConfig')
+      .mockResolvedValue({
+        id: 'cfg-1',
+        tenantId: 'tenant-1',
+        guildId: 'guild-1',
+        paidLogChannelId: null,
+        staffRoleIds: [],
+        defaultCurrency: 'GBP',
+        tipEnabled: false,
+        pointsEarnCategoryKeys: [],
+        pointsRedeemCategoryKeys: [],
+        pointValueMinor: 1,
+        referralRewardMinor: 0,
+        referralRewardCategoryKeys: [],
+        referralLogChannelId: null,
+        referralThankYouTemplate:
+          'Thanks for your referral. You earned {points} point(s) ({amount_gbp} GBP) after {referred_email} paid.',
+        referralSubmissionTemplate:
+          'Referral submitted successfully. We will reward points automatically after the first paid order.',
+        ticketMetadataKey: 'isTicket',
+        joinGateEnabled: false,
+        joinGateFallbackChannelId: null,
+        joinGateVerifiedRoleId: null,
+        joinGateTicketCategoryId: null,
+        joinGateCurrentLookupChannelId: null,
+        joinGateNewLookupChannelId: null,
+      } as Awaited<ReturnType<TenantRepository['upsertGuildConfig']>>);
+
+    const { interaction, editReply } = createInteractionMock({
+      userId: 'owner-1',
+      subcommand: 'disable',
+    });
+
+    await joinGateCommand.execute(interaction);
+
+    expect(upsertSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        joinGateEnabled: false,
+        joinGateFallbackChannelId: null,
+        joinGateVerifiedRoleId: null,
+        joinGateTicketCategoryId: null,
+        joinGateCurrentLookupChannelId: null,
+        joinGateNewLookupChannelId: null,
+      }),
+    );
+    expect(editReply).toHaveBeenCalledWith({
+      content: 'Join gate is disabled for this server. Its Discord-side configuration has been cleared.',
     });
   });
 });
