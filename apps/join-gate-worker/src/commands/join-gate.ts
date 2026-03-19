@@ -1,4 +1,5 @@
 import {
+  ApplicationCommandOptionType,
   ChannelType,
   MessageFlags,
   PermissionFlagsBits,
@@ -122,6 +123,27 @@ function buildJoinGateSetupSavedMessage(config: GuildConfigRecord): string {
     `New-customer lookup: <#${config.joinGateNewLookupChannelId}>`,
     'Next steps: run `/join-gate sync`, then `/join-gate install`, then `/join-gate status`.',
   ].join('\n');
+}
+
+function getRawSubcommandOptionId(
+  interaction: ChatInputCommandInteraction,
+  optionName: string,
+): string {
+  const subcommandOption = interaction.options.data.find(
+    (option) => option.type === ApplicationCommandOptionType.Subcommand,
+  );
+  const targetOption = subcommandOption?.options?.find((option) => option.name === optionName);
+  const value = targetOption?.value;
+
+  if (typeof value === 'string' && value.trim().length > 0) {
+    return value;
+  }
+
+  throw new AppError(
+    'JOIN_GATE_OPTION_INVALID',
+    `The required \`${optionName}\` value could not be resolved from this command interaction.`,
+    400,
+  );
 }
 
 export function buildJoinGateAuthorizedUsersMessage(
@@ -341,21 +363,21 @@ export const joinGateCommand = {
       }
 
       if (subcommand === 'setup') {
-        const fallbackChannel = interaction.options.getChannel('fallback_channel', true);
-        const verifiedRole = interaction.options.getRole('verified_role', true);
-        const ticketCategory = interaction.options.getChannel('ticket_category', true);
-        const currentLookupChannel = interaction.options.getChannel('current_lookup_channel', true);
-        const newLookupChannel = interaction.options.getChannel('new_lookup_channel', true);
+        const fallbackChannelId = getRawSubcommandOptionId(interaction, 'fallback_channel');
+        const verifiedRoleId = getRawSubcommandOptionId(interaction, 'verified_role');
+        const ticketCategoryId = getRawSubcommandOptionId(interaction, 'ticket_category');
+        const currentLookupChannelId = getRawSubcommandOptionId(interaction, 'current_lookup_channel');
+        const newLookupChannelId = getRawSubcommandOptionId(interaction, 'new_lookup_channel');
 
         const config = await saveJoinGateConfig({
           guildId: interaction.guild.id,
           config: {
             joinGateEnabled: true,
-            joinGateFallbackChannelId: fallbackChannel.id,
-            joinGateVerifiedRoleId: verifiedRole.id,
-            joinGateTicketCategoryId: ticketCategory.id,
-            joinGateCurrentLookupChannelId: currentLookupChannel.id,
-            joinGateNewLookupChannelId: newLookupChannel.id,
+            joinGateFallbackChannelId: fallbackChannelId,
+            joinGateVerifiedRoleId: verifiedRoleId,
+            joinGateTicketCategoryId: ticketCategoryId,
+            joinGateCurrentLookupChannelId: currentLookupChannelId,
+            joinGateNewLookupChannelId: newLookupChannelId,
           },
         });
 

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { MessageFlags, type ChatInputCommandInteraction } from 'discord.js';
+import { ApplicationCommandOptionType, MessageFlags, type ChatInputCommandInteraction } from 'discord.js';
 
 vi.mock('@voodoo/core', () => {
   class AppError extends Error {
@@ -130,6 +130,24 @@ function createInteractionMock(input?: {
     inGuild: vi.fn().mockReturnValue(true),
     memberPermissions: { has: vi.fn().mockReturnValue(true) },
     options: {
+      data: [
+        {
+          name: input?.subcommand ?? 'status',
+          type: ApplicationCommandOptionType.Subcommand,
+          options:
+            input?.subcommand === 'setup'
+              ? [
+                  { name: 'fallback_channel', value: channelIds.fallback },
+                  { name: 'verified_role', value: input?.roleId ?? 'role-verified' },
+                  { name: 'ticket_category', value: channelIds.ticketCategory },
+                  { name: 'current_lookup_channel', value: channelIds.currentLookup },
+                  { name: 'new_lookup_channel', value: channelIds.newLookup },
+                ]
+              : input?.subcommand === 'grant' || input?.subcommand === 'revoke'
+                ? [{ name: 'user', value: input?.targetUserId ?? 'user-2' }]
+                : [],
+        },
+      ],
       getSubcommand: vi.fn().mockReturnValue(input?.subcommand ?? 'status'),
       getUser: vi.fn().mockReturnValue({ id: input?.targetUserId ?? 'user-2' }),
       getChannel: vi.fn((name: string) => {
