@@ -34,12 +34,12 @@ import { ulid } from 'ulid';
 
 import {
   EMAIL_INPUT_ID,
-  PANEL_EMBED_TITLE,
   buildJoinGateEmailModal,
   buildJoinGatePrompt,
   buildJoinGateStatusMessage,
   lookupFailureMessage,
   parseJoinGateModalCustomId,
+  parseJoinGateResendDmCustomId,
   parseJoinGateStartCustomId,
   sanitizeTicketChannelName,
   shortStatusLabel,
@@ -78,6 +78,10 @@ type InstallPanelResult = {
   channelId: string;
   messageId: string;
   created: boolean;
+};
+
+type DmPromptResult = {
+  delivery: 'sent' | 'blocked';
 };
 
 type FetchableTextChannel = TextBasedChannel & {
@@ -313,6 +317,12 @@ async function describeRuntimeWarnings(guild: Guild, config: GuildConfigRecord):
     }
   }
 
+  for (const roleId of Array.from(new Set(config.joinGateStaffRoleIds ?? []))) {
+    if (!guild.roles.cache.has(roleId)) {
+      warnings.push(`Configured staff role no longer exists: ${roleId}`);
+    }
+  }
+
   if (hasText(config.joinGateTicketCategoryId)) {
     const category = await guild.channels.fetch(config.joinGateTicketCategoryId).catch(() => null);
     if (!category || category.type !== ChannelType.GuildCategory) {
@@ -398,6 +408,23 @@ async function requireTextChannel(guild: Guild, channelId: string, label: string
   }
 
   return channel;
+}
+
+function isJoinGateFallbackPanelMessage(message: Message): boolean {
+  if (message.author.id !== message.client.user?.id) {
+    return false;
+  }
+
+  return message.components.some((row) =>
+    'components' in row &&
+    Array.isArray(row.components) &&
+    row.components.some(
+      (component) =>
+        'customId' in component &&
+        typeof component.customId === 'string' &&
+        (component.customId.startsWith('join-gate:start:') || component.customId.startsWith('join-gate:resend-dm:')),
+    ),
+  );
 }
 
 async function syncLookupSourceChannel(
@@ -513,12 +540,12 @@ export async function installOrRefreshFallbackPanel(guild: Guild): Promise<Insta
     guildId: guild.id,
     guildName: guild.name,
     delivery: 'fallback',
+    panelTitle: context.config.joinGatePanelTitle,
+    panelMessage: context.config.joinGatePanelMessage,
   });
 
   const recentMessages = await channel.messages.fetch({ limit: 25 });
-  const existing = [...recentMessages.values()].find(
-    (message) => message.author.id === guild.client.user?.id && message.embeds[0]?.title === PANEL_EMBED_TITLE,
-  );
+  const existing = [...recentMessages.values()].find((message) => isJoinGateFallbackPanelMessage(message));
 
   if (existing) {
     await existing.edit(payload);
@@ -619,6 +646,17 @@ async function createVerificationTicket(input: {
   email: string;
   resources: VerificationResources;
 }): Promise<{ channelId: string }> {
+  const staffRoleOverwrites = Array.from(new Set(input.context.config.joinGateStaffRoleIds ?? []))
+    .filter((roleId) => input.context.guild.roles.cache.has(roleId))
+    .map((roleId) => ({
+      id: roleId,
+      allow: [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.ReadMessageHistory,
+      ],
+    }));
+
   const ticketChannel = await input.context.guild.channels.create({
     name: sanitizeTicketChannelName(input.member.displayName || input.member.user.username, ulid()),
     type: ChannelType.GuildText,
@@ -645,14 +683,7 @@ async function createVerificationTicket(input: {
           PermissionFlagsBits.ManageChannels,
         ],
       },
-      ...Array.from(new Set(input.context.config.staffRoleIds)).map((roleId) => ({
-        id: roleId,
-        allow: [
-          PermissionFlagsBits.ViewChannel,
-          PermissionFlagsBits.SendMessages,
-          PermissionFlagsBits.ReadMessageHistory,
-        ],
-      })),
+      ...staffRoleOverwrites,
     ],
   });
 
@@ -691,6 +722,56 @@ async function createVerificationTicket(input: {
   };
 }
 
+async function sendJoinGateDmPrompt(input: {
+  context: JoinGateContext;
+  member: GuildMember;
+  source: 'member_join' | 'resend_button';
+}): Promise<DmPromptResult> {
+  try {
+    await input.member.send(
+      buildJoinGatePrompt({
+        guildId: input.member.guild.id,
+        guildName: input.member.guild.name,
+        delivery: 'dm',
+      }),
+    );
+
+    const statusResult = await joinGateService.markDmStatus({
+      tenantId: input.context.tenantId,
+      guildId: input.member.guild.id,
+      discordUserId: input.member.id,
+      dmStatus: 'sent',
+    });
+    if (statusResult.isErr()) {
+      logger.warn(
+        { err: statusResult.error, guildId: input.member.guild.id, memberId: input.member.id, source: input.source },
+        'join gate failed to record sent dm',
+      );
+    }
+
+    return { delivery: 'sent' };
+  } catch (error) {
+    const statusResult = await joinGateService.markDmStatus({
+      tenantId: input.context.tenantId,
+      guildId: input.member.guild.id,
+      discordUserId: input.member.id,
+      dmStatus: 'blocked',
+    });
+    if (statusResult.isErr()) {
+      logger.warn(
+        { err: statusResult.error, guildId: input.member.guild.id, memberId: input.member.id, source: input.source },
+        'join gate failed to record blocked dm',
+      );
+    }
+
+    logger.warn(
+      { err: error, guildId: input.member.guild.id, memberId: input.member.id, source: input.source },
+      'join gate dm prompt failed',
+    );
+    return { delivery: 'blocked' };
+  }
+}
+
 export async function handleMemberJoin(member: GuildMember): Promise<void> {
   const context = await resolveJoinGateContext(member.guild);
   if (!context || !context.config.joinGateEnabled) {
@@ -717,49 +798,71 @@ export async function handleMemberJoin(member: GuildMember): Promise<void> {
     return;
   }
 
-  try {
-    await member.send(
-      buildJoinGatePrompt({
-        guildId: member.guild.id,
-        guildName: member.guild.name,
-        delivery: 'dm',
-      }),
-    );
-
-    const statusResult = await joinGateService.markDmStatus({
-      tenantId: context.tenantId,
-      guildId: member.guild.id,
-      discordUserId: member.id,
-      dmStatus: 'sent',
-    });
-    if (statusResult.isErr()) {
-      logger.warn({ err: statusResult.error, guildId: member.guild.id, memberId: member.id }, 'join gate failed to record sent dm');
-    }
-  } catch (error) {
-    const statusResult = await joinGateService.markDmStatus({
-      tenantId: context.tenantId,
-      guildId: member.guild.id,
-      discordUserId: member.id,
-      dmStatus: 'blocked',
-    });
-    if (statusResult.isErr()) {
-      logger.warn({ err: statusResult.error, guildId: member.guild.id, memberId: member.id }, 'join gate failed to record blocked dm');
-    }
-
-    logger.warn({ err: error, guildId: member.guild.id, memberId: member.id }, 'join gate dm prompt failed');
-  }
+  await sendJoinGateDmPrompt({
+    context,
+    member,
+    source: 'member_join',
+  });
 }
 
 export async function handleJoinGateButton(interaction: ButtonInteraction): Promise<boolean> {
-  const parsed = parseJoinGateStartCustomId(interaction.customId);
-  if (!parsed) {
+  const startParsed = parseJoinGateStartCustomId(interaction.customId);
+  if (startParsed) {
+    try {
+      const { guild, member } = await resolveGuildMember({
+        client: interaction.client,
+        guildId: startParsed.guildId,
+        userId: interaction.user.id,
+      });
+      const context = await resolveJoinGateContext(guild);
+      if (!context) {
+        throw new AppError('JOIN_GATE_GUILD_NOT_CONNECTED', 'This server is not connected to a tenant configuration.', 404);
+      }
+
+      await requireActivatedJoinGate(context);
+      requireEnabledJoinGate(context);
+
+      const setSelectionResult = await joinGateService.setSelection({
+        tenantId: context.tenantId,
+        guildId: guild.id,
+        discordUserId: member.id,
+        path: startParsed.path,
+      });
+      if (setSelectionResult.isErr()) {
+        throw setSelectionResult.error;
+      }
+
+      await interaction.showModal(buildJoinGateEmailModal(guild.id, startParsed.path));
+    } catch (error) {
+      const replyOptions = privateReplyOptions(interaction);
+
+      if (interaction.replied || interaction.deferred) {
+        await interaction.followUp({
+          content: mapJoinGateError(error),
+          ...(replyOptions ?? {}),
+        });
+      } else {
+        await interaction.reply({
+          content: mapJoinGateError(error),
+          ...(replyOptions ?? {}),
+        });
+      }
+    }
+
+    return true;
+  }
+
+  const resendParsed = parseJoinGateResendDmCustomId(interaction.customId);
+  if (!resendParsed) {
     return false;
   }
+
+  await interaction.deferReply(privateDeferReplyOptions(interaction));
 
   try {
     const { guild, member } = await resolveGuildMember({
       client: interaction.client,
-      guildId: parsed.guildId,
+      guildId: resendParsed.guildId,
       userId: interaction.user.id,
     });
     const context = await resolveJoinGateContext(guild);
@@ -770,31 +873,20 @@ export async function handleJoinGateButton(interaction: ButtonInteraction): Prom
     await requireActivatedJoinGate(context);
     requireEnabledJoinGate(context);
 
-    const setSelectionResult = await joinGateService.setSelection({
-      tenantId: context.tenantId,
-      guildId: guild.id,
-      discordUserId: member.id,
-      path: parsed.path,
+    const dmResult = await sendJoinGateDmPrompt({
+      context,
+      member,
+      source: 'resend_button',
     });
-    if (setSelectionResult.isErr()) {
-      throw setSelectionResult.error;
-    }
 
-    await interaction.showModal(buildJoinGateEmailModal(guild.id, parsed.path));
+    await interaction.editReply({
+      content:
+        dmResult.delivery === 'sent'
+          ? 'I sent the verification DM again. Please check your Discord direct messages.'
+          : 'I could not send the DM. Please enable DMs from this server or continue using the fallback verification panel here.',
+    });
   } catch (error) {
-    const replyOptions = privateReplyOptions(interaction);
-
-    if (interaction.replied || interaction.deferred) {
-      await interaction.followUp({
-        content: mapJoinGateError(error),
-        ...(replyOptions ?? {}),
-      });
-    } else {
-      await interaction.reply({
-        content: mapJoinGateError(error),
-        ...(replyOptions ?? {}),
-      });
-    }
+    await interaction.editReply({ content: mapJoinGateError(error) });
   }
 
   return true;

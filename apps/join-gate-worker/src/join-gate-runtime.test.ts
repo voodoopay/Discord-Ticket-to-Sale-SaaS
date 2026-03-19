@@ -4,9 +4,11 @@ import {
   buildJoinGateButtons,
   buildJoinGateEmailModal,
   buildJoinGatePrompt,
+  buildJoinGateResendDmButton,
   buildJoinGateStatusMessage,
   lookupFailureMessage,
   parseJoinGateModalCustomId,
+  parseJoinGateResendDmCustomId,
   parseJoinGateStartCustomId,
   sanitizeTicketChannelName,
   shortStatusLabel,
@@ -23,6 +25,15 @@ describe('join gate runtime helpers', () => {
     expect(components[1]?.custom_id).toBe('join-gate:start:guild-123:new_customer');
   });
 
+  it('builds a stable resend-dm button id', () => {
+    const row = buildJoinGateResendDmButton('guild-123');
+    const json = row.toJSON();
+    const components = json.components as Array<{ custom_id?: string }>;
+
+    expect(components).toHaveLength(1);
+    expect(components[0]?.custom_id).toBe('join-gate:resend-dm:guild-123');
+  });
+
   it('parses join gate custom ids from button and modal interactions', () => {
     expect(parseJoinGateStartCustomId('join-gate:start:guild-1:current_customer')).toEqual({
       guildId: 'guild-1',
@@ -32,8 +43,12 @@ describe('join gate runtime helpers', () => {
       guildId: 'guild-2',
       path: 'new_customer',
     });
+    expect(parseJoinGateResendDmCustomId('join-gate:resend-dm:guild-9')).toEqual({
+      guildId: 'guild-9',
+    });
     expect(parseJoinGateStartCustomId('sale:start:guild-1:current_customer')).toBeNull();
     expect(parseJoinGateModalCustomId('join-gate:email:guild-2:wrong')).toBeNull();
+    expect(parseJoinGateResendDmCustomId('join-gate:resend-dm:')).toBeNull();
   });
 
   it('builds the verification prompt copy for fallback delivery', () => {
@@ -41,11 +56,14 @@ describe('join gate runtime helpers', () => {
       guildId: 'guild-1',
       guildName: 'Voodoo Guild',
       delivery: 'fallback',
+      panelTitle: 'Welcome to Voodoo',
+      panelMessage: 'Please verify below before you can access the rest of the server.',
     });
     const embed = payload.embeds?.[0]?.toJSON();
 
-    expect(embed?.title).toBe('Verify Server Access');
-    expect(embed?.description).toContain('cannot see the rest of the server yet');
+    expect(embed?.title).toBe('Welcome to Voodoo');
+    expect(embed?.description).toContain('Please verify below before you can access the rest of the server.');
+    expect(payload.components).toHaveLength(2);
   });
 
   it('builds the verification prompt copy for dm delivery', () => {
@@ -89,11 +107,14 @@ describe('join gate runtime helpers', () => {
     const content = buildJoinGateStatusMessage({
       config: {
         joinGateEnabled: true,
+        joinGateStaffRoleIds: ['role-staff-1', 'role-staff-2'],
         joinGateFallbackChannelId: 'fallback-1',
         joinGateVerifiedRoleId: 'role-1',
         joinGateTicketCategoryId: 'cat-1',
         joinGateCurrentLookupChannelId: 'current-1',
         joinGateNewLookupChannelId: 'new-1',
+        joinGatePanelTitle: 'Welcome to Voodoo',
+        joinGatePanelMessage: 'Please verify to continue.',
       },
       missingConfig: ['Verified role'],
       runtimeWarnings: ['Missing guild permission: Manage Roles'],
@@ -102,6 +123,8 @@ describe('join gate runtime helpers', () => {
     });
 
     expect(content).toContain('Join Gate: Enabled');
+    expect(content).toContain('Staff roles: <@&role-staff-1>, <@&role-staff-2>');
+    expect(content).toContain('Fallback panel title: "Welcome to Voodoo"');
     expect(content).toContain('Current-customer lookup: <#current-1> (12 indexed email(s))');
     expect(content).toContain('Missing config: Verified role');
     expect(content).toContain('- Missing guild permission: Manage Roles');
@@ -111,11 +134,14 @@ describe('join gate runtime helpers', () => {
     const content = buildJoinGateStatusMessage({
       config: {
         joinGateEnabled: false,
+        joinGateStaffRoleIds: [],
         joinGateFallbackChannelId: null,
         joinGateVerifiedRoleId: null,
         joinGateTicketCategoryId: null,
         joinGateCurrentLookupChannelId: null,
         joinGateNewLookupChannelId: null,
+        joinGatePanelTitle: null,
+        joinGatePanelMessage: null,
       },
       missingConfig: [],
       runtimeWarnings: [],

@@ -18,6 +18,8 @@ export type JoinGateConfigInput = {
   joinGateTicketCategoryId?: string | null;
   joinGateCurrentLookupChannelId?: string | null;
   joinGateNewLookupChannelId?: string | null;
+  joinGatePanelTitle?: string | null;
+  joinGatePanelMessage?: string | null;
 };
 
 export type JoinGateMessageEmbedLike = {

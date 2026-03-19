@@ -120,6 +120,13 @@
       "when": 1773926400000,
       "tag": "0016_join_gate_access_control",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "5",
+      "when": 1773946000000,
+      "tag": "0017_join_gate_panel_config",
+      "breakpoints": true
     }
   ]
 }

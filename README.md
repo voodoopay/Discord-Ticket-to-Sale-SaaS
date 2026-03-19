@@ -69,8 +69,12 @@ Copy `.env.example` to `.env` and fill values.
 - Join-gate setup is Discord-only. It is configured through `/join-gate` slash commands, not through the web dashboard.
 - The join-gate worker indexes emails from the two configured lookup channels, opens a private staff/member ticket on a confirmed match, grants the verified role, and kicks after 3 failed email attempts.
 - Run `/join-gate setup fallback_channel:#verify verified_role:@verified ticket_category:Verification current_lookup_channel:#current-customers new_lookup_channel:#new-customers` to configure join-gate for a server.
+- Run `/join-gate staff-add role:@Staff` and `/join-gate staff-remove role:@Staff` to control which roles can see new verification tickets.
+- Run `/join-gate staff-list` to review the current join-gate ticket visibility roles.
+- Run `/join-gate panel title:"Welcome" message:"Custom welcome text"` to save a custom fallback embed title/message.
+- Run `/join-gate panel-reset` to go back to the default fallback embed text.
 - Run `/join-gate disable` to turn join-gate off and clear the stored Discord-side join-gate settings for that server.
-- Run `/join-gate install` after configuring the fallback channel to post or refresh the verification panel.
+- Run `/join-gate install` after configuring the fallback channel to post or refresh the verification panel. The fallback panel includes a `Resend DM` button for members whose DMs are closed or missed the first prompt.
 - Run `/join-gate sync` after changing lookup channel history to rebuild the email index immediately.
 - Run `/join-gate status` to confirm missing configuration, missing permissions, and current indexed email counts.
 - `/join-gate authorized` lists the extra Discord user IDs allowed to use `/join-gate` in the current server. Only `SUPER_ADMIN_DISCORD_IDS` can use it.

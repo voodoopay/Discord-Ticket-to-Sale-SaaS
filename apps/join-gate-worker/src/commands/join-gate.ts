@@ -26,14 +26,20 @@ const DEFAULT_REFERRAL_THANK_YOU_TEMPLATE =
 const DEFAULT_REFERRAL_SUBMISSION_TEMPLATE =
   'Referral submitted successfully. We will reward points automatically after the first paid order.';
 
-type JoinGateConfigWriteInput = {
-  joinGateEnabled: boolean;
-  joinGateFallbackChannelId: string | null;
-  joinGateVerifiedRoleId: string | null;
-  joinGateTicketCategoryId: string | null;
-  joinGateCurrentLookupChannelId: string | null;
-  joinGateNewLookupChannelId: string | null;
-};
+type JoinGateConfigPatch = Partial<
+  Pick<
+    GuildConfigRecord,
+    | 'joinGateEnabled'
+    | 'joinGateStaffRoleIds'
+    | 'joinGateFallbackChannelId'
+    | 'joinGateVerifiedRoleId'
+    | 'joinGateTicketCategoryId'
+    | 'joinGateCurrentLookupChannelId'
+    | 'joinGateNewLookupChannelId'
+    | 'joinGatePanelTitle'
+    | 'joinGatePanelMessage'
+  >
+>;
 
 function isSuperAdminUser(discordUserId: string): boolean {
   return getEnv().superAdminDiscordIds.includes(discordUserId);
@@ -75,26 +81,33 @@ function buildBaseGuildConfigRecord(input: {
       input.existingConfig?.referralSubmissionTemplate ?? DEFAULT_REFERRAL_SUBMISSION_TEMPLATE,
     ticketMetadataKey: input.existingConfig?.ticketMetadataKey ?? 'isTicket',
     joinGateEnabled: input.existingConfig?.joinGateEnabled ?? false,
+    joinGateStaffRoleIds: input.existingConfig?.joinGateStaffRoleIds ?? [],
     joinGateFallbackChannelId: input.existingConfig?.joinGateFallbackChannelId ?? null,
     joinGateVerifiedRoleId: input.existingConfig?.joinGateVerifiedRoleId ?? null,
     joinGateTicketCategoryId: input.existingConfig?.joinGateTicketCategoryId ?? null,
     joinGateCurrentLookupChannelId: input.existingConfig?.joinGateCurrentLookupChannelId ?? null,
     joinGateNewLookupChannelId: input.existingConfig?.joinGateNewLookupChannelId ?? null,
+    joinGatePanelTitle: input.existingConfig?.joinGatePanelTitle ?? null,
+    joinGatePanelMessage: input.existingConfig?.joinGatePanelMessage ?? null,
   };
 }
 
-async function saveJoinGateConfig(input: {
+function normalizeOptionalConfigText(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+async function saveGuildConfigPatch(input: {
   guildId: string;
-  config: JoinGateConfigWriteInput;
+  patch: JoinGateConfigPatch;
 }): Promise<GuildConfigRecord> {
   const tenant = await tenantRepository.getTenantByGuildId(input.guildId);
   if (!tenant) {
     throw new AppError('JOIN_GATE_GUILD_NOT_CONNECTED', 'This server is not connected to a tenant/workspace.', 404);
-  }
-
-  const validation = validateJoinGateConfig(input.config);
-  if (validation.isErr()) {
-    throw validation.error;
   }
 
   const existingConfig = await tenantRepository.getGuildConfig({
@@ -107,10 +120,17 @@ async function saveJoinGateConfig(input: {
     existingConfig,
   });
 
-  return tenantRepository.upsertGuildConfig({
+  const nextConfig = {
     ...baseConfig,
-    ...input.config,
-  });
+    ...input.patch,
+  };
+
+  const validation = validateJoinGateConfig(nextConfig);
+  if (validation.isErr()) {
+    throw validation.error;
+  }
+
+  return tenantRepository.upsertGuildConfig(nextConfig);
 }
 
 function buildJoinGateSetupSavedMessage(config: GuildConfigRecord): string {
@@ -122,6 +142,29 @@ function buildJoinGateSetupSavedMessage(config: GuildConfigRecord): string {
     `Current-customer lookup: <#${config.joinGateCurrentLookupChannelId}>`,
     `New-customer lookup: <#${config.joinGateNewLookupChannelId}>`,
     'Next steps: run `/join-gate sync`, then `/join-gate install`, then `/join-gate status`.',
+  ].join('\n');
+}
+
+function buildJoinGateStaffRolesMessage(roleIds: string[]): string {
+  if (roleIds.length === 0) {
+    return [
+      'No join-gate staff roles are configured yet.',
+      'Use `/join-gate staff-add role:@Staff` to allow a role to see newly opened verification tickets.',
+    ].join('\n');
+  }
+
+  return [
+    'Join-gate staff roles:',
+    ...roleIds.map((roleId) => `<@&${roleId}>`),
+  ].join('\n');
+}
+
+function buildJoinGatePanelSavedMessage(config: GuildConfigRecord): string {
+  return [
+    'Fallback verify panel text saved.',
+    `Title: ${config.joinGatePanelTitle ? `"${config.joinGatePanelTitle}"` : 'Default title'}`,
+    `Message: ${config.joinGatePanelMessage ? `"${config.joinGatePanelMessage}"` : 'Default welcome message'}`,
+    'Run `/join-gate install` to post or refresh the fallback panel with the updated embed.',
   ].join('\n');
 }
 
@@ -219,6 +262,45 @@ export const joinGateCommand = {
     )
     .addSubcommand((subcommand) =>
       subcommand.setName('install').setDescription('Post or refresh the fallback verify panel'),
+    )
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName('panel')
+        .setDescription('Save a custom fallback embed title and welcome message for the verify panel')
+        .addStringOption((option) =>
+          option
+            .setName('title')
+            .setDescription('Optional custom embed title for the fallback verify panel')
+            .setMaxLength(120),
+        )
+        .addStringOption((option) =>
+          option
+            .setName('message')
+            .setDescription('Optional custom welcome message shown above the verification instructions')
+            .setMaxLength(2000),
+        ),
+    )
+    .addSubcommand((subcommand) =>
+      subcommand.setName('panel-reset').setDescription('Reset the fallback verify panel back to the default title and message'),
+    )
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName('staff-add')
+        .setDescription('Allow a staff role to see new verification tickets')
+        .addRoleOption((option) =>
+          option.setName('role').setDescription('Role that should see new verification tickets').setRequired(true),
+        ),
+    )
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName('staff-remove')
+        .setDescription('Remove a staff role from new verification tickets')
+        .addRoleOption((option) =>
+          option.setName('role').setDescription('Role to remove from verification ticket access').setRequired(true),
+        ),
+    )
+    .addSubcommand((subcommand) =>
+      subcommand.setName('staff-list').setDescription('List the staff roles that can see new verification tickets'),
     )
     .addSubcommand((subcommand) =>
       subcommand.setName('authorized').setDescription('List Discord users allowed to use /join-gate here'),
@@ -369,9 +451,9 @@ export const joinGateCommand = {
         const currentLookupChannelId = getRawSubcommandOptionId(interaction, 'current_lookup_channel');
         const newLookupChannelId = getRawSubcommandOptionId(interaction, 'new_lookup_channel');
 
-        const config = await saveJoinGateConfig({
+        const config = await saveGuildConfigPatch({
           guildId: interaction.guild.id,
-          config: {
+          patch: {
             joinGateEnabled: true,
             joinGateFallbackChannelId: fallbackChannelId,
             joinGateVerifiedRoleId: verifiedRoleId,
@@ -388,20 +470,122 @@ export const joinGateCommand = {
       }
 
       if (subcommand === 'disable') {
-        await saveJoinGateConfig({
+        await saveGuildConfigPatch({
           guildId: interaction.guild.id,
-          config: {
+          patch: {
             joinGateEnabled: false,
             joinGateFallbackChannelId: null,
             joinGateVerifiedRoleId: null,
             joinGateTicketCategoryId: null,
             joinGateCurrentLookupChannelId: null,
             joinGateNewLookupChannelId: null,
+            joinGatePanelTitle: null,
+            joinGatePanelMessage: null,
           },
         });
 
         await interaction.editReply({
           content: 'Join gate is disabled for this server. Its Discord-side configuration has been cleared.',
+        });
+        return;
+      }
+
+      if (subcommand === 'panel') {
+        const title = normalizeOptionalConfigText(interaction.options.getString('title'));
+        const message = normalizeOptionalConfigText(interaction.options.getString('message'));
+
+        if (!title && !message) {
+          await interaction.editReply({
+            content: 'Provide `title`, `message`, or both so I know what to save for the fallback verify panel.',
+          });
+          return;
+        }
+
+        const config = await saveGuildConfigPatch({
+          guildId: interaction.guild.id,
+          patch: {
+            ...(title !== null ? { joinGatePanelTitle: title } : {}),
+            ...(message !== null ? { joinGatePanelMessage: message } : {}),
+          },
+        });
+
+        await interaction.editReply({
+          content: buildJoinGatePanelSavedMessage(config),
+        });
+        return;
+      }
+
+      if (subcommand === 'panel-reset') {
+        const config = await saveGuildConfigPatch({
+          guildId: interaction.guild.id,
+          patch: {
+            joinGatePanelTitle: null,
+            joinGatePanelMessage: null,
+          },
+        });
+
+        await interaction.editReply({
+          content: buildJoinGatePanelSavedMessage(config),
+        });
+        return;
+      }
+
+      if (subcommand === 'staff-list') {
+        const existingConfig = await tenantRepository.getGuildConfig({
+          tenantId: tenant.tenantId,
+          guildId: interaction.guild.id,
+        });
+
+        await interaction.editReply({
+          content: buildJoinGateStaffRolesMessage(existingConfig?.joinGateStaffRoleIds ?? []),
+        });
+        return;
+      }
+
+      if (subcommand === 'staff-add') {
+        const roleId = getRawSubcommandOptionId(interaction, 'role');
+        const existingConfig = await tenantRepository.getGuildConfig({
+          tenantId: tenant.tenantId,
+          guildId: interaction.guild.id,
+        });
+        const nextRoleIds = Array.from(new Set([...(existingConfig?.joinGateStaffRoleIds ?? []), roleId]));
+        const config = await saveGuildConfigPatch({
+          guildId: interaction.guild.id,
+          patch: {
+            joinGateStaffRoleIds: nextRoleIds,
+          },
+        });
+
+        await interaction.editReply({
+          content: [
+            `Added <@&${roleId}> to join-gate staff ticket access.`,
+            buildJoinGateStaffRolesMessage(config.joinGateStaffRoleIds ?? []),
+          ].join('\n'),
+        });
+        return;
+      }
+
+      if (subcommand === 'staff-remove') {
+        const roleId = getRawSubcommandOptionId(interaction, 'role');
+        const existingConfig = await tenantRepository.getGuildConfig({
+          tenantId: tenant.tenantId,
+          guildId: interaction.guild.id,
+        });
+        const nextRoleIds = (existingConfig?.joinGateStaffRoleIds ?? []).filter(
+          (existingRoleId) => existingRoleId !== roleId,
+        );
+        const config = await saveGuildConfigPatch({
+          guildId: interaction.guild.id,
+          patch: {
+            joinGateStaffRoleIds: nextRoleIds,
+          },
+        });
+
+        await interaction.editReply({
+          content: [
+            `Removed <@&${roleId}> from join-gate staff ticket access.`,
+            buildJoinGateStaffRolesMessage(config.joinGateStaffRoleIds ?? []),
+          ].join('\n'),
         });
         return;
       }

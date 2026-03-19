@@ -448,6 +448,15 @@ Then run:
 - `/join-gate install`
 - `/join-gate status`
 
+Optional join-gate commands:
+- `/join-gate staff-add role:@Staff`
+- `/join-gate staff-remove role:@Staff`
+- `/join-gate staff-list`
+- `/join-gate panel title:"Welcome" message:"Custom welcome text for new members"`
+- `/join-gate panel-reset`
+
+The fallback verify panel now includes a `Resend DM` button so members can request the DM prompt again without needing staff help.
+
 The join-gate worker is default-deny until a super admin activates it for the server:
 - Run `/join-gate authorized` to confirm whether the server already has an allowlist entry
 - Run `/join-gate grant user:@someone` to activate the server for the first allowed Discord user
@@ -459,8 +468,9 @@ Without that activation step, automatic new-member verification stays locked for
 
 Server permissions pattern:
 - `@everyone` should only see the fallback verify area
-- the verified role and staff roles should see the normal channels
+- the verified role and your normal server roles should see the normal channels
 - the lookup channels should be readable by the join-gate bot
+- the join-gate staff roles added with `/join-gate staff-add` can see newly opened verification tickets
 
 In WooCommerce:
 1. Create webhook for order updates
@@ -589,6 +599,6 @@ Expected:
   - Leave only the fallback verify area visible to `@everyone`
 
 - Join-gate email lookups do not match:
-  - Make sure the correct lookup channels are selected in the dashboard
+  - Make sure the correct lookup channels are configured with `/join-gate setup`
   - Run `/join-gate sync` after changing lookup-channel history
   - Confirm the email address exists in the configured lookup channel content or embeds

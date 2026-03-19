@@ -51,12 +51,15 @@ export type GuildConfigRecord = {
   referralThankYouTemplate: string;
   referralSubmissionTemplate: string;
   ticketMetadataKey: string;
-    joinGateEnabled?: boolean;
-    joinGateFallbackChannelId?: string | null;
-    joinGateVerifiedRoleId?: string | null;
-    joinGateTicketCategoryId?: string | null;
-    joinGateCurrentLookupChannelId?: string | null;
-    joinGateNewLookupChannelId?: string | null;
+  joinGateEnabled?: boolean;
+  joinGateStaffRoleIds?: string[];
+  joinGateFallbackChannelId?: string | null;
+  joinGateVerifiedRoleId?: string | null;
+  joinGateTicketCategoryId?: string | null;
+  joinGateCurrentLookupChannelId?: string | null;
+  joinGateNewLookupChannelId?: string | null;
+  joinGatePanelTitle?: string | null;
+  joinGatePanelMessage?: string | null;
 };
 
 export class TenantRepository {
@@ -248,11 +251,14 @@ export class TenantRepository {
             'Referral submitted successfully. We will reward points automatically after the first paid order.',
           ticketMetadataKey: 'isTicket',
           joinGateEnabled: false,
+          joinGateStaffRoleIds: [],
           joinGateFallbackChannelId: null,
           joinGateVerifiedRoleId: null,
           joinGateTicketCategoryId: null,
           joinGateCurrentLookupChannelId: null,
           joinGateNewLookupChannelId: null,
+          joinGatePanelTitle: null,
+          joinGatePanelMessage: null,
         });
       }
     });
@@ -344,11 +350,14 @@ export class TenantRepository {
       referralSubmissionTemplate: row.referralSubmissionTemplate,
       ticketMetadataKey: row.ticketMetadataKey,
       joinGateEnabled: row.joinGateEnabled ?? false,
+      joinGateStaffRoleIds: row.joinGateStaffRoleIds ?? [],
       joinGateFallbackChannelId: row.joinGateFallbackChannelId ?? null,
       joinGateVerifiedRoleId: row.joinGateVerifiedRoleId ?? null,
       joinGateTicketCategoryId: row.joinGateTicketCategoryId ?? null,
       joinGateCurrentLookupChannelId: row.joinGateCurrentLookupChannelId ?? null,
       joinGateNewLookupChannelId: row.joinGateNewLookupChannelId ?? null,
+      joinGatePanelTitle: row.joinGatePanelTitle ?? null,
+      joinGatePanelMessage: row.joinGatePanelMessage ?? null,
     };
   }
 
@@ -369,11 +378,14 @@ export class TenantRepository {
     referralSubmissionTemplate: string;
     ticketMetadataKey: string;
     joinGateEnabled?: boolean;
+    joinGateStaffRoleIds?: string[];
     joinGateFallbackChannelId?: string | null;
     joinGateVerifiedRoleId?: string | null;
     joinGateTicketCategoryId?: string | null;
     joinGateCurrentLookupChannelId?: string | null;
     joinGateNewLookupChannelId?: string | null;
+    joinGatePanelTitle?: string | null;
+    joinGatePanelMessage?: string | null;
   }): Promise<GuildConfigRecord> {
     const existing = await this.db.query.guildConfigs.findFirst({
       where: and(eq(guildConfigs.tenantId, input.tenantId), eq(guildConfigs.guildId, input.guildId)),
@@ -382,6 +394,8 @@ export class TenantRepository {
     if (existing) {
       const joinGateEnabled =
         input.joinGateEnabled !== undefined ? input.joinGateEnabled : existing.joinGateEnabled;
+      const joinGateStaffRoleIds =
+        input.joinGateStaffRoleIds !== undefined ? input.joinGateStaffRoleIds : existing.joinGateStaffRoleIds;
       const joinGateFallbackChannelId =
         input.joinGateFallbackChannelId !== undefined
           ? input.joinGateFallbackChannelId
@@ -400,6 +414,10 @@ export class TenantRepository {
         input.joinGateNewLookupChannelId !== undefined
           ? input.joinGateNewLookupChannelId
           : existing.joinGateNewLookupChannelId;
+      const joinGatePanelTitle =
+        input.joinGatePanelTitle !== undefined ? input.joinGatePanelTitle : existing.joinGatePanelTitle;
+      const joinGatePanelMessage =
+        input.joinGatePanelMessage !== undefined ? input.joinGatePanelMessage : existing.joinGatePanelMessage;
 
       await this.db
         .update(guildConfigs)
@@ -418,11 +436,14 @@ export class TenantRepository {
           referralSubmissionTemplate: input.referralSubmissionTemplate,
           ticketMetadataKey: input.ticketMetadataKey,
           joinGateEnabled,
+          joinGateStaffRoleIds,
           joinGateFallbackChannelId,
           joinGateVerifiedRoleId,
           joinGateTicketCategoryId,
           joinGateCurrentLookupChannelId,
           joinGateNewLookupChannelId,
+          joinGatePanelTitle,
+          joinGatePanelMessage,
           updatedAt: new Date(),
         })
         .where(eq(guildConfigs.id, existing.id));
@@ -445,20 +466,26 @@ export class TenantRepository {
         referralSubmissionTemplate: input.referralSubmissionTemplate,
         ticketMetadataKey: input.ticketMetadataKey,
         joinGateEnabled,
+        joinGateStaffRoleIds,
         joinGateFallbackChannelId,
         joinGateVerifiedRoleId,
         joinGateTicketCategoryId,
         joinGateCurrentLookupChannelId,
         joinGateNewLookupChannelId,
+        joinGatePanelTitle,
+        joinGatePanelMessage,
       };
     }
 
     const joinGateEnabledValue = input.joinGateEnabled ?? false;
+    const joinGateStaffRoleIdsValue = input.joinGateStaffRoleIds ?? [];
     const joinGateFallbackChannelIdValue = input.joinGateFallbackChannelId ?? null;
     const joinGateVerifiedRoleIdValue = input.joinGateVerifiedRoleId ?? null;
     const joinGateTicketCategoryIdValue = input.joinGateTicketCategoryId ?? null;
     const joinGateCurrentLookupChannelIdValue = input.joinGateCurrentLookupChannelId ?? null;
     const joinGateNewLookupChannelIdValue = input.joinGateNewLookupChannelId ?? null;
+    const joinGatePanelTitleValue = input.joinGatePanelTitle ?? null;
+    const joinGatePanelMessageValue = input.joinGatePanelMessage ?? null;
     const id = ulid();
     await this.db.insert(guildConfigs).values({
       id,
@@ -478,11 +505,14 @@ export class TenantRepository {
       referralSubmissionTemplate: input.referralSubmissionTemplate,
       ticketMetadataKey: input.ticketMetadataKey,
       joinGateEnabled: joinGateEnabledValue,
+      joinGateStaffRoleIds: joinGateStaffRoleIdsValue,
       joinGateFallbackChannelId: joinGateFallbackChannelIdValue,
       joinGateVerifiedRoleId: joinGateVerifiedRoleIdValue,
       joinGateTicketCategoryId: joinGateTicketCategoryIdValue,
       joinGateCurrentLookupChannelId: joinGateCurrentLookupChannelIdValue,
       joinGateNewLookupChannelId: joinGateNewLookupChannelIdValue,
+      joinGatePanelTitle: joinGatePanelTitleValue,
+      joinGatePanelMessage: joinGatePanelMessageValue,
     });
 
     return {
@@ -503,11 +533,14 @@ export class TenantRepository {
       referralSubmissionTemplate: input.referralSubmissionTemplate,
       ticketMetadataKey: input.ticketMetadataKey,
       joinGateEnabled: joinGateEnabledValue,
+      joinGateStaffRoleIds: joinGateStaffRoleIdsValue,
       joinGateFallbackChannelId: joinGateFallbackChannelIdValue,
       joinGateVerifiedRoleId: joinGateVerifiedRoleIdValue,
       joinGateTicketCategoryId: joinGateTicketCategoryIdValue,
       joinGateCurrentLookupChannelId: joinGateCurrentLookupChannelIdValue,
       joinGateNewLookupChannelId: joinGateNewLookupChannelIdValue,
+      joinGatePanelTitle: joinGatePanelTitleValue,
+      joinGatePanelMessage: joinGatePanelMessageValue,
     };
   }
 
