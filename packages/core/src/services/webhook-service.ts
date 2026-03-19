@@ -19,6 +19,7 @@ import { formatUserReference, parsePlatformScopedId } from '../utils/platform-id
 import { enqueueWebhookTask } from '../workers/webhook-queue.js';
 import { AdminService } from './admin-service.js';
 import { IntegrationService } from './integration-service.js';
+import { getOrderSourceLabel } from './order-source.js';
 import {
   buildPaidOrderFulfillmentComponents,
   buildPaidOrderFulfillmentTelegramReplyMarkup,
@@ -854,6 +855,7 @@ export class WebhookService {
     const message = [
       '**Order Paid**',
       `Provider: WooCommerce`,
+      `Source: ${getOrderSourceLabel(orderSession.ticketChannelId)}`,
       `Order Session: \`${orderSession.id}\``,
       `Woo Order: ${order.id}`,
       '',
@@ -1083,6 +1085,7 @@ export class WebhookService {
     const message = [
       '**Order Paid**',
       `Provider: Voodoo Pay`,
+      `Source: ${getOrderSourceLabel(orderSession.ticketChannelId)}`,
       `Order Session: \`${orderSession.id}\``,
       `Status: ${paymentState.status ?? 'paid'}`,
       `TXID Hash: \`${String(txidHash).replace(/`/g, "'")}\``,
@@ -1533,17 +1536,55 @@ export class WebhookService {
     if (scopedChannelId.platform === 'telegram') {
       const telegramBotToken = this.getTelegramBotToken();
       if (!telegramBotToken) {
-        throw new AbortError('No Telegram bot token available for ticket paid confirmation');
+        logger.warn(
+          {
+            ticketChannelId: input.ticketChannelId,
+            customerDiscordId: input.customerDiscordId,
+          },
+          'skipping Telegram paid confirmation DM because no Telegram bot token is available',
+        );
+        return;
       }
 
-      await postMessageToTelegramChat({
-        botToken: telegramBotToken,
-        chatId: scopedChannelId.rawId,
-        content: message.replace(
-          `Payment received for <@${input.customerDiscordId}>. Thank you.`,
-          `Payment received for ${formatUserReference(input.customerDiscordId)}. Thank you.`,
-        ),
-      });
+      const scopedCustomerId = parsePlatformScopedId(input.customerDiscordId);
+      if (scopedCustomerId.platform !== 'telegram') {
+        logger.warn(
+          {
+            ticketChannelId: input.ticketChannelId,
+            customerDiscordId: input.customerDiscordId,
+          },
+          'skipping Telegram paid confirmation DM because the customer ID is not a Telegram user',
+        );
+        return;
+      }
+
+      const directMessage = [
+        'Payment received. Thank you.',
+        `Order Session: ${input.orderSessionId}`,
+        `Product: ${input.productName}`,
+        `Variant: ${input.variantLabel}`,
+        `Amount: ${(input.priceMinor / 100).toFixed(2)} ${input.currency}`,
+        input.updatedPointsBalance === null
+          ? 'Updated Points Balance: unavailable'
+          : `Updated Points Balance: ${input.updatedPointsBalance} point(s)`,
+      ].join('\n');
+
+      try {
+        await sendDirectMessageToTelegramUser({
+          botToken: telegramBotToken,
+          userId: scopedCustomerId.rawId,
+          content: directMessage,
+        });
+      } catch (error) {
+        logger.warn(
+          {
+            err: error,
+            ticketChannelId: input.ticketChannelId,
+            customerDiscordId: input.customerDiscordId,
+          },
+          'failed to DM Telegram paid confirmation to customer',
+        );
+      }
       return;
     }
 

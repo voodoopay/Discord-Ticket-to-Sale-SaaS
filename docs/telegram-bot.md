@@ -5,9 +5,9 @@
 The Telegram worker mirrors the commerce flow from `apps/bot-worker` for Telegram groups:
 
 - `/connect <token>` links a Telegram group to an existing workspace + Discord server store.
-- `/sale` runs the multi-step sale flow with category, product, variant, coupon, customer answers, tip, and points redemption.
-- `/points` checks points balances for the linked store.
-- `/refer` submits referral claims for the linked store.
+- `/sale` starts in the group, then moves the sensitive sale flow into the customer's DM with the bot.
+- `/points` starts in the group, then asks for the customer email in DM only.
+- `/refer` starts in the group, then asks for both referral emails in DM only.
 - Paid-order fulfillment buttons are rendered in Telegram paid logs and update inline after fulfillment.
 
 ## Linking Model
@@ -37,6 +37,8 @@ The linked Telegram chat then reuses the selected Discord server store data:
 
 ## Runtime Notes
 
-- Telegram sales and referrals are group-chat based.
+- Telegram uses the group for lightweight handoff/status messaging, then moves sensitive flows into DM.
+- Telegram payment confirmation messages are sent to the customer in DM instead of the linked group.
+- Referral submissions from Telegram are mirrored into the configured Discord referral log channel.
 - Telegram uses inline keyboards and next-message prompts where Discord uses components/modals.
 - Staff enforcement on Telegram is based on Telegram group admins.

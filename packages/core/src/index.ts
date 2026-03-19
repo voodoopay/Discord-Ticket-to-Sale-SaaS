@@ -32,6 +32,7 @@ export * from './services/coupon-scope.js';
 export * from './services/integration-service.js';
 export * from './services/nuke-schedule.js';
 export * from './services/nuke-service.js';
+export * from './services/order-source.js';
 export * from './services/paid-order-service.js';
 export * from './services/points-calculator.js';
 export * from './services/points-service.js';

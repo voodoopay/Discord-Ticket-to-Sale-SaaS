@@ -2383,6 +2383,17 @@ export default function DashboardPage() {
                     >
                       Generate Telegram Command
                     </Button>
+                    {telegramBotUsername.trim() ? (
+                      <Button asChild type="button" variant="outline">
+                        <a
+                          href={`https://t.me/${telegramBotUsername.replace(/^@+/u, '')}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Open @{telegramBotUsername.replace(/^@+/u, '')}
+                        </a>
+                      </Button>
+                    ) : null}
                   </div>
 
                   {telegramLinkCommand ? (

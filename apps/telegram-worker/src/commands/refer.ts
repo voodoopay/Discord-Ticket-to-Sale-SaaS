@@ -1,4 +1,10 @@
-import { getEnv, ReferralService, TenantRepository, toTelegramScopedId } from '@voodoo/core';
+import {
+  getEnv,
+  postMessageToDiscordChannel,
+  ReferralService,
+  TenantRepository,
+  toTelegramScopedId,
+} from '@voodoo/core';
 import { InlineKeyboard, type Context } from 'grammy';
 
 import {
@@ -10,6 +16,7 @@ import {
   buildTelegramBotDeepLink,
   parseTelegramReferStartPayload,
 } from '../lib/sale-links.js';
+import { formatTelegramReferralSubmissionLog } from '../lib/referral-submission-log.js';
 import {
   formatTelegramUserLabel,
   getLinkedStoreForChat,
@@ -86,6 +93,33 @@ function formatSubmissionOutcomeMessage(input: {
   }
 
   return 'Referral blocked: your email and the new customer email cannot be the same.';
+}
+
+async function postReferralSubmissionLog(input: {
+  referralLogChannelId: string | null;
+  submitterLabel: string;
+  submitterTelegramUserId: string;
+  guildId: string;
+  referrerEmail: string;
+  referredEmail: string;
+  status: 'accepted' | 'duplicate' | 'self_blocked';
+}): Promise<void> {
+  if (!input.referralLogChannelId) {
+    return;
+  }
+
+  await postMessageToDiscordChannel({
+    botToken: env.DISCORD_TOKEN,
+    channelId: input.referralLogChannelId,
+    content: formatTelegramReferralSubmissionLog({
+      submitterLabel: input.submitterLabel,
+      submitterTelegramUserId: input.submitterTelegramUserId,
+      guildId: input.guildId,
+      referrerEmail: input.referrerEmail,
+      referredEmail: input.referredEmail,
+      status: input.status,
+    }),
+  });
 }
 
 export async function handleReferStartCommand(ctx: Context): Promise<boolean> {
@@ -228,8 +262,23 @@ export async function handlePendingReferMessage(ctx: Context): Promise<boolean> 
     guildId: pending.guildId,
   });
   const submitterLabel = formatTelegramUserLabel(ctx.from);
+  const submitterTelegramUserId = toTelegramScopedId(String(ctx.from.id));
   const referrerEmail = pending.referrerEmail.trim();
   const referredEmail = text.trim();
+
+  try {
+    await postReferralSubmissionLog({
+      referralLogChannelId: config?.referralLogChannelId ?? null,
+      submitterLabel,
+      submitterTelegramUserId,
+      guildId: pending.guildId,
+      referrerEmail,
+      referredEmail,
+      status: created.value.status,
+    });
+  } catch {
+    // Do not fail the DM response if the merchant referral log channel post fails.
+  }
 
   await ctx.reply(
     formatSubmissionOutcomeMessage({

@@ -60,7 +60,7 @@ Inside the **Sales Settings** panel, the **Customer Points** area supports:
   - categories eligible for referral rewards (`referral_reward_category_keys`)
   - `referral reward` fallback amount in GBP (`referral_reward_minor`)
   - `/refer` success reply template (`referral_submission_template`)
-  - `referral log channel` (optional, rewarded referral payouts only)
+  - `referral log channel` (optional, referral submissions and rewarded referral payouts)
   - `thank-you DM template` with placeholders
 - Product variants set `referral_reward_minor` per variant.
 - Reward conversion uses snapshots from checkout creation:

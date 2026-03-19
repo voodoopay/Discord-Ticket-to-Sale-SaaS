@@ -88,7 +88,7 @@ Copy `.env.example` to `.env` and fill values.
   - categories eligible for `referral rewards`
   - `referral reward` GBP fallback amount (used only when eligible purchased variants have no per-variant referral reward)
   - `referral submission reply template` (private `/refer` success response)
-  - `referral log channel` (optional, payout events only)
+  - `referral log channel` (optional, referral submissions and payout events)
   - `referral thank-you template` for DM placeholders
 - Product variants now support per-variant referral reward amounts in the product builder.
 - Dashboard now includes customer points management (list balances, manual add/remove, search).
@@ -118,6 +118,7 @@ Copy `.env.example` to `.env` and fill values.
 - Telegram DM sale drafts now stay active for 6 hours and refresh their expiry as the customer moves through the private flow.
 - Telegram `/points` now hands off from the linked group into a private DM before collecting the customer email or showing the balance.
 - Telegram `/refer` now hands off from the linked group into a private DM before collecting either email address.
+- Telegram paid confirmations are sent to the customer in DM instead of the linked group.
 - Dashboard Voodoo integration now supports Hosted Multi-Coin mode with enable/disable toggle and wallet inputs.
 - Hosted Multi-Coin wallet mapping:
   - BTC -> `btc`
@@ -134,6 +135,7 @@ Copy `.env.example` to `.env` and fill values.
 - Voodoo Pay callback endpoint can also finalize paid orders.
 - API verifies signature, dedupes, retries on failure, fetches Woo order notes.
 - Bot posts paid-order details to configured paid-log channel (sensitive fields masked) with a fulfillment button so staff can mark an order handled.
+- Paid logs now label each order as `Telegram Order` or `Discord Order` so merchants can see the source immediately.
 
 ## Points Command
 
