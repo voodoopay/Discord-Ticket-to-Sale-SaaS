@@ -76,6 +76,10 @@ Copy `.env.example` to `.env` and fill values.
 - Run `/join-gate install` after configuring the fallback channel to post or refresh the verification panel.
 - Run `/join-gate sync` after changing lookup channel history to rebuild the email index immediately.
 - Run `/join-gate status` to confirm missing configuration, missing permissions, and current indexed email counts.
+- `/join-gate authorized` lists the extra Discord user IDs allowed to use `/join-gate` in the current server. Only `SUPER_ADMIN_DISCORD_IDS` can use it.
+- `/join-gate grant user:<@user>` grants `/join-gate` access for the current server. Only `SUPER_ADMIN_DISCORD_IDS` can use it.
+- `/join-gate revoke user:<@user>` revokes `/join-gate` access for the current server. Only `SUPER_ADMIN_DISCORD_IDS` can use it.
+- `/join-gate` is now default-deny for every server. Until a super admin grants at least one Discord user, regular members cannot use it and the automatic join verification flow stays inactive for that server.
 - Restrict the rest of the server so `@everyone` only sees the fallback verify area, while the configured verified role and staff roles can see the normal channels.
 
 ## OAuth + Dashboard

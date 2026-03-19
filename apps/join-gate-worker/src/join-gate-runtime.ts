@@ -21,6 +21,7 @@ import {
 } from 'discord.js';
 import {
   AppError,
+  JoinGateAccessService,
   JoinGateService,
   SaleService,
   TenantRepository,
@@ -47,6 +48,7 @@ import {
 
 const tenantRepository = new TenantRepository();
 const joinGateService = new JoinGateService();
+const joinGateAccessService = new JoinGateAccessService();
 const saleService = new SaleService();
 
 type GuildConfigRecord = NonNullable<Awaited<ReturnType<TenantRepository['getGuildConfig']>>>;
@@ -171,6 +173,51 @@ async function resolveJoinGateContext(guild: Guild): Promise<JoinGateContext | n
     config,
     guild,
   };
+}
+
+async function isJoinGateActivatedForContext(context: JoinGateContext): Promise<boolean> {
+  const activationState = await joinGateAccessService.getGuildActivationState({
+    tenantId: context.tenantId,
+    guildId: context.guild.id,
+  });
+  if (activationState.isErr()) {
+    throw activationState.error;
+  }
+
+  return activationState.value.activated;
+}
+
+async function requireActivatedJoinGate(context: JoinGateContext): Promise<void> {
+  if (await isJoinGateActivatedForContext(context)) {
+    return;
+  }
+
+  throw new AppError(
+    'JOIN_GATE_LOCKED',
+    'This join-gate worker is locked for this server. A super admin must activate this server by granting a Discord ID access before verification can run.',
+    403,
+  );
+}
+
+async function safeIsJoinGateActivatedForContext(input: {
+  context: JoinGateContext;
+  logEvent: string;
+  extra?: Record<string, unknown>;
+}): Promise<boolean> {
+  try {
+    return await isJoinGateActivatedForContext(input.context);
+  } catch (error) {
+    logger.error(
+      {
+        err: error,
+        guildId: input.context.guild.id,
+        tenantId: input.context.tenantId,
+        ...input.extra,
+      },
+      input.logEvent,
+    );
+    return false;
+  }
 }
 
 async function resolveGuildMember(input: {
@@ -429,6 +476,7 @@ export async function syncConfiguredLookupChannelsForGuild(guild: Guild): Promis
     throw new AppError('JOIN_GATE_GUILD_NOT_CONNECTED', 'This server is not connected to a tenant configuration.', 404);
   }
 
+  await requireActivatedJoinGate(context);
   requireEnabledJoinGate(context);
 
   const currentChannelId = context.config.joinGateCurrentLookupChannelId;
@@ -452,6 +500,7 @@ export async function installOrRefreshFallbackPanel(guild: Guild): Promise<Insta
     throw new AppError('JOIN_GATE_GUILD_NOT_CONNECTED', 'This server is not connected to a tenant configuration.', 404);
   }
 
+  await requireActivatedJoinGate(context);
   requireEnabledJoinGate(context);
 
   const fallbackChannelId = context.config.joinGateFallbackChannelId;
@@ -648,6 +697,16 @@ export async function handleMemberJoin(member: GuildMember): Promise<void> {
     return;
   }
 
+  if (
+    !(await safeIsJoinGateActivatedForContext({
+      context,
+      logEvent: 'join gate activation check failed during member join',
+      extra: { memberId: member.id },
+    }))
+  ) {
+    return;
+  }
+
   const registerResult = await joinGateService.registerJoin({
     tenantId: context.tenantId,
     guildId: member.guild.id,
@@ -708,6 +767,7 @@ export async function handleJoinGateButton(interaction: ButtonInteraction): Prom
       throw new AppError('JOIN_GATE_GUILD_NOT_CONNECTED', 'This server is not connected to a tenant configuration.', 404);
     }
 
+    await requireActivatedJoinGate(context);
     requireEnabledJoinGate(context);
 
     const setSelectionResult = await joinGateService.setSelection({
@@ -759,6 +819,7 @@ export async function handleJoinGateModal(interaction: ModalSubmitInteraction): 
       throw new AppError('JOIN_GATE_GUILD_NOT_CONNECTED', 'This server is not connected to a tenant configuration.', 404);
     }
 
+    await requireActivatedJoinGate(context);
     requireEnabledJoinGate(context);
 
     const email = interaction.fields.getTextInputValue(EMAIL_INPUT_ID);
@@ -855,6 +916,16 @@ export async function handleLookupMessageUpsert(message: Message | PartialMessag
     return;
   }
 
+  if (
+    !(await safeIsJoinGateActivatedForContext({
+      context,
+      logEvent: 'join gate activation check failed during lookup message upsert',
+      extra: { channelId: message.channelId, messageId: message.id },
+    }))
+  ) {
+    return;
+  }
+
   const lookupType = detectLookupType(context.config, message.channelId);
   if (!lookupType) {
     return;
@@ -890,6 +961,16 @@ export async function handleLookupMessageDelete(message: Message | PartialMessag
 
   const context = await resolveJoinGateContext(guild);
   if (!context || !context.config.joinGateEnabled) {
+    return;
+  }
+
+  if (
+    !(await safeIsJoinGateActivatedForContext({
+      context,
+      logEvent: 'join gate activation check failed during lookup message delete',
+      extra: { channelId: message.channelId, messageId: message.id },
+    }))
+  ) {
     return;
   }
 
@@ -953,6 +1034,15 @@ export function bindJoinGateReadyHandlers(client: Client): void {
         try {
           const context = await resolveJoinGateContext(guild);
           if (!context || !context.config.joinGateEnabled) {
+            continue;
+          }
+
+          if (
+            !(await safeIsJoinGateActivatedForContext({
+              context,
+              logEvent: 'join gate activation check failed during startup sync',
+            }))
+          ) {
             continue;
           }
 

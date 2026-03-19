@@ -226,6 +226,30 @@ export const joinGateEmailIndex = mysqlTable(
   }),
 );
 
+export const joinGateAuthorizedUsers = mysqlTable(
+  'join_gate_authorized_users',
+  {
+    id: varchar('id', { length: 26 }).primaryKey(),
+    tenantId: varchar('tenant_id', { length: 26 }).notNull(),
+    guildId: varchar('guild_id', { length: 32 }).notNull(),
+    discordUserId: varchar('discord_user_id', { length: 32 }).notNull(),
+    grantedByDiscordUserId: varchar('granted_by_discord_user_id', { length: 32 }),
+    createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantGuildUserUnique: uniqueIndex('join_gate_authorized_users_tenant_guild_user_uq').on(
+      table.tenantId,
+      table.guildId,
+      table.discordUserId,
+    ),
+    tenantGuildIdx: index('join_gate_authorized_users_tenant_guild_idx').on(
+      table.tenantId,
+      table.guildId,
+    ),
+  }),
+);
+
 export const discountCoupons = mysqlTable(
   'discount_coupons',
   {

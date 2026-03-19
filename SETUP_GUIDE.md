@@ -236,6 +236,8 @@ pnpm deploy:commands:nuke
 
 Telegram does not require slash-command deployment. After the dashboard is online, generate a Telegram link command from `Workspace & Server`, add the Telegram bot to the target group, and run `/connect <token>` as a Telegram group admin. `TELEGRAM_BOT_USERNAME` is also required because `/sale` now hands customers off from the group into a private DM with the bot.
 
+Join-gate access is now default-deny too. After deploying, use the Discord account listed in `SUPER_ADMIN_DISCORD_IDS`, then run `/join-gate grant user:@someone` in that exact server to activate the join-gate bot there.
+
 ---
 
 ## 11. Run App with PM2
@@ -498,3 +500,9 @@ Expected:
   - Run `/nuke revoke user:@someone` to remove an allowed user later
   - After activation, `/nuke delete confirm:DELETE` permanently removes the current channel without making a replacement channel
 
+- `/join-gate` says the worker is locked for this server:
+  - `/join-gate` is now default-deny for every server until a super admin activates it
+  - Use the Discord account listed in `SUPER_ADMIN_DISCORD_IDS`
+  - Run `/join-gate authorized` to inspect the current server allowlist
+  - Run `/join-gate grant user:@someone` to activate the server for the first allowed user
+  - Run `/join-gate revoke user:@someone` to remove an allowed user later
