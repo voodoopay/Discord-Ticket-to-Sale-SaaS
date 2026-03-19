@@ -9,6 +9,7 @@ It is step-by-step and beginner-friendly, and includes:
 - PM2 process management
 - Nginx + SSL
 - Discord + WooCommerce integration basics
+- separate Discord workers for sales, join-gate verification, and nuke
 
 ---
 
@@ -18,7 +19,7 @@ It is step-by-step and beginner-friendly, and includes:
 - SSH access to the droplet.
 - A private GitHub repository containing this project.
 - A custom domain or subdomain (example: `voodoo.example.com`).
-- Discord Developer Portal access for your bot app.
+- Discord Developer Portal access for your Discord bot apps.
 - WooCommerce store access.
 
 Recommended droplet size:
@@ -80,13 +81,13 @@ ufw status
 
 ---
 
-## 6. Install Node.js 24.13.0 and pnpm
+## 6. Install Node.js 24.13.1 and pnpm
 
 ```bash
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
 source ~/.bashrc
-nvm install 24.13.0
-nvm alias default 24.13.0
+nvm install 24.13.1
+nvm alias default 24.13.1
 node -v
 ```
 
@@ -186,6 +187,8 @@ Paste and update values:
 ```env
 DISCORD_TOKEN=YOUR_DISCORD_BOT_TOKEN
 DISCORD_CLIENT_ID=YOUR_DISCORD_CLIENT_ID
+JOIN_GATE_DISCORD_TOKEN=YOUR_JOIN_GATE_BOT_TOKEN
+JOIN_GATE_DISCORD_CLIENT_ID=YOUR_JOIN_GATE_BOT_CLIENT_ID
 TELEGRAM_BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN
 TELEGRAM_BOT_USERNAME=YOUR_TELEGRAM_BOT_USERNAME
 NUKE_DISCORD_TOKEN=YOUR_NUKE_BOT_TOKEN
@@ -231,12 +234,10 @@ Run migrations and deploy slash commands:
 ```bash
 pnpm migrate
 pnpm deploy:commands
-pnpm deploy:commands:nuke
 ```
 
 Telegram does not require slash-command deployment. After the dashboard is online, generate a Telegram link command from `Workspace & Server`, add the Telegram bot to the target group, and run `/connect <token>` as a Telegram group admin. `TELEGRAM_BOT_USERNAME` is also required because `/sale` now hands customers off from the group into a private DM with the bot.
-
-Join-gate access is now default-deny too. After deploying, use the Discord account listed in `SUPER_ADMIN_DISCORD_IDS`, then run `/join-gate grant user:@someone` in that exact server to activate the join-gate bot there.
+`pnpm deploy:commands` now deploys the sales bot, join-gate bot, and nuke bot command sets together.
 
 ---
 
@@ -286,6 +287,16 @@ module.exports = {
       env_file: '/var/www/voodoo/.env'
     },
     {
+      name: 'voodoo-join-gate',
+      cwd: '/var/www/voodoo',
+      script: 'node',
+      args: 'apps/join-gate-worker/dist/index.js',
+      env: {
+        NODE_ENV: 'production'
+      },
+      env_file: '/var/www/voodoo/.env'
+    },
+    {
       name: 'voodoo-nuke',
       cwd: '/var/www/voodoo',
       script: 'node',
@@ -321,6 +332,7 @@ Useful logs:
 pm2 logs voodoo-web --lines 100
 pm2 logs voodoo-bot --lines 100
 pm2 logs voodoo-telegram --lines 100
+pm2 logs voodoo-join-gate --lines 100
 pm2 logs voodoo-nuke --lines 100
 ```
 
@@ -375,23 +387,44 @@ certbot renew --dry-run
 
 ---
 
-## 14. Configure Discord Application
+## 14. Configure Discord Applications
+
+### 14.1 Main sales bot app
 
 In Discord Developer Portal:
-1. Open your app
+1. Open your main sales bot app
 2. `OAuth2` -> add redirect URI:
    - `https://voodoo.example.com/api/auth/discord/callback`
 3. Save changes
+
+### 14.2 Join-gate bot app
+
+In Discord Developer Portal:
+1. Open your join-gate bot app
+2. `Bot` -> enable:
+   - `SERVER MEMBERS INTENT`
+   - `MESSAGE CONTENT INTENT`
+3. Save changes
+
+The join-gate worker is a separate Discord application/token. It does not use OAuth login, but it must be invited to the same server and it must have:
+- `Manage Roles`
+- `Manage Channels`
+- `Kick Members`
+- permission to read the configured lookup channels and send in the fallback verify channel
+
+### 14.3 Nuke bot app
+
+Make sure the nuke bot app is also invited and has the permissions required by `/nuke`.
 
 After updates:
 
 ```bash
 cd /var/www/voodoo
 pnpm deploy:commands
-pnpm deploy:commands:nuke
 pm2 restart voodoo-web
 pm2 restart voodoo-bot
 pm2 restart voodoo-telegram
+pm2 start ecosystem.config.cjs --only voodoo-join-gate --update-env
 pm2 start ecosystem.config.cjs --only voodoo-nuke --update-env
 pm2 save
 ```
@@ -403,6 +436,31 @@ pm2 save
 In dashboard:
 1. Save Woo base URL, webhook secret, API key, API secret
 2. Copy generated webhook URL
+
+Also in dashboard `Server Settings`, configure join-gate if you want new members to be verified before they can see the full server:
+1. Enable join-gate
+2. Pick the fallback verify channel
+3. Pick the verified role
+4. Pick the verification ticket category
+5. Pick the current-customer lookup channel
+6. Pick the new-customer/referral lookup channel
+
+After saving those values, run these commands in the target Discord server:
+- `/join-gate install`
+- `/join-gate sync`
+- `/join-gate status`
+
+The join-gate worker is default-deny until a super admin activates it for the server:
+- Run `/join-gate authorized` to confirm whether the server already has an allowlist entry
+- Run `/join-gate grant user:@someone` to activate the server for the first allowed Discord user
+- Use `/join-gate revoke user:@someone` later if you need to remove extra `/join-gate` access
+
+Without that activation step, automatic new-member verification stays locked for the server.
+
+Server permissions pattern:
+- `@everyone` should only see the fallback verify area
+- the verified role and staff roles should see the normal channels
+- the lookup channels should be readable by the join-gate bot
 
 In WooCommerce:
 1. Create webhook for order updates
@@ -426,10 +484,10 @@ pnpm install
 pnpm build
 pnpm migrate
 pnpm deploy:commands
-pnpm deploy:commands:nuke
 pm2 restart voodoo-web
 pm2 restart voodoo-bot
 pm2 restart voodoo-telegram
+pm2 start ecosystem.config.cjs --only voodoo-join-gate --update-env
 pm2 start ecosystem.config.cjs --only voodoo-nuke --update-env
 pm2 save
 ```
@@ -444,11 +502,12 @@ curl -I https://voodoo.example.com
 ```
 
 Expected:
-- Both PM2 apps are `online`
+- All PM2 apps are `online`
 - Domain responds with HTTP success code
 - `/dashboard` opens in browser
 - Dashboard shows the mobile-first setup flow strip and compact current-context card
 - Dashboard sections expand/collapse correctly and the catalog builder shows the four guided steps
+- New members only see the fallback verify area until join-gate verification succeeds
 
 ---
 
@@ -500,9 +559,36 @@ Expected:
   - Run `/nuke revoke user:@someone` to remove an allowed user later
   - After activation, `/nuke delete confirm:DELETE` permanently removes the current channel without making a replacement channel
 
+- Join-gate worker offline:
+  - Verify `JOIN_GATE_DISCORD_TOKEN`
+  - Verify `JOIN_GATE_DISCORD_CLIENT_ID`
+  - If PM2 says `Process or Namespace voodoo-join-gate not found`, register it first with `pm2 start ecosystem.config.cjs --only voodoo-join-gate --update-env`
+  - Run `pm2 save` after it starts successfully
+  - Check `pm2 logs voodoo-join-gate`
+
+- `/join-gate status` shows missing privileged intents:
+  - Open the join-gate bot application in Discord Developer Portal
+  - Enable `SERVER MEMBERS INTENT`
+  - Enable `MESSAGE CONTENT INTENT`
+  - Restart `voodoo-join-gate`
+
+- `/join-gate status` shows missing permissions:
+  - Make sure the join-gate bot role is above the configured verified role
+  - Give the bot `Manage Roles`, `Manage Channels`, and `Kick Members`
+  - Make sure it can view the lookup channels and the fallback verify channel
+
 - `/join-gate` says the worker is locked for this server:
-  - `/join-gate` is now default-deny for every server until a super admin activates it
-  - Use the Discord account listed in `SUPER_ADMIN_DISCORD_IDS`
-  - Run `/join-gate authorized` to inspect the current server allowlist
+  - The server has not been activated for join-gate yet
+  - Use a Discord account listed in `SUPER_ADMIN_DISCORD_IDS`
+  - Run `/join-gate authorized` to inspect the current allowlist
   - Run `/join-gate grant user:@someone` to activate the server for the first allowed user
-  - Run `/join-gate revoke user:@someone` to remove an allowed user later
+
+- New members can still see the whole server before verification:
+  - Your Discord channel permissions are too open
+  - Restrict normal channels to staff + verified role
+  - Leave only the fallback verify area visible to `@everyone`
+
+- Join-gate email lookups do not match:
+  - Make sure the correct lookup channels are selected in the dashboard
+  - Run `/join-gate sync` after changing lookup-channel history
+  - Confirm the email address exists in the configured lookup channel content or embeds
