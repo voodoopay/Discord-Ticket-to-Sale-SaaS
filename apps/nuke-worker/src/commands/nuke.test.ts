@@ -1,6 +1,87 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ChannelType, MessageFlags, type ChatInputCommandInteraction } from 'discord.js';
 
+vi.mock('@voodoo/core', () => {
+  class AppError extends Error {
+    public readonly code: string;
+    public readonly statusCode: number;
+
+    constructor(code: string, message: string, statusCode: number) {
+      super(message);
+      this.name = 'AppError';
+      this.code = code;
+      this.statusCode = statusCode;
+    }
+  }
+
+  class NukeService {
+    public async getCommandAccessState(): Promise<never> {
+      throw new Error('Mock getCommandAccessState not implemented');
+    }
+
+    public async getChannelSchedule(): Promise<never> {
+      throw new Error('Mock getChannelSchedule not implemented');
+    }
+
+    public async grantUserAccess(): Promise<never> {
+      throw new Error('Mock grantUserAccess not implemented');
+    }
+
+    public async runDeleteNow(): Promise<never> {
+      throw new Error('Mock runDeleteNow not implemented');
+    }
+
+    public async listAuthorizedUsers(): Promise<never> {
+      throw new Error('Mock listAuthorizedUsers not implemented');
+    }
+
+    public async revokeUserAccess(): Promise<never> {
+      throw new Error('Mock revokeUserAccess not implemented');
+    }
+
+    public async createChannelSchedule(): Promise<never> {
+      throw new Error('Mock createChannelSchedule not implemented');
+    }
+
+    public async disableChannelSchedule(): Promise<never> {
+      throw new Error('Mock disableChannelSchedule not implemented');
+    }
+
+    public async runNukeNow(): Promise<never> {
+      throw new Error('Mock runNukeNow not implemented');
+    }
+
+    public async deleteChannelSchedule(): Promise<never> {
+      throw new Error('Mock deleteChannelSchedule not implemented');
+    }
+  }
+
+  class TenantRepository {
+    public async getTenantByGuildId(): Promise<never> {
+      throw new Error('Mock getTenantByGuildId not implemented');
+    }
+  }
+
+  return {
+    AppError,
+    NukeService,
+    TenantRepository,
+    getEnv: () => ({
+      superAdminDiscordIds: (process.env.SUPER_ADMIN_DISCORD_IDS ?? '')
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean),
+    }),
+    logger: {
+      debug: vi.fn(),
+      error: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+    },
+    resetEnvForTests: () => undefined,
+  };
+});
+
 import { AppError, NukeService, resetEnvForTests, TenantRepository } from '@voodoo/core';
 
 import {

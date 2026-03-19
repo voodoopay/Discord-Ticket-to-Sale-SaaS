@@ -2,12 +2,15 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildJoinGateButtons,
+  buildJoinGateEmailModal,
   buildJoinGatePrompt,
   buildJoinGateStatusMessage,
+  lookupFailureMessage,
   parseJoinGateModalCustomId,
   parseJoinGateStartCustomId,
   sanitizeTicketChannelName,
-} from './join-gate-runtime.js';
+  shortStatusLabel,
+} from './join-gate-ui.js';
 
 describe('join gate runtime helpers', () => {
   it('builds stable start button ids for both verification paths', () => {
@@ -45,6 +48,38 @@ describe('join gate runtime helpers', () => {
     expect(embed?.description).toContain('cannot see the rest of the server yet');
   });
 
+  it('builds the verification prompt copy for dm delivery', () => {
+    const payload = buildJoinGatePrompt({
+      guildId: 'guild-1',
+      guildName: 'Voodoo Guild',
+      delivery: 'dm',
+    });
+    const embed = payload.embeds?.[0]?.toJSON();
+
+    expect(embed?.description).toContain('Welcome to **Voodoo Guild**.');
+  });
+
+  it('builds the email modal for both verification paths', () => {
+    const currentModal = buildJoinGateEmailModal('guild-1', 'current_customer').toJSON();
+    const newModal = buildJoinGateEmailModal('guild-1', 'new_customer').toJSON();
+
+    expect(currentModal.custom_id).toBe('join-gate:email:guild-1:current_customer');
+    expect(currentModal.title).toBe('Current Customer Verification');
+    expect(newModal.custom_id).toBe('join-gate:email:guild-1:new_customer');
+    expect(newModal.title).toBe('New Customer Verification');
+  });
+
+  it('returns the right success and retry labels for both paths', () => {
+    expect(shortStatusLabel('current_customer')).toBe('confirmed customer');
+    expect(shortStatusLabel('new_customer')).toBe('new customer email confirmed');
+    expect(lookupFailureMessage('current_customer')).toBe(
+      'No customer email connected to this email address. Try again.',
+    );
+    expect(lookupFailureMessage('new_customer')).toBe(
+      'No referral or email connected to this email address. Try again.',
+    );
+  });
+
   it('sanitizes ticket channel names for Discord-friendly output', () => {
     expect(sanitizeTicketChannelName('Fancy User !!!', '01ABCDEF')).toBe('verify-fancy-user-01abcd');
     expect(sanitizeTicketChannelName('***', '!!')).toBe('verify-member-verify');
@@ -53,22 +88,6 @@ describe('join gate runtime helpers', () => {
   it('formats the status message with config and warning sections', () => {
     const content = buildJoinGateStatusMessage({
       config: {
-        id: 'cfg-1',
-        tenantId: 'tenant-1',
-        guildId: 'guild-1',
-        paidLogChannelId: null,
-        staffRoleIds: [],
-        defaultCurrency: 'GBP',
-        tipEnabled: false,
-        pointsEarnCategoryKeys: [],
-        pointsRedeemCategoryKeys: [],
-        pointValueMinor: 1,
-        referralRewardMinor: 0,
-        referralRewardCategoryKeys: [],
-        referralLogChannelId: null,
-        referralThankYouTemplate: '',
-        referralSubmissionTemplate: '',
-        ticketMetadataKey: 'isTicket',
         joinGateEnabled: true,
         joinGateFallbackChannelId: 'fallback-1',
         joinGateVerifiedRoleId: 'role-1',
@@ -86,5 +105,26 @@ describe('join gate runtime helpers', () => {
     expect(content).toContain('Current-customer lookup: <#current-1> (12 indexed email(s))');
     expect(content).toContain('Missing config: Verified role');
     expect(content).toContain('- Missing guild permission: Manage Roles');
+  });
+
+  it('formats the status message when no config or runtime warnings are missing', () => {
+    const content = buildJoinGateStatusMessage({
+      config: {
+        joinGateEnabled: false,
+        joinGateFallbackChannelId: null,
+        joinGateVerifiedRoleId: null,
+        joinGateTicketCategoryId: null,
+        joinGateCurrentLookupChannelId: null,
+        joinGateNewLookupChannelId: null,
+      },
+      missingConfig: [],
+      runtimeWarnings: [],
+      currentLookupCount: 0,
+      newLookupCount: 0,
+    });
+
+    expect(content).toContain('Join Gate: Disabled');
+    expect(content).toContain('Missing config: none');
+    expect(content).toContain('Runtime warnings: none');
   });
 });

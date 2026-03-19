@@ -33,6 +33,14 @@ describe('Telegram helpers', () => {
     expect(formatUserReference('987654321')).toBe('<@987654321>');
   });
 
+  it('parses Discord-scoped ids after trimming whitespace', () => {
+    expect(parsePlatformScopedId('  dc:555666777  ')).toEqual({
+      platform: 'discord',
+      rawId: '555666777',
+    });
+    expect(formatUserReference('dc:555666777')).toBe('<@555666777>');
+  });
+
   it('builds Telegram fulfillment inline keyboards', () => {
     expect(
       buildPaidOrderFulfillmentTelegramReplyMarkup({

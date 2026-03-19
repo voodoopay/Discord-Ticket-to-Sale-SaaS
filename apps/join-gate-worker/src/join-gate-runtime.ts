@@ -1,15 +1,8 @@
 import {
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
   ChannelType,
-  EmbedBuilder,
   Events,
   MessageFlags,
-  ModalBuilder,
   PermissionFlagsBits,
-  TextInputBuilder,
-  TextInputStyle,
   type ButtonInteraction,
   type CacheType,
   type CategoryChannel,
@@ -38,14 +31,23 @@ import {
 } from '@voodoo/core';
 import { ulid } from 'ulid';
 
+import {
+  EMAIL_INPUT_ID,
+  PANEL_EMBED_TITLE,
+  buildJoinGateEmailModal,
+  buildJoinGatePrompt,
+  buildJoinGateStatusMessage,
+  lookupFailureMessage,
+  parseJoinGateModalCustomId,
+  parseJoinGateStartCustomId,
+  sanitizeTicketChannelName,
+  shortStatusLabel,
+  type JoinGateStatusMessageInput,
+} from './join-gate-ui.js';
+
 const tenantRepository = new TenantRepository();
 const joinGateService = new JoinGateService();
 const saleService = new SaleService();
-
-const JOIN_GATE_START_PREFIX = 'join-gate:start';
-const JOIN_GATE_MODAL_PREFIX = 'join-gate:email';
-const PANEL_EMBED_TITLE = 'Verify Server Access';
-const EMAIL_INPUT_ID = 'email';
 
 type GuildConfigRecord = NonNullable<Awaited<ReturnType<TenantRepository['getGuildConfig']>>>;
 
@@ -55,12 +57,8 @@ type JoinGateContext = {
   guild: Guild;
 };
 
-type JoinGateStatusSummary = {
+type JoinGateStatusSummary = JoinGateStatusMessageInput & {
   config: GuildConfigRecord;
-  missingConfig: string[];
-  runtimeWarnings: string[];
-  currentLookupCount: number;
-  newLookupCount: number;
 };
 
 type LookupSyncResult = {
@@ -90,14 +88,6 @@ type FetchableTextChannel = TextBasedChannel & {
 
 function hasText(value: string | null | undefined): value is string {
   return typeof value === 'string' && value.trim().length > 0;
-}
-
-function channelMention(channelId: string | null | undefined): string {
-  return hasText(channelId) ? `<#${channelId}>` : 'Not configured';
-}
-
-function roleMention(roleId: string | null | undefined): string {
-  return hasText(roleId) ? `<@&${roleId}>` : 'Not configured';
 }
 
 function getMissingJoinGateConfigFields(config: GuildConfigRecord): string[] {
@@ -132,128 +122,6 @@ function getMissingJoinGateConfigFields(config: GuildConfigRecord): string[] {
   }
 
   return missing;
-}
-
-function buildPromptDescription(input: { guildName: string; delivery: 'dm' | 'fallback' }): string {
-  const intro =
-    input.delivery === 'dm'
-      ? `Welcome to **${input.guildName}**.`
-      : `Use this panel if you just joined **${input.guildName}** and cannot see the rest of the server yet.`;
-
-  return [
-    intro,
-    'Choose whether you are a current customer or a new customer, then enter your email address.',
-    'If your email is confirmed, the bot will open a private ticket with staff and unlock your verified role.',
-    'After 3 failed email attempts, you will be removed from the server.',
-  ].join('\n');
-}
-
-export function buildJoinGateButtons(guildId: string): ActionRowBuilder<ButtonBuilder> {
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`${JOIN_GATE_START_PREFIX}:${guildId}:current_customer`)
-      .setLabel('Current Customer')
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId(`${JOIN_GATE_START_PREFIX}:${guildId}:new_customer`)
-      .setLabel('New Customer')
-      .setStyle(ButtonStyle.Secondary),
-  );
-}
-
-export function buildJoinGatePrompt(input: {
-  guildId: string;
-  guildName: string;
-  delivery: 'dm' | 'fallback';
-}) {
-  const embed = new EmbedBuilder()
-    .setTitle(PANEL_EMBED_TITLE)
-    .setDescription(buildPromptDescription(input));
-
-  return {
-    embeds: [embed],
-    components: [buildJoinGateButtons(input.guildId)],
-  };
-}
-
-export function parseJoinGateStartCustomId(customId: string): { guildId: string; path: JoinGateLookupType } | null {
-  const parts = customId.split(':');
-  if (parts.length !== 4) {
-    return null;
-  }
-  if (`${parts[0]}:${parts[1]}` !== JOIN_GATE_START_PREFIX) {
-    return null;
-  }
-
-  const guildId = parts[2]?.trim();
-  const path = parts[3]?.trim();
-  if (!hasText(guildId)) {
-    return null;
-  }
-  if (path !== 'current_customer' && path !== 'new_customer') {
-    return null;
-  }
-
-  return { guildId, path };
-}
-
-export function parseJoinGateModalCustomId(customId: string): { guildId: string; path: JoinGateLookupType } | null {
-  const parts = customId.split(':');
-  if (parts.length !== 4) {
-    return null;
-  }
-  if (`${parts[0]}:${parts[1]}` !== JOIN_GATE_MODAL_PREFIX) {
-    return null;
-  }
-
-  const guildId = parts[2]?.trim();
-  const path = parts[3]?.trim();
-  if (!hasText(guildId)) {
-    return null;
-  }
-  if (path !== 'current_customer' && path !== 'new_customer') {
-    return null;
-  }
-
-  return { guildId, path };
-}
-
-export function buildJoinGateEmailModal(guildId: string, path: JoinGateLookupType): ModalBuilder {
-  const title = path === 'current_customer' ? 'Current Customer Verification' : 'New Customer Verification';
-  const input = new TextInputBuilder()
-    .setCustomId(EMAIL_INPUT_ID)
-    .setLabel('Email Address')
-    .setStyle(TextInputStyle.Short)
-    .setPlaceholder('name@example.com')
-    .setRequired(true)
-    .setMaxLength(320);
-
-  return new ModalBuilder()
-    .setCustomId(`${JOIN_GATE_MODAL_PREFIX}:${guildId}:${path}`)
-    .setTitle(title)
-    .addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));
-}
-
-function shortStatusLabel(path: JoinGateLookupType): string {
-  return path === 'current_customer' ? 'confirmed customer' : 'new customer email confirmed';
-}
-
-function lookupFailureMessage(path: JoinGateLookupType): string {
-  return path === 'current_customer'
-    ? 'No customer email connected to this email address. Try again.'
-    : 'No referral or email connected to this email address. Try again.';
-}
-
-export function sanitizeTicketChannelName(baseName: string, suffix: string): string {
-  const normalizedBase = baseName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 32);
-  const safeBase = normalizedBase.length > 0 ? normalizedBase : 'member';
-  const safeSuffix = suffix.toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 6) || 'verify';
-
-  return `verify-${safeBase}-${safeSuffix}`.slice(0, 90);
 }
 
 function privateReplyOptions(interaction: Interaction<CacheType>): InteractionReplyOptions | null {
@@ -418,33 +286,6 @@ async function describeRuntimeWarnings(guild: Guild, config: GuildConfigRecord):
 
   return warnings;
 }
-
-export function buildJoinGateStatusMessage(input: JoinGateStatusSummary): string {
-  const lines = [
-    `Join Gate: ${input.config.joinGateEnabled ? 'Enabled' : 'Disabled'}`,
-    `Fallback verify channel: ${channelMention(input.config.joinGateFallbackChannelId)}`,
-    `Verified role: ${roleMention(input.config.joinGateVerifiedRoleId)}`,
-    `Ticket category: ${channelMention(input.config.joinGateTicketCategoryId)}`,
-    `Current-customer lookup: ${channelMention(input.config.joinGateCurrentLookupChannelId)} (${input.currentLookupCount} indexed email(s))`,
-    `New-customer lookup: ${channelMention(input.config.joinGateNewLookupChannelId)} (${input.newLookupCount} indexed email(s))`,
-  ];
-
-  if (input.missingConfig.length > 0) {
-    lines.push('');
-    lines.push(`Missing config: ${input.missingConfig.join(', ')}`);
-  }
-
-  if (input.runtimeWarnings.length > 0) {
-    lines.push('');
-    lines.push('Warnings:');
-    for (const warning of input.runtimeWarnings) {
-      lines.push(`- ${warning}`);
-    }
-  }
-
-  return lines.join('\n');
-}
-
 export async function getJoinGateStatusSummary(guild: Guild): Promise<JoinGateStatusSummary> {
   const context = await resolveJoinGateContext(guild);
   if (!context) {

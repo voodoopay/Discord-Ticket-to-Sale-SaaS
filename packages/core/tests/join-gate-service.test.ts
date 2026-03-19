@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  extractJoinGateEmailsFromText,
   extractJoinGateEmailsFromMessage,
   JoinGateService,
+  normalizeJoinGateEmail,
   validateJoinGateConfig,
   type JoinGateMessageLike,
   type JoinGateRepositoryLike,
 } from '../src/services/join-gate-service.js';
+import { AppError } from '../src/domain/errors.js';
 import type {
   JoinGateEmailIndexRecord,
   JoinGateMemberRecord,
@@ -56,6 +59,28 @@ function makeLookupEntry(overrides: Partial<JoinGateEmailIndexRecord> = {}): Joi
     createdAt: now(),
     updatedAt: now(),
     ...overrides,
+  };
+}
+
+function createThrowingRepository(): JoinGateRepositoryLike {
+  const boom = async (): Promise<never> => {
+    throw new Error('boom');
+  };
+
+  return {
+    upsertMemberOnJoin: boom,
+    getMember: boom,
+    setMemberSelection: boom,
+    recordDmStatus: boom,
+    incrementFailedAttempts: boom,
+    markMemberMatched: boom,
+    completeVerification: boom,
+    markMemberKicked: boom,
+    findLookupEntry: boom,
+    replaceLookupMessageEntries: boom,
+    deleteLookupMessageEntries: boom,
+    clearLookupSourceEntries: boom,
+    countLookupEntries: boom,
   };
 }
 
@@ -314,6 +339,49 @@ class InMemoryJoinGateRepository implements JoinGateRepositoryLike {
 
     return removed;
   }
+
+  public async clearLookupSourceEntries(input: {
+    tenantId: string;
+    guildId: string;
+    lookupType: JoinGateLookupType;
+    sourceChannelId: string;
+  }): Promise<number> {
+    let removed = 0;
+    for (const [key, entry] of this.lookupEntries.entries()) {
+      if (
+        entry.tenantId === input.tenantId &&
+        entry.guildId === input.guildId &&
+        entry.lookupType === input.lookupType &&
+        entry.sourceChannelId === input.sourceChannelId
+      ) {
+        this.lookupEntries.delete(key);
+        removed += 1;
+      }
+    }
+
+    return removed;
+  }
+
+  public async countLookupEntries(input: {
+    tenantId: string;
+    guildId: string;
+    lookupType: JoinGateLookupType;
+    sourceChannelId?: string | null;
+  }): Promise<number> {
+    let count = 0;
+    for (const entry of this.lookupEntries.values()) {
+      if (
+        entry.tenantId === input.tenantId &&
+        entry.guildId === input.guildId &&
+        entry.lookupType === input.lookupType &&
+        (input.sourceChannelId == null || entry.sourceChannelId === input.sourceChannelId)
+      ) {
+        count += 1;
+      }
+    }
+
+    return count;
+  }
 }
 
 describe('join gate service', () => {
@@ -335,6 +403,47 @@ describe('join gate service', () => {
     expect(result.error.code).toBe('JOIN_GATE_CONFIG_INVALID');
   });
 
+  it('accepts a complete join-gate config and normalizes valid email input', () => {
+    const configResult = validateJoinGateConfig({
+      joinGateEnabled: true,
+      joinGateFallbackChannelId: 'fallback-1',
+      joinGateVerifiedRoleId: 'role-1',
+      joinGateTicketCategoryId: 'category-1',
+      joinGateCurrentLookupChannelId: 'current-1',
+      joinGateNewLookupChannelId: 'new-1',
+    });
+    expect(configResult.isOk()).toBe(true);
+
+    const emailResult = normalizeJoinGateEmail('Customer@Example.com');
+    expect(emailResult.isOk()).toBe(true);
+    if (emailResult.isErr()) {
+      return;
+    }
+
+    expect(emailResult.value).toEqual({
+      emailDisplay: 'Customer@Example.com',
+      emailNormalized: 'customer@example.com',
+    });
+  });
+
+  it('rejects invalid email strings and extracts unique emails from plain text', () => {
+    const emailResult = normalizeJoinGateEmail('not-an-email');
+    expect(emailResult.isErr()).toBe(true);
+
+    expect(
+      extractJoinGateEmailsFromText('One: FIRST@example.com, two: first@example.com, three: new@example.com'),
+    ).toEqual([
+      {
+        emailDisplay: 'first@example.com',
+        emailNormalized: 'first@example.com',
+      },
+      {
+        emailDisplay: 'new@example.com',
+        emailNormalized: 'new@example.com',
+      },
+    ]);
+  });
+
   it('extracts and deduplicates emails from message content and embeds', () => {
     const message: JoinGateMessageLike = {
       content: 'Reach us at Current@example.com or billing@example.com.',
@@ -354,6 +463,146 @@ describe('join gate service', () => {
       'new@example.com',
       'sales@example.com',
     ]);
+  });
+
+  it('records DM status transitions for join prompts', async () => {
+    const repository = new InMemoryJoinGateRepository();
+    const service = new JoinGateService(repository);
+
+    await service.registerJoin({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      discordUserId: '223456789012345678',
+    });
+
+    const sent = await service.markDmStatus({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      discordUserId: '223456789012345678',
+      dmStatus: 'sent',
+    });
+    expect(sent.isOk()).toBe(true);
+    if (sent.isErr()) {
+      return;
+    }
+    expect(sent.value.dmStatus).toBe('sent');
+    expect(sent.value.dmSentAt).not.toBeNull();
+
+    const blocked = await service.markDmStatus({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      discordUserId: '223456789012345678',
+      dmStatus: 'blocked',
+    });
+    expect(blocked.isOk()).toBe(true);
+    if (blocked.isErr()) {
+      return;
+    }
+    expect(blocked.value.dmStatus).toBe('blocked');
+    expect(blocked.value.dmSentAt).toBeNull();
+  });
+
+  it('rejects invalid submitEmail input before touching repository state', async () => {
+    const repository = new InMemoryJoinGateRepository();
+    const service = new JoinGateService(repository);
+
+    const result = await service.submitEmail({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      discordUserId: '223456789012345678',
+      path: 'current_customer',
+      email: 'definitely-not-an-email',
+    });
+
+    expect(result.isErr()).toBe(true);
+    expect(repository.members.size).toBe(0);
+  });
+
+  it('syncs, counts, deletes, and clears lookup entries', async () => {
+    const repository = new InMemoryJoinGateRepository();
+    const service = new JoinGateService(repository);
+
+    const synced = await service.syncLookupMessage({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      lookupType: 'current_customer',
+      sourceChannelId: 'lookup-1',
+      sourceMessageId: 'message-1',
+      message: {
+        content: 'customer@example.com and customer@example.com',
+        embeds: [
+          {
+            description: 'backup@example.com',
+          },
+        ],
+      },
+    });
+    expect(synced.isOk()).toBe(true);
+    if (synced.isErr()) {
+      return;
+    }
+    expect(synced.value.emails.map((entry) => entry.emailNormalized)).toEqual([
+      'customer@example.com',
+      'backup@example.com',
+    ]);
+
+    const countAll = await service.countLookupEntries({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      lookupType: 'current_customer',
+      sourceChannelId: null,
+    });
+    expect(countAll.isOk()).toBe(true);
+    if (countAll.isErr()) {
+      return;
+    }
+    expect(countAll.value).toBe(2);
+
+    const deleted = await service.deleteLookupMessage({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      lookupType: 'current_customer',
+      sourceChannelId: 'lookup-1',
+      sourceMessageId: 'message-1',
+    });
+    expect(deleted.isOk()).toBe(true);
+    if (deleted.isErr()) {
+      return;
+    }
+    expect(deleted.value).toBe(2);
+
+    await service.syncLookupMessage({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      lookupType: 'new_customer',
+      sourceChannelId: 'lookup-2',
+      sourceMessageId: 'message-2',
+      message: {
+        content: 'new@example.com',
+      },
+    });
+    await service.syncLookupMessage({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      lookupType: 'new_customer',
+      sourceChannelId: 'lookup-2',
+      sourceMessageId: 'message-3',
+      message: {
+        content: 'referral@example.com',
+      },
+    });
+
+    const cleared = await service.clearLookupSource({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      lookupType: 'new_customer',
+      sourceChannelId: 'lookup-2',
+    });
+    expect(cleared.isOk()).toBe(true);
+    if (cleared.isErr()) {
+      return;
+    }
+    expect(cleared.value).toBe(2);
   });
 
   it('matches emails, opens the verification state, and preserves shared fail counts', async () => {
@@ -410,6 +659,141 @@ describe('join gate service', () => {
 
     expect(completed.value.status).toBe('verified');
     expect(completed.value.ticketChannelId).toBe('555456789012345678');
+  });
+
+  it('matches new-customer lookup entries and exposes terminal verification states', async () => {
+    const repository = new InMemoryJoinGateRepository();
+    repository.lookupEntries.set(
+      '01J0TENANT0000000000000001:123456789012345678:new_customer:new@example.com',
+      makeLookupEntry({
+        lookupType: 'new_customer',
+        emailNormalized: 'new@example.com',
+        emailDisplay: 'new@example.com',
+      }),
+    );
+
+    const service = new JoinGateService(repository);
+    await service.registerJoin({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      discordUserId: '223456789012345678',
+    });
+
+    const matched = await service.submitEmail({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      discordUserId: '223456789012345678',
+      path: 'new_customer',
+      email: 'new@example.com',
+    });
+    expect(matched.isOk()).toBe(true);
+    if (matched.isErr()) {
+      return;
+    }
+    expect(matched.value.status).toBe('matched');
+
+    await service.completeVerification({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      discordUserId: '223456789012345678',
+      ticketChannelId: 'ticket-1',
+    });
+
+    const verified = await service.submitEmail({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      discordUserId: '223456789012345678',
+      path: 'new_customer',
+      email: 'new@example.com',
+    });
+    expect(verified.isOk()).toBe(true);
+    if (verified.isErr()) {
+      return;
+    }
+    expect(verified.value.status).toBe('already_verified');
+
+    await service.markKicked({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      discordUserId: '999999999999999999',
+    });
+
+    const kicked = await service.submitEmail({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      discordUserId: '999999999999999999',
+      path: 'current_customer',
+      email: 'kicked@example.com',
+    });
+    expect(kicked.isOk()).toBe(true);
+    if (kicked.isErr()) {
+      return;
+    }
+    expect(kicked.value.status).toBe('already_kicked');
+  });
+
+  it('returns kick required immediately when a member has already exhausted attempts', async () => {
+    const repository = new InMemoryJoinGateRepository();
+    repository.members.set(
+      '01J0TENANT0000000000000001:123456789012345678:223456789012345678',
+      makeMember({
+        failedAttempts: 3,
+        status: 'awaiting_email',
+        selectedPath: 'current_customer',
+      }),
+    );
+
+    const service = new JoinGateService(repository);
+    const result = await service.submitEmail({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      discordUserId: '223456789012345678',
+      path: 'current_customer',
+      email: 'customer@example.com',
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) {
+      return;
+    }
+
+    expect(result.value.status).toBe('kick_required');
+    expect(result.value.member.failedAttempts).toBe(3);
+  });
+
+  it('matches new-customer lookups and returns the matched lookup record', async () => {
+    const repository = new InMemoryJoinGateRepository();
+    repository.lookupEntries.set(
+      '01J0TENANT0000000000000001:123456789012345678:new_customer:new@example.com',
+      makeLookupEntry({
+        lookupType: 'new_customer',
+        emailNormalized: 'new@example.com',
+        emailDisplay: 'new@example.com',
+      }),
+    );
+
+    const service = new JoinGateService(repository);
+    await service.registerJoin({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      discordUserId: '223456789012345678',
+    });
+
+    const matched = await service.submitEmail({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      discordUserId: '223456789012345678',
+      path: 'new_customer',
+      email: 'new@example.com',
+    });
+
+    expect(matched.isOk()).toBe(true);
+    if (matched.isErr() || matched.value.status !== 'matched') {
+      return;
+    }
+
+    expect(matched.value.lookupEntry.lookupType).toBe('new_customer');
+    expect(matched.value.member.selectedPath).toBe('new_customer');
   });
 
   it('kicks after three failed attempts across both paths', async () => {
@@ -491,5 +875,248 @@ describe('join gate service', () => {
     }
 
     expect(kicked.value.status).toBe('kicked');
+  });
+
+  it('records dm status and handles already verified/already kicked terminal states', async () => {
+    const repository = new InMemoryJoinGateRepository();
+    const service = new JoinGateService(repository);
+
+    await service.registerJoin({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      discordUserId: '223456789012345678',
+    });
+
+    const dmStatus = await service.markDmStatus({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      discordUserId: '223456789012345678',
+      dmStatus: 'sent',
+    });
+
+    expect(dmStatus.isOk()).toBe(true);
+    if (dmStatus.isErr()) {
+      return;
+    }
+
+    expect(dmStatus.value.dmStatus).toBe('sent');
+    expect(dmStatus.value.dmSentAt).not.toBeNull();
+
+    await service.completeVerification({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      discordUserId: '223456789012345678',
+      ticketChannelId: '555456789012345678',
+    });
+
+    const alreadyVerified = await service.submitEmail({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      discordUserId: '223456789012345678',
+      path: 'current_customer',
+      email: 'customer@example.com',
+    });
+
+    expect(alreadyVerified.isOk()).toBe(true);
+    if (alreadyVerified.isErr()) {
+      return;
+    }
+
+    expect(alreadyVerified.value.status).toBe('already_verified');
+
+    await service.registerJoin({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      discordUserId: '323456789012345678',
+    });
+    await service.markKicked({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      discordUserId: '323456789012345678',
+    });
+
+    const alreadyKicked = await service.submitEmail({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      discordUserId: '323456789012345678',
+      path: 'current_customer',
+      email: 'customer@example.com',
+    });
+
+    expect(alreadyKicked.isOk()).toBe(true);
+    if (alreadyKicked.isErr()) {
+      return;
+    }
+
+    expect(alreadyKicked.value.status).toBe('already_kicked');
+  });
+
+  it('syncs, counts, deletes, and clears lookup index entries by message and source channel', async () => {
+    const repository = new InMemoryJoinGateRepository();
+    const service = new JoinGateService(repository);
+
+    const synced = await service.syncLookupMessage({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      lookupType: 'current_customer',
+      sourceChannelId: '333456789012345678',
+      sourceMessageId: '444456789012345678',
+      message: {
+        content: 'customer@example.com and second@example.com',
+      },
+    });
+
+    expect(synced.isOk()).toBe(true);
+    if (synced.isErr()) {
+      return;
+    }
+
+    expect(synced.value.emails.map((entry) => entry.emailNormalized)).toEqual([
+      'customer@example.com',
+      'second@example.com',
+    ]);
+    expect(synced.value.entries).toHaveLength(2);
+
+    const counted = await service.countLookupEntries({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      lookupType: 'current_customer',
+    });
+
+    expect(counted.isOk()).toBe(true);
+    if (counted.isErr()) {
+      return;
+    }
+
+    expect(counted.value).toBe(2);
+
+    const deleted = await service.deleteLookupMessage({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      lookupType: 'current_customer',
+      sourceChannelId: '333456789012345678',
+      sourceMessageId: '444456789012345678',
+    });
+
+    expect(deleted.isOk()).toBe(true);
+    if (deleted.isErr()) {
+      return;
+    }
+
+    expect(deleted.value).toBe(2);
+
+    await service.syncLookupMessage({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      lookupType: 'current_customer',
+      sourceChannelId: '333456789012345678',
+      sourceMessageId: '555456789012345678',
+      message: {
+        content: 'third@example.com',
+      },
+    });
+
+    const cleared = await service.clearLookupSource({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      lookupType: 'current_customer',
+      sourceChannelId: '333456789012345678',
+    });
+
+    expect(cleared.isOk()).toBe(true);
+    if (cleared.isErr()) {
+      return;
+    }
+
+    expect(cleared.value).toBe(1);
+  });
+
+  it('wraps repository failures as AppError results across service boundaries', async () => {
+    const service = new JoinGateService(createThrowingRepository());
+
+    const registerJoin = await service.registerJoin({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      discordUserId: '223456789012345678',
+    });
+    expect(registerJoin.isErr()).toBe(true);
+    if (registerJoin.isOk()) {
+      return;
+    }
+    expect(registerJoin.error).toBeInstanceOf(AppError);
+
+    const setSelection = await service.setSelection({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      discordUserId: '223456789012345678',
+      path: 'current_customer',
+    });
+    expect(setSelection.isErr()).toBe(true);
+
+    const markDmStatus = await service.markDmStatus({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      discordUserId: '223456789012345678',
+      dmStatus: 'blocked',
+    });
+    expect(markDmStatus.isErr()).toBe(true);
+
+    const submitEmail = await service.submitEmail({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      discordUserId: '223456789012345678',
+      path: 'current_customer',
+      email: 'customer@example.com',
+    });
+    expect(submitEmail.isErr()).toBe(true);
+
+    const completeVerification = await service.completeVerification({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      discordUserId: '223456789012345678',
+      ticketChannelId: '555456789012345678',
+    });
+    expect(completeVerification.isErr()).toBe(true);
+
+    const syncLookupMessage = await service.syncLookupMessage({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      lookupType: 'current_customer',
+      sourceChannelId: '333456789012345678',
+      sourceMessageId: '444456789012345678',
+      message: { content: 'customer@example.com' },
+    });
+    expect(syncLookupMessage.isErr()).toBe(true);
+
+    const deleteLookupMessage = await service.deleteLookupMessage({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      lookupType: 'current_customer',
+      sourceChannelId: '333456789012345678',
+      sourceMessageId: '444456789012345678',
+    });
+    expect(deleteLookupMessage.isErr()).toBe(true);
+
+    const clearLookupSource = await service.clearLookupSource({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      lookupType: 'current_customer',
+      sourceChannelId: '333456789012345678',
+    });
+    expect(clearLookupSource.isErr()).toBe(true);
+
+    const countLookupEntries = await service.countLookupEntries({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      lookupType: 'current_customer',
+    });
+    expect(countLookupEntries.isErr()).toBe(true);
+
+    const markKicked = await service.markKicked({
+      tenantId: '01J0TENANT0000000000000001',
+      guildId: '123456789012345678',
+      discordUserId: '223456789012345678',
+    });
+    expect(markKicked.isErr()).toBe(true);
   });
 });

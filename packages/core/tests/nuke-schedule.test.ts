@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  assertValidTimezone,
   buildScheduledNukeIdempotencyKey,
   computeNextRunAtUtc,
   parseDailyTimeHhMm,
@@ -16,6 +17,11 @@ describe('nuke schedule helpers', () => {
   it('rejects invalid HH:mm input', () => {
     expect(() => parseDailyTimeHhMm('25:00')).toThrow();
     expect(() => parseDailyTimeHhMm('9:00')).toThrow();
+  });
+
+  it('rejects blank or invalid timezones', () => {
+    expect(() => assertValidTimezone('   ')).toThrow();
+    expect(() => assertValidTimezone('Mars/Olympus')).toThrow();
   });
 
   it('computes next run later same day when time is in the future', () => {

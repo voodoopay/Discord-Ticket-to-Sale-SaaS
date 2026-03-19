@@ -78,4 +78,20 @@ describe('coupon scope', () => {
       ),
     ).toBe(true);
   });
+
+  it('ignores negative and non-finite line values in eligible subtotals', () => {
+    const eligible = computeCouponEligibleSubtotalMinor(
+      {
+        allowedProductIds: [],
+        allowedVariantIds: [],
+      },
+      [
+        { productId: 'p1', variantId: 'v1', priceMinor: -500 },
+        { productId: 'p2', variantId: 'v2', priceMinor: Number.POSITIVE_INFINITY },
+        { productId: 'p3', variantId: 'v3', priceMinor: 250 },
+      ],
+    );
+
+    expect(eligible).toBe(250);
+  });
 });

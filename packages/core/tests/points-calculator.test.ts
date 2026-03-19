@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { calculatePointsOrderTotals } from '../src/services/points-calculator.js';
+import {
+  allocateProportionalMinor,
+  calculateEarnFromAppliedDiscounts,
+  calculatePointsOrderTotals,
+} from '../src/services/points-calculator.js';
 
 describe('points calculator', () => {
   it('allocates coupon discount deterministically by basket index remainder', () => {
@@ -104,5 +108,27 @@ describe('points calculator', () => {
 
     expect(result.earnPoolMinor).toBe(10_500);
     expect(result.pointsEarned).toBe(105);
+  });
+
+  it('returns zero allocations when no eligible amount can receive a discount', () => {
+    expect(allocateProportionalMinor(50, [0, 0])).toEqual([0, 0]);
+    expect(allocateProportionalMinor(50, [100, 100], [false, false])).toEqual([0, 0]);
+  });
+
+  it('normalizes calculated earnings from already-applied discounts', () => {
+    const result = calculateEarnFromAppliedDiscounts({
+      lines: [
+        { category: ' earn ', priceMinor: 500 },
+        { category: 'skip', priceMinor: 500 },
+      ],
+      couponDiscountMinor: 100,
+      pointsDiscountMinor: 50,
+      earnCategoryKeys: ['earn'],
+      redeemCategoryKeys: ['earn'],
+    });
+
+    expect(result.earnPoolMinor).toBe(400);
+    expect(result.pointsEarned).toBe(4);
+    expect(result.lineBreakdown.map((line) => line.pointsAllocatedMinor)).toEqual([50, 0]);
   });
 });
