@@ -193,6 +193,7 @@ Copy `.env.example` to `.env` and fill values.
 - Voodoo Pay callback endpoint can also finalize paid orders.
 - API verifies signature, dedupes, retries on failure, fetches Woo order notes.
 - Bot posts paid-order details to configured paid-log channel (sensitive fields masked) with a fulfillment button so staff can mark an order handled.
+- When staff clicks the paid-log fulfillment button in Discord, the bot now opens an optional message box so merchants can send delivery info back to the customer at the same time. Discord orders post that message into the original sale channel, while Telegram orders send it to the customer's DM.
 - Paid logs now label each order as `Telegram Order` or `Discord Order` so merchants can see the source immediately.
 
 ## Points Command
