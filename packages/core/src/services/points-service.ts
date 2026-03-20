@@ -6,6 +6,7 @@ import type { OrderSessionRecord } from '../repositories/order-repository.js';
 import { OrderRepository } from '../repositories/order-repository.js';
 import { PointsRepository } from '../repositories/points-repository.js';
 import type { SessionPayload } from '../security/session-token.js';
+import { resolveOrderSessionCustomerEmail } from '../utils/customer-email.js';
 import { AuthorizationService } from './authorization-service.js';
 
 const emailSchema = z.string().trim().min(3).max(320).email();
@@ -352,10 +353,11 @@ export class PointsService {
     reason: 'expired' | 'cancelled';
   }): Promise<Result<void, AppError>> {
     try {
+      const customerEmail = resolveOrderSessionCustomerEmail(input.orderSession);
       if (
         input.orderSession.pointsReservationState !== 'reserved' ||
         input.orderSession.pointsReserved <= 0 ||
-        !input.orderSession.customerEmailNormalized
+        !customerEmail
       ) {
         if (input.orderSession.pointsReservationState === 'reserved') {
           await this.orderRepository.setOrderSessionPointsReservationState({
@@ -371,14 +373,14 @@ export class PointsService {
       await this.pointsRepository.releaseReservedPoints({
         tenantId: input.orderSession.tenantId,
         guildId: input.orderSession.guildId,
-        emailNormalized: input.orderSession.customerEmailNormalized,
+        emailNormalized: customerEmail,
         points: input.orderSession.pointsReserved,
       });
 
       await this.pointsRepository.insertLedgerEvent({
         tenantId: input.orderSession.tenantId,
         guildId: input.orderSession.guildId,
-        emailNormalized: input.orderSession.customerEmailNormalized,
+        emailNormalized: customerEmail,
         deltaPoints: 0,
         eventType: input.reason === 'expired' ? 'reservation_released_expired' : 'reservation_released_cancelled',
         orderSessionId: input.orderSession.id,
@@ -405,7 +407,7 @@ export class PointsService {
     try {
       const reservationState = input.orderSession.pointsReservationState;
       const pointsReserved = Math.max(0, input.orderSession.pointsReserved);
-      const emailNormalized = input.orderSession.customerEmailNormalized;
+      const emailNormalized = resolveOrderSessionCustomerEmail(input.orderSession);
 
       if (reservationState !== 'reserved' || pointsReserved <= 0 || !emailNormalized) {
         if (reservationState === 'reserved') {
@@ -471,7 +473,8 @@ export class PointsService {
   }): Promise<Result<PointsBalanceView | null, AppError>> {
     try {
       const points = Math.max(0, Math.floor(input.points));
-      if (!input.orderSession.customerEmailNormalized || points <= 0) {
+      const customerEmail = resolveOrderSessionCustomerEmail(input.orderSession);
+      if (!customerEmail || points <= 0) {
         return ok(null);
       }
 
@@ -485,40 +488,28 @@ export class PointsService {
         const account = await this.pointsRepository.getAccount({
           tenantId: input.orderSession.tenantId,
           guildId: input.orderSession.guildId,
-          emailNormalized: input.orderSession.customerEmailNormalized,
+          emailNormalized: customerEmail,
         });
 
         if (!account) {
-          return ok(
-            this.toBalanceView(
-              input.orderSession.customerEmailNormalized,
-              input.orderSession.customerEmailNormalized,
-              null,
-            ),
-          );
+          return ok(this.toBalanceView(customerEmail, customerEmail, null));
         }
 
-        return ok(
-          this.toBalanceView(
-            input.orderSession.customerEmailNormalized,
-            input.orderSession.customerEmailNormalized,
-            account,
-          ),
-        );
+        return ok(this.toBalanceView(customerEmail, customerEmail, account));
       }
 
       const account = await this.pointsRepository.addPoints({
         tenantId: input.orderSession.tenantId,
         guildId: input.orderSession.guildId,
-        emailNormalized: input.orderSession.customerEmailNormalized,
-        emailDisplay: input.orderSession.customerEmailNormalized,
+        emailNormalized: customerEmail,
+        emailDisplay: customerEmail,
         points,
       });
 
       await this.pointsRepository.insertLedgerEvent({
         tenantId: input.orderSession.tenantId,
         guildId: input.orderSession.guildId,
-        emailNormalized: input.orderSession.customerEmailNormalized,
+        emailNormalized: customerEmail,
         deltaPoints: points,
         eventType: 'earned_from_paid_order',
         orderSessionId: input.orderSession.id,

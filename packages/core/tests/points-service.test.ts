@@ -131,4 +131,39 @@ describe('points service', () => {
     }
     expect(result.value?.balancePoints).toBe(42);
   });
+
+  it('does not add earned points for Telegram placeholder emails', async () => {
+    const service = new PointsService();
+    const orderSession = makeOrderSession({
+      customerDiscordId: 'tg:7694095003',
+      ticketChannelId: 'tg:-1003848597553',
+      customerEmailNormalized: 'discord@voodoo-services.com',
+      pointsReservationState: 'consumed',
+      pointsReserved: 0,
+    });
+
+    const addPoints = vi.spyOn((service as any).pointsRepository, 'addPoints').mockResolvedValue({
+      id: 'acct-1',
+      tenantId: orderSession.tenantId,
+      guildId: orderSession.guildId,
+      emailNormalized: 'discord@voodoo-services.com',
+      emailDisplay: 'discord@voodoo-services.com',
+      balancePoints: 42,
+      reservedPoints: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const result = await service.addEarnedPointsForPaidOrder({
+      orderSession,
+      points: 12,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(addPoints).not.toHaveBeenCalled();
+    if (result.isErr()) {
+      return;
+    }
+    expect(result.value).toBeNull();
+  });
 });

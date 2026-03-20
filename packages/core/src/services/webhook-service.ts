@@ -14,6 +14,7 @@ import { ProductRepository } from '../repositories/product-repository.js';
 import { TenantRepository } from '../repositories/tenant-repository.js';
 import { verifyVoodooCallbackToken } from '../security/voodoo-callback-token.js';
 import { isPaidWooStatus, verifyWooWebhookSignature } from '../security/webhook-signature.js';
+import { resolveOrderSessionCustomerEmail } from '../utils/customer-email.js';
 import { maskAnswers } from '../utils/mask.js';
 import { formatUserReference, parsePlatformScopedId } from '../utils/platform-ids.js';
 import { enqueueWebhookTask } from '../workers/webhook-queue.js';
@@ -1208,16 +1209,17 @@ export class WebhookService {
     }
 
     let updatedPointsBalance: number | null = null;
+    const customerEmail = resolveOrderSessionCustomerEmail(input.orderSession);
 
-    if (input.orderSession.customerEmailNormalized) {
+    if (customerEmail) {
       if (addEarn.value) {
         updatedPointsBalance = addEarn.value.balancePoints;
       } else {
         const balance = await this.pointsService.getBalanceByNormalizedEmail({
           tenantId: input.orderSession.tenantId,
           guildId: input.orderSession.guildId,
-          emailNormalized: input.orderSession.customerEmailNormalized,
-          emailDisplay: input.orderSession.customerEmailNormalized,
+          emailNormalized: customerEmail,
+          emailDisplay: customerEmail,
           releaseExpiredReservations: false,
         });
         if (balance.isErr()) {

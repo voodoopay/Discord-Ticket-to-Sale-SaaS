@@ -3,6 +3,7 @@ import { ulid } from 'ulid';
 
 import { getDb } from '../infra/db/client.js';
 import { orderNotesCache, orderSessions, ordersPaid, webhookEvents } from '../infra/db/schema/index.js';
+import { isMysqlDuplicateEntryError } from '../utils/mysql-errors.js';
 
 function isMissingColumnError(error: unknown, columnName: string): boolean {
   if (typeof error !== 'object' || error === null) {
@@ -398,12 +399,7 @@ export class OrderRepository {
         created: true,
       };
     } catch (error) {
-      if (
-        typeof error === 'object' &&
-        error !== null &&
-        'code' in error &&
-        (error as { code?: string }).code === 'ER_DUP_ENTRY'
-      ) {
+      if (isMysqlDuplicateEntryError(error)) {
         const existing = await this.getPaidOrderByOrderSessionId(input.orderSessionId);
         if (!existing) {
           throw new Error('Paid order exists but could not be loaded by order session');

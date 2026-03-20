@@ -3,6 +3,7 @@ import { ulid } from 'ulid';
 
 import { getDb } from '../infra/db/client.js';
 import { customerFirstPaidOrders, referralClaims } from '../infra/db/schema/index.js';
+import { isMysqlDuplicateEntryError } from '../utils/mysql-errors.js';
 
 export type ReferralClaimStatus = 'active' | 'rewarded';
 
@@ -145,12 +146,7 @@ export class ReferralRepository {
         status: 'active',
       });
     } catch (error) {
-      if (
-        typeof error === 'object' &&
-        error !== null &&
-        'code' in error &&
-        (error as { code?: string }).code === 'ER_DUP_ENTRY'
-      ) {
+      if (isMysqlDuplicateEntryError(error)) {
         const existing = await this.findClaimByReferredEmail({
           tenantId: input.tenantId,
           guildId: input.guildId,
@@ -219,12 +215,7 @@ export class ReferralRepository {
         pointValueMinorSnapshot: input.pointValueMinorSnapshot,
       });
     } catch (error) {
-      if (
-        typeof error === 'object' &&
-        error !== null &&
-        'code' in error &&
-        (error as { code?: string }).code === 'ER_DUP_ENTRY'
-      ) {
+      if (isMysqlDuplicateEntryError(error)) {
         const existing = await this.findFirstPaidGateByReferredEmail({
           tenantId: input.tenantId,
           guildId: input.guildId,

@@ -10,6 +10,7 @@ import {
   type FirstPaidGateRecord,
   type ReferralClaimRecord,
 } from '../repositories/referral-repository.js';
+import { resolveOrderSessionCustomerEmail } from '../utils/customer-email.js';
 import { formatUserReference } from '../utils/platform-ids.js';
 import { PointsService } from './points-service.js';
 
@@ -124,7 +125,7 @@ export class ReferralService {
     referralThankYouTemplate: string | null;
   }): Promise<Result<ReferralRewardResult, AppError>> {
     try {
-      const referredEmail = input.orderSession.customerEmailNormalized;
+      const referredEmail = resolveOrderSessionCustomerEmail(input.orderSession);
       if (!referredEmail) {
         return ok({
           status: 'not_applicable',

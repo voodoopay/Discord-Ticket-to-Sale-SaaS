@@ -104,6 +104,30 @@ describe('referral service', () => {
     expect(result.value.reason).toBe('no_customer_email');
   });
 
+  it('ignores Telegram placeholder emails when processing referral rewards', async () => {
+    const service = new ReferralService();
+
+    const result = await service.processPaidOrderReward({
+      orderSession: makeOrderSession({
+        customerDiscordId: 'tg:7694095003',
+        ticketChannelId: 'tg:-1003848597553',
+        customerEmailNormalized: 'discord@voodoo-services.com',
+      }),
+      referralThankYouTemplate: null,
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) {
+      return;
+    }
+
+    expect(result.value.status).toBe('not_applicable');
+    if (result.value.status !== 'not_applicable') {
+      return;
+    }
+    expect(result.value.reason).toBe('no_customer_email');
+  });
+
   it('returns the rewarded outcome again when the same paid order is retried', async () => {
     const service = new ReferralService();
     const orderSession = makeOrderSession({

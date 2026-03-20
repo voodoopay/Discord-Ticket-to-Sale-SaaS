@@ -12,6 +12,7 @@ import { TicketMetadataRepository } from '../repositories/ticket-metadata-reposi
 import { signCheckoutToken } from '../security/checkout-token.js';
 import type { SessionPayload } from '../security/session-token.js';
 import { signVoodooCallbackToken } from '../security/voodoo-callback-token.js';
+import { resolveOrderSessionCustomerEmail } from '../utils/customer-email.js';
 import { AuthorizationService } from './authorization-service.js';
 import { computeCouponEligibleSubtotalMinor } from './coupon-scope.js';
 import { IntegrationService, normalizeCheckoutDomain } from './integration-service.js';
@@ -511,6 +512,17 @@ export class SaleService {
         return err(new AppError('CUSTOMER_EMAIL_INVALID', 'Customer email is invalid', 400));
       }
       normalizedCustomerEmail = normalized.value;
+    }
+
+    const persistedCustomerEmailNormalized = normalizedCustomerEmail
+      ? resolveOrderSessionCustomerEmail({
+          customerEmailNormalized: normalizedCustomerEmail.emailNormalized,
+          customerDiscordId: input.customerDiscordUserId,
+          ticketChannelId: input.ticketChannelId,
+        })
+      : null;
+    if (!persistedCustomerEmailNormalized) {
+      normalizedCustomerEmail = null;
     }
 
     let availablePoints = 0;
