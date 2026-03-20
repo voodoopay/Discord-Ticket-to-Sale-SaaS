@@ -25,10 +25,12 @@ import {
 } from '../lib/sale-links.js';
 import { buildTelegramCheckoutButtonLabel } from '../lib/checkout-links.js';
 import {
-  formatTelegramUserLabel,
+  canTelegramUserAccessSaleDraft,
   getLinkedStoreForChat,
   isTelegramChatAdmin,
   isTelegramGroupChat,
+  normalizeTelegramUsername,
+  resolveTelegramSaleCustomer,
 } from '../lib/telegram.js';
 
 const env = getEnv();
@@ -36,9 +38,15 @@ const productRepository = new ProductRepository();
 const couponRepository = new CouponRepository();
 const saleService = new SaleService();
 const displayLabelCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+type TelegramKeyboardButton = { label: string; data?: string; url?: string };
 
-function canInteractWithDraft(draft: SaleDraft, userId: string): boolean {
-  return draft.customerDiscordUserId === userId;
+function canInteractWithDraft(draft: SaleDraft, userId: string, username?: string): boolean {
+  return canTelegramUserAccessSaleDraft({
+    expectedUserId: draft.customerDiscordUserId || null,
+    expectedUsernameNormalized: draft.customerTelegramUsernameNormalized,
+    actualUserId: userId,
+    actualUsername: username,
+  });
 }
 
 function normalizeCategoryLabel(category: string): string {
@@ -96,7 +104,7 @@ async function editDraftMessage(input: {
   }
 }
 
-function buildKeyboard(buttons: Array<{ label: string; data?: string; url?: string }>): InlineKeyboard {
+function buildKeyboard(buttons: TelegramKeyboardButton[]): InlineKeyboard {
   const keyboard = new InlineKeyboard();
   buttons.forEach((button, index) => {
     if (button.url) keyboard.url(button.label, button.url);
@@ -104,6 +112,14 @@ function buildKeyboard(buttons: Array<{ label: string; data?: string; url?: stri
     if (index < buttons.length - 1) keyboard.row();
   });
   return keyboard;
+}
+
+function appendDoneAddingButton(buttons: TelegramKeyboardButton[], draft: SaleDraft): TelegramKeyboardButton[] {
+  if (draft.basketItems.length === 0) {
+    return buttons;
+  }
+
+  return [...buttons, { label: 'Done Adding', data: `sale:act:${draft.id}:co` }];
 }
 
 function formatMinorCurrency(minor: number, currency: string): string {
@@ -375,7 +391,12 @@ async function renderCategorySelectionStep(api: Api, draft: SaleDraft): Promise<
     api,
     draft,
     content: [`Step 1/7: Select category for ${draft.customerLabel}`, ...buildBasketSummaryLines(draft)].join('\n'),
-    keyboard: buildKeyboard(draft.categoryOptions.map((category, index) => ({ label: category, data: `sale:cat:${draft.id}:${index}` }))),
+    keyboard: buildKeyboard(
+      appendDoneAddingButton(
+        draft.categoryOptions.map((category, index) => ({ label: category, data: `sale:cat:${draft.id}:${index}` })),
+        draft,
+      ),
+    ),
   });
 }
 
@@ -413,10 +434,13 @@ async function renderProductSelectionStep(api: Api, draft: SaleDraft): Promise<v
     draft,
     content: [`Step 2/7: Select product`, ...buildBasketSummaryLines(draft)].join('\n'),
     keyboard: buildKeyboard(
-      products.sort(compareProductNameForDisplay).map((product) => ({
-        label: product.name,
-        data: `sale:prd:${draft.id}:${product.productId}`,
-      })),
+      appendDoneAddingButton(
+        products.sort(compareProductNameForDisplay).map((product) => ({
+          label: product.name,
+          data: `sale:prd:${draft.id}:${product.productId}`,
+        })),
+        draft,
+      ),
     ),
   });
 }
@@ -432,10 +456,13 @@ async function renderVariantSelectionStep(api: Api, draft: SaleDraft): Promise<v
     draft,
     content: [`Step 3/7: Select price option`, `Category: ${draft.category}`, `Product: ${draft.productName}`, ...buildBasketSummaryLines(draft)].join('\n'),
     keyboard: buildKeyboard(
-      draft.variantOptions.map((variant) => ({
-        label: `${variant.label} (${formatMinorCurrency(variant.priceMinor, variant.currency)})`,
-        data: `sale:var:${draft.id}:${variant.variantId}`,
-      })),
+      appendDoneAddingButton(
+        draft.variantOptions.map((variant) => ({
+          label: `${variant.label} (${formatMinorCurrency(variant.priceMinor, variant.currency)})`,
+          data: `sale:var:${draft.id}:${variant.variantId}`,
+        })),
+        draft,
+      ),
     ),
   });
 }
@@ -741,7 +768,7 @@ export async function handleSaleStartCommand(ctx: Context): Promise<boolean> {
     return true;
   }
 
-  if (!canInteractWithDraft(draft, toTelegramScopedId(String(ctx.from.id)))) {
+  if (!canInteractWithDraft(draft, toTelegramScopedId(String(ctx.from.id)), ctx.from.username)) {
     await ctx.reply('This private sale link is only valid for the selected customer.');
     return true;
   }
@@ -755,6 +782,9 @@ export async function handleSaleStartCommand(ctx: Context): Promise<boolean> {
 
   draft.controlChatId = toTelegramScopedId(String(ctx.chat.id));
   draft.controlMessageId = controlMessage.message_id;
+  draft.customerDiscordUserId = toTelegramScopedId(String(ctx.from.id));
+  draft.customerTelegramUsernameNormalized =
+    normalizeTelegramUsername(ctx.from.username) ?? draft.customerTelegramUsernameNormalized;
   draft.pendingInput = null;
   updateSaleDraft(draft);
 
@@ -785,16 +815,21 @@ export async function handleSaleCommand(ctx: Context): Promise<void> {
     return;
   }
 
-  const customer =
-    ctx.message.reply_to_message?.from && !ctx.message.reply_to_message.from.is_bot ? ctx.message.reply_to_message.from : ctx.from;
+  const customer = resolveTelegramSaleCustomer({
+    text: ctx.message.text ?? '',
+    from: ctx.from,
+    replyToUser: ctx.message.reply_to_message?.from ?? null,
+    entities: ctx.message.entities ?? [],
+  });
   clearSaleDraftsForChat(toTelegramScopedId(String(ctx.chat.id)));
   const draft = createSaleDraft({
     tenantId: linkedStore.tenantId,
     guildId: linkedStore.guildId,
     ticketChannelId: toTelegramScopedId(String(ctx.chat.id)),
-    customerLabel: formatTelegramUserLabel(customer),
+    customerLabel: customer.label,
     staffDiscordUserId: toTelegramScopedId(String(ctx.from.id)),
-    customerDiscordUserId: toTelegramScopedId(String(customer.id)),
+    customerDiscordUserId: customer.id == null ? '' : toTelegramScopedId(String(customer.id)),
+    customerTelegramUsernameNormalized: customer.usernameNormalized,
     tipEnabled: configResult.value.tipEnabled,
     defaultCurrency: configResult.value.defaultCurrency,
   });
@@ -838,7 +873,7 @@ export async function handleSaleCallbackQuery(ctx: Context): Promise<boolean> {
     await ctx.answerCallbackQuery({ text: 'This sale is handled in the customer DM only.', show_alert: true });
     return true;
   }
-  if (!canInteractWithDraft(draft, toTelegramScopedId(String(ctx.from.id)))) {
+  if (!canInteractWithDraft(draft, toTelegramScopedId(String(ctx.from.id)), ctx.from.username)) {
     await ctx.answerCallbackQuery({ text: 'Only the selected customer can use these private sale controls.', show_alert: true });
     return true;
   }
@@ -888,7 +923,9 @@ export async function handleSaleTextMessage(ctx: Context): Promise<boolean> {
   const actor = ctx.from;
   if (!actor) return false;
   const draft = listSaleDraftsForControlChat(toTelegramScopedId(String(ctx.chat.id))).find(
-    (candidate) => candidate.pendingInput !== null && canInteractWithDraft(candidate, toTelegramScopedId(String(actor.id))),
+    (candidate) =>
+      candidate.pendingInput !== null &&
+      canInteractWithDraft(candidate, toTelegramScopedId(String(actor.id)), actor.username),
   );
   if (!draft || !draft.pendingInput) return false;
 

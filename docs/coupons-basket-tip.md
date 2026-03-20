@@ -25,12 +25,18 @@
 1. Staff starts `/sale`.
 2. Customer/staff selects `Category -> Product -> Price option`.
 3. Bot asks whether to add more products to basket.
-4. Bot shows optional coupon step.
-5. Bot collects customer answers (category question set).
-6. If tip is enabled, bot asks tip `Yes/No`.
-7. If `Yes`, customer enters custom GBP tip amount.
-8. Bot checks points (by customer email) and offers `Use Points` when eligible.
-9. Bot generates checkout link.
+4. If customer opens `Add More` and changes their mind, the selection screens now include `Done Adding` so they can continue to checkout without choosing another item.
+5. Bot shows optional coupon step.
+6. Bot collects customer answers (category question set).
+7. If tip is enabled, bot asks tip `Yes/No`.
+8. If `Yes`, customer enters custom GBP tip amount.
+9. Bot checks points (by customer email) and offers `Use Points` when eligible.
+10. Bot generates checkout link.
+
+## Telegram Targeting
+
+- Telegram `/sale` supports the selected customer via reply, `text_mention`, or `/sale @username`.
+- The group handoff message is still visible in the group, but only the selected customer can continue the private DM sale.
 
 ## Total Calculation
 

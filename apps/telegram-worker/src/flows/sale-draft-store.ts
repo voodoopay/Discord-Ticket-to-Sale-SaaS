@@ -41,6 +41,7 @@ export type SaleDraft = {
   customerLabel: string;
   staffDiscordUserId: string;
   customerDiscordUserId: string;
+  customerTelegramUsernameNormalized: string | null;
   category: string | null;
   categoryOptions: string[];
   productName: string | null;
@@ -89,6 +90,7 @@ export function createSaleDraft(input: {
   customerLabel: string;
   staffDiscordUserId: string;
   customerDiscordUserId: string;
+  customerTelegramUsernameNormalized?: string | null;
   tipEnabled?: boolean;
   defaultCurrency?: string;
 }): SaleDraft {
@@ -102,6 +104,7 @@ export function createSaleDraft(input: {
     customerLabel: input.customerLabel,
     staffDiscordUserId: input.staffDiscordUserId,
     customerDiscordUserId: input.customerDiscordUserId,
+    customerTelegramUsernameNormalized: input.customerTelegramUsernameNormalized ?? null,
     category: null,
     categoryOptions: [],
     productName: null,

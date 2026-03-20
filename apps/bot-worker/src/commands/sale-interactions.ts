@@ -192,6 +192,20 @@ function buildButtonRow(buttons: StepButton[]): ActionRowBuilder<ButtonBuilder> 
   return row;
 }
 
+function buildDoneAddingRow(draft: SaleDraft): ActionRowBuilder<ButtonBuilder> | null {
+  if (draft.basketItems.length === 0) {
+    return null;
+  }
+
+  return buildButtonRow([
+    {
+      customId: `sale:action:${draft.id}:continue_checkout`,
+      label: 'Done Adding',
+      style: ButtonStyle.Primary,
+    },
+  ]);
+}
+
 function toOptionDescription(input: { description: string; variantCount: number }): string {
   const description = input.description.trim();
   if (description.length > 0) {
@@ -577,13 +591,14 @@ async function renderCategorySelectionStep(
     placeholder: 'Select category',
     options: categoryOptions,
   });
+  const doneAddingRow = buildDoneAddingRow(draft);
 
   await interaction.update({
     content: [
       `Step 1/7: Select category for <@${draft.customerDiscordUserId}>`,
       ...buildBasketSummaryLines(draft),
     ].join('\n'),
-    components: [row],
+    components: doneAddingRow ? [row, doneAddingRow] : [row],
   });
 }
 
@@ -644,13 +659,16 @@ async function renderProductSelectionStep(
         value: product.productId,
       })),
   });
+  const doneAddingRow = buildDoneAddingRow(draft);
 
   await interaction.update({
     content: [
       `Step 2/7: Category **${draft.category}** selected. Now select product.`,
       ...buildBasketSummaryLines(draft),
     ].join('\n'),
-    components: [row, buildBackRow({ customId: `sale:back:${draft.id}:category` })],
+    components: doneAddingRow
+      ? [row, buildBackRow({ customId: `sale:back:${draft.id}:category` }), doneAddingRow]
+      : [row, buildBackRow({ customId: `sale:back:${draft.id}:category` })],
   });
 }
 
@@ -707,6 +725,7 @@ async function renderVariantSelectionStep(
     description.length > 0
       ? `Description: ${description.length > 280 ? `${description.slice(0, 277)}...` : description}`
       : null;
+  const doneAddingRow = buildDoneAddingRow(draft);
 
   await interaction.update({
     content: [
@@ -718,7 +737,9 @@ async function renderVariantSelectionStep(
     ]
       .filter((line): line is string => Boolean(line))
       .join('\n'),
-    components: [row, buildBackRow({ customId: `sale:back:${draft.id}:product` })],
+    components: doneAddingRow
+      ? [row, buildBackRow({ customId: `sale:back:${draft.id}:product` }), doneAddingRow]
+      : [row, buildBackRow({ customId: `sale:back:${draft.id}:product` })],
   });
 }
 

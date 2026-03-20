@@ -128,7 +128,7 @@ Copy `.env.example` to `.env` and fill values.
 - Staff runs `/sale` in any server channel where they have required permissions.
 - Sale drafts stay active for 1 hour on Discord and refresh their expiry as staff move through the flow.
 - Bot shows category -> product -> variant flow with Back buttons on selection steps.
-- After variant selection, bot supports basket flow (`Add More Products` or continue).
+- After variant selection, bot supports basket flow (`Add More Products` or continue), and add-more selection steps now include a `Done Adding` escape button so customers can move forward without picking another item.
 - Coupon step is optional; entered code is validated against server coupon settings and selected basket item scope.
 - Product description is shown in the bot flow when configured.
 - Bot gathers custom form answers through modals.
@@ -142,6 +142,7 @@ Copy `.env.example` to `.env` and fill values.
 - Bot creates `order_session` and posts payment buttons in the ticket (`Pay`, and optionally `Pay with Crypto`).
 - Checkout amount now reflects basket total minus coupon plus tip.
 - Telegram `/sale` now starts in the linked group and immediately moves the sensitive sale flow into a private DM with the selected customer.
+- Telegram `/sale` can target the customer by reply, `text_mention`, or plain `/sale @username`, and only the matching customer can continue the private DM flow.
 - Telegram DM sale drafts now stay active for 6 hours and refresh their expiry as the customer moves through the private flow.
 - Telegram `/points` now hands off from the linked group into a private DM before collecting the customer email or showing the balance.
 - Telegram `/refer` now hands off from the linked group into a private DM before collecting either email address.
