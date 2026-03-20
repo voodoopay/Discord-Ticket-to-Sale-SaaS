@@ -63,6 +63,22 @@ type SportsApiV2EventLookup = {
   strBanner?: string | null;
 };
 
+type SportsApiV1TvShow = {
+  idChannel?: string | null;
+  idShow?: string | null;
+  strCountry?: string | null;
+  strNetwork?: string | null;
+  strTvChannel?: string | null;
+  strLogo?: string | null;
+};
+
+type SportsApiTvPayload = {
+  filter?: SportsApiV1TvEvent[] | null;
+  tvevent?: SportsApiV1TvEvent[] | null;
+  tvevents?: SportsApiV1TvEvent[] | null;
+  tvshows?: SportsApiV1TvShow[] | null;
+};
+
 export type SportDefinition = {
   sportId: string | null;
   sportName: string;
@@ -170,7 +186,13 @@ function parseUtcDateTime(input: {
   const timestamp = input.timestamp?.trim();
   if (timestamp) {
     const normalized = timestamp.includes('T') ? timestamp : timestamp.replace(' ', 'T');
-    return new Date(normalized.endsWith('Z') ? normalized : `${normalized}Z`);
+    const parsedWithOffset = new Date(normalized);
+    if (!Number.isNaN(parsedWithOffset.getTime())) {
+      return parsedWithOffset;
+    }
+
+    const parsedUtc = new Date(normalized.endsWith('Z') ? normalized : `${normalized}Z`);
+    return Number.isNaN(parsedUtc.getTime()) ? null : parsedUtc;
   }
 
   const date = input.date?.trim();
@@ -179,7 +201,8 @@ function parseUtcDateTime(input: {
     return null;
   }
 
-  return new Date(`${date}T${time}Z`);
+  const parsed = new Date(`${date}T${time}Z`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
 function formatUkTime(date: Date, timezone: string): string {
@@ -209,6 +232,70 @@ function normalizeForSearch(value: string): string {
     .replace(/[^\p{L}\p{N}\s]/gu, ' ')
     .replace(/\s+/gu, ' ')
     .trim();
+}
+
+function normalizeCountryName(value: string): string {
+  return normalizeWhitespace(value).toLowerCase();
+}
+
+function matchesCountry(input: {
+  actual?: string | null;
+  expected: string;
+}): boolean {
+  const actual = firstNonEmpty(input.actual);
+  if (!actual) {
+    return false;
+  }
+
+  return normalizeCountryName(actual) === normalizeCountryName(input.expected);
+}
+
+function extractTvEventRows(payload: SportsApiTvPayload): SportsApiV1TvEvent[] {
+  return payload.filter ?? payload.tvevents ?? payload.tvevent ?? [];
+}
+
+function extractTvBroadcasts(payload: SportsApiTvPayload): SportsBroadcast[] {
+  const eventBroadcasts = extractTvEventRows(payload)
+    .map((row) => {
+      const channelName = firstNonEmpty(row.strChannel);
+      if (!channelName) {
+        return null;
+      }
+
+      return {
+        channelId: firstNonEmpty(row.idChannel),
+        channelName,
+        country: firstNonEmpty(row.strCountry),
+        logoUrl: firstNonEmpty(row.strLogo),
+      } satisfies SportsBroadcast;
+    })
+    .filter((row): row is SportsBroadcast => row !== null);
+
+  const tvShowBroadcasts = (payload.tvshows ?? [])
+    .map((row) => {
+      const channelName = firstNonEmpty(row.strTvChannel, row.strNetwork);
+      if (!channelName) {
+        return null;
+      }
+
+      return {
+        channelId: firstNonEmpty(row.idChannel, row.idShow),
+        channelName,
+        country: firstNonEmpty(row.strCountry),
+        logoUrl: firstNonEmpty(row.strLogo),
+      } satisfies SportsBroadcast;
+    })
+    .filter((row): row is SportsBroadcast => row !== null);
+
+  const uniqueBroadcasts = new Map<string, SportsBroadcast>();
+  for (const broadcaster of [...eventBroadcasts, ...tvShowBroadcasts]) {
+    const key = broadcaster.channelId ?? broadcaster.channelName.toLowerCase();
+    if (!uniqueBroadcasts.has(key)) {
+      uniqueBroadcasts.set(key, broadcaster);
+    }
+  }
+
+  return [...uniqueBroadcasts.values()];
 }
 
 export function pickBestSportsSearchResult(
@@ -383,19 +470,11 @@ export class SportsDataService {
       const previousDateValue = previousDate.toISOString().slice(0, 10);
 
       const [previousDay, currentDay] = await Promise.all([
-        this.requestV1<{ tvevents?: SportsApiV1TvEvent[] }>({
-          endpoint: 'eventstv.php',
-          params: {
-            d: previousDateValue,
-            a: input.broadcastCountry,
-          },
+        this.requestV2<SportsApiTvPayload>({
+          path: `/filter/tv/day/${encodeURIComponent(previousDateValue)}`,
         }),
-        this.requestV1<{ tvevents?: SportsApiV1TvEvent[] }>({
-          endpoint: 'eventstv.php',
-          params: {
-            d: input.localDate,
-            a: input.broadcastCountry,
-          },
+        this.requestV2<SportsApiTvPayload>({
+          path: `/filter/tv/day/${encodeURIComponent(input.localDate)}`,
         }),
       ]);
 
@@ -412,6 +491,16 @@ export class SportsDataService {
           });
 
           if (!eventId || !sportName || !eventName || !eventDateTime) {
+            continue;
+          }
+
+          if (
+            input.broadcastCountry.trim().length > 0 &&
+            !matchesCountry({
+              actual: row.strCountry,
+              expected: input.broadcastCountry,
+            })
+          ) {
             continue;
           }
 
@@ -468,8 +557,8 @@ export class SportsDataService {
         }
       };
 
-      addRows(previousDay.tvevents);
-      addRows(currentDay.tvevents);
+      addRows(extractTvEventRows(previousDay));
+      addRows(extractTvEventRows(currentDay));
 
       const bySport = new Map<string, SportsListing[]>();
       for (const listing of eventGroups.values()) {
@@ -549,7 +638,7 @@ export class SportsDataService {
         this.requestV2<{ lookup?: SportsApiV2EventLookup[] }>({
           path: `/lookup/event/${encodeURIComponent(input.eventId)}`,
         }),
-        this.requestV1<{ tvevents?: SportsApiV1TvEvent[] }>({
+        this.requestV1<SportsApiTvPayload>({
           endpoint: 'lookuptv.php',
           params: {
             id: input.eventId,
@@ -567,24 +656,14 @@ export class SportsDataService {
         date: event.dateEvent,
         time: event.strTime,
       });
-      const broadcasters = (tvPayload.tvevents ?? [])
-        .map((row) => {
-          const channelName = firstNonEmpty(row.strChannel);
-          if (!channelName) {
-            return null;
-          }
-
-          return {
-            channelId: firstNonEmpty(row.idChannel),
-            channelName,
-            country: firstNonEmpty(row.strCountry),
-            logoUrl: firstNonEmpty(row.strLogo),
-          } satisfies SportsBroadcast;
-        })
-        .filter((row): row is SportsBroadcast => row !== null);
+      const broadcasters = extractTvBroadcasts(tvPayload);
 
       const countryMatches = broadcasters.filter(
-        (broadcaster) => broadcaster.country?.toLowerCase() === input.broadcastCountry.toLowerCase(),
+        (broadcaster) =>
+          matchesCountry({
+            actual: broadcaster.country,
+            expected: input.broadcastCountry,
+          }),
       );
       const visibleBroadcasters = (countryMatches.length > 0 ? countryMatches : broadcasters).sort((left, right) =>
         left.channelName.localeCompare(right.channelName, UK_LOCALE),
