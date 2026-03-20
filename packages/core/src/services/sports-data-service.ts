@@ -36,7 +36,7 @@ type SportsApiV2Sport = {
 };
 
 type SportsApiV2EventSearch = {
-  idEvent?: string | null;
+  idEvent?: string | number | null;
   strEvent?: string | null;
   strLeague?: string | null;
   dateEvent?: string | null;
@@ -45,7 +45,7 @@ type SportsApiV2EventSearch = {
 };
 
 type SportsApiV2EventLookup = {
-  idEvent?: string | null;
+  idEvent?: string | number | null;
   strEvent?: string | null;
   strSport?: string | null;
   strLeague?: string | null;
@@ -61,6 +61,44 @@ type SportsApiV2EventLookup = {
   strFanart?: string | null;
   strThumb?: string | null;
   strBanner?: string | null;
+};
+
+type SportsApiV2EventSearchPayload = {
+  results?: SportsApiV2EventSearch[] | null;
+  search?: SportsApiV2EventSearch[] | null;
+};
+
+type SportsApiV2TeamSearch = {
+  idTeam?: string | number | null;
+  strAlternate?: string | null;
+  strLeague?: string | null;
+  strSport?: string | null;
+  strTeam?: string | null;
+  strTeamShort?: string | null;
+};
+
+type SportsApiV2TeamSearchPayload = {
+  search?: SportsApiV2TeamSearch[] | null;
+  teams?: SportsApiV2TeamSearch[] | null;
+};
+
+type SportsApiV2TeamScheduleEvent = {
+  dateEvent?: string | null;
+  idAwayTeam?: string | number | null;
+  idEvent?: string | number | null;
+  idHomeTeam?: string | number | null;
+  strAwayTeam?: string | null;
+  strEvent?: string | null;
+  strEventThumb?: string | null;
+  strHomeTeam?: string | null;
+  strLeague?: string | null;
+  strPoster?: string | null;
+  strSport?: string | null;
+  strThumb?: string | null;
+};
+
+type SportsApiV2TeamSchedulePayload = {
+  schedule?: SportsApiV2TeamScheduleEvent[] | null;
 };
 
 type SportsApiV1TvShow = {
@@ -168,10 +206,16 @@ function slugifySportName(value: string): string {
     .slice(0, 90);
 }
 
-function firstNonEmpty(...values: Array<string | null | undefined>): string | null {
+function firstNonEmpty(
+  ...values: Array<string | number | null | undefined>
+): string | null {
   for (const value of values) {
     if (typeof value === 'string' && value.trim().length > 0) {
       return value.trim();
+    }
+
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return String(value);
     }
   }
 
@@ -238,6 +282,19 @@ function normalizeCountryName(value: string): string {
   return normalizeWhitespace(value).toLowerCase();
 }
 
+function parseVersusQuery(query: string): { leftTeam: string; rightTeam: string } | null {
+  const normalized = normalizeForSearch(query);
+  const segments = normalized.split(/\svs\s/gu).map((segment) => segment.trim()).filter(Boolean);
+  if (segments.length !== 2) {
+    return null;
+  }
+
+  return {
+    leftTeam: segments[0] ?? '',
+    rightTeam: segments[1] ?? '',
+  };
+}
+
 function matchesCountry(input: {
   actual?: string | null;
   expected: string;
@@ -296,6 +353,46 @@ function extractTvBroadcasts(payload: SportsApiTvPayload): SportsBroadcast[] {
   }
 
   return [...uniqueBroadcasts.values()];
+}
+
+function extractEventSearchRows(payload: SportsApiV2EventSearchPayload): SportsApiV2EventSearch[] {
+  return payload.search ?? payload.results ?? [];
+}
+
+function extractTeamSearchRows(payload: SportsApiV2TeamSearchPayload): SportsApiV2TeamSearch[] {
+  return payload.search ?? payload.teams ?? [];
+}
+
+function pickBestTeamSearchResult(
+  query: string,
+  results: SportsApiV2TeamSearch[],
+): SportsApiV2TeamSearch | null {
+  const normalizedQuery = normalizeForSearch(query);
+  const scored = results.map((result) => {
+    const exactNames = [
+      firstNonEmpty(result.strTeam),
+      firstNonEmpty(result.strTeamShort),
+      firstNonEmpty(result.strAlternate),
+    ]
+      .filter((value): value is string => value !== null)
+      .map((value) => normalizeForSearch(value));
+
+    let score = 0;
+    if (exactNames.includes(normalizedQuery)) {
+      score += 100;
+    }
+
+    for (const name of exactNames) {
+      if (name.includes(normalizedQuery) || normalizedQuery.includes(name)) {
+        score += 30;
+      }
+    }
+
+    return { result, score };
+  });
+
+  scored.sort((left, right) => right.score - left.score);
+  return scored[0]?.result ?? null;
 }
 
 export function pickBestSportsSearchResult(
@@ -419,6 +516,105 @@ export class SportsDataService {
         'X-API-KEY': this.getApiKey(),
       },
     })) as T;
+  }
+
+  private mapSportsSearchResults(rows: SportsApiV2EventSearch[]): SportsSearchResult[] {
+    return rows
+      .map((result) => ({
+        eventId: firstNonEmpty(result.idEvent) ?? '',
+        eventName: firstNonEmpty(result.strEvent) ?? '',
+        sportName: firstNonEmpty(result.strSport),
+        leagueName: firstNonEmpty(result.strLeague),
+        dateEvent: firstNonEmpty(result.dateEvent),
+        imageUrl: firstNonEmpty(result.strThumb),
+      }))
+      .filter((result) => result.eventId.length > 0 && result.eventName.length > 0);
+  }
+
+  private mapTeamScheduleResults(rows: SportsApiV2TeamScheduleEvent[]): SportsSearchResult[] {
+    return rows
+      .map((row) => ({
+        eventId: firstNonEmpty(row.idEvent) ?? '',
+        eventName: firstNonEmpty(row.strEvent) ?? '',
+        sportName: firstNonEmpty(row.strSport),
+        leagueName: firstNonEmpty(row.strLeague),
+        dateEvent: firstNonEmpty(row.dateEvent),
+        imageUrl: firstNonEmpty(row.strThumb, row.strEventThumb, row.strPoster),
+      }))
+      .filter((result) => result.eventId.length > 0 && result.eventName.length > 0);
+  }
+
+  private async searchHeadToHeadEvents(query: string): Promise<SportsSearchResult[]> {
+    const versusQuery = parseVersusQuery(query);
+    if (!versusQuery) {
+      return [];
+    }
+
+    const [leftPayload, rightPayload] = await Promise.all([
+      this.requestV2<SportsApiV2TeamSearchPayload>({
+        path: `/search/team/${toApiPathSegment(versusQuery.leftTeam)}`,
+      }),
+      this.requestV2<SportsApiV2TeamSearchPayload>({
+        path: `/search/team/${toApiPathSegment(versusQuery.rightTeam)}`,
+      }),
+    ]);
+
+    const leftTeam = pickBestTeamSearchResult(
+      versusQuery.leftTeam,
+      extractTeamSearchRows(leftPayload),
+    );
+    const rightTeam = pickBestTeamSearchResult(
+      versusQuery.rightTeam,
+      extractTeamSearchRows(rightPayload),
+    );
+    const leftTeamId = firstNonEmpty(leftTeam?.idTeam);
+    const rightTeamId = firstNonEmpty(rightTeam?.idTeam);
+
+    if (!leftTeam || !rightTeam || !leftTeamId) {
+      return [];
+    }
+
+    const [nextSchedule, previousSchedule] = await Promise.all([
+      this.requestV2<SportsApiV2TeamSchedulePayload>({
+        path: `/schedule/next/team/${encodeURIComponent(leftTeamId)}`,
+      }),
+      this.requestV2<SportsApiV2TeamSchedulePayload>({
+        path: `/schedule/previous/team/${encodeURIComponent(leftTeamId)}`,
+      }),
+    ]);
+
+    const rightTeamNames = [
+      firstNonEmpty(rightTeam.strTeam),
+      firstNonEmpty(rightTeam.strTeamShort),
+      firstNonEmpty(rightTeam.strAlternate),
+    ]
+      .filter((value): value is string => value !== null)
+      .map((value) => normalizeForSearch(value));
+
+    const matchingRows = [...(nextSchedule.schedule ?? []), ...(previousSchedule.schedule ?? [])].filter(
+      (row) => {
+        const homeTeamId = firstNonEmpty(row.idHomeTeam);
+        const awayTeamId = firstNonEmpty(row.idAwayTeam);
+        if (rightTeamId && (homeTeamId === rightTeamId || awayTeamId === rightTeamId)) {
+          return true;
+        }
+
+        const homeTeam = firstNonEmpty(row.strHomeTeam);
+        const awayTeam = firstNonEmpty(row.strAwayTeam);
+        return [homeTeam, awayTeam]
+          .filter((value): value is string => value !== null)
+          .some((value) => rightTeamNames.includes(normalizeForSearch(value)));
+      },
+    );
+
+    const uniqueResults = new Map<string, SportsSearchResult>();
+    for (const result of this.mapTeamScheduleResults(matchingRows)) {
+      if (!uniqueResults.has(result.eventId)) {
+        uniqueResults.set(result.eventId, result);
+      }
+    }
+
+    return [...uniqueResults.values()];
   }
 
   public async listSupportedSports(): Promise<Result<SportDefinition[], AppError>> {
@@ -596,6 +792,7 @@ export class SportsDataService {
       return ok([]);
     }
 
+    const eventSearchQuery = normalizeForSearch(query);
     const cacheKey = normalizedQuery.toLowerCase();
     try {
       const cached = this.searchCache.get(cacheKey);
@@ -603,19 +800,13 @@ export class SportsDataService {
         return ok(cached.value);
       }
 
-      const payload = await this.requestV2<{ search?: SportsApiV2EventSearch[] }>({
-        path: `/search/event/${toApiPathSegment(normalizedQuery)}`,
+      const payload = await this.requestV2<SportsApiV2EventSearchPayload>({
+        path: `/search/event/${toApiPathSegment(eventSearchQuery)}`,
       });
-      const results = (payload.search ?? [])
-        .map((result) => ({
-          eventId: firstNonEmpty(result.idEvent) ?? '',
-          eventName: firstNonEmpty(result.strEvent) ?? '',
-          sportName: firstNonEmpty(result.strSport),
-          leagueName: firstNonEmpty(result.strLeague),
-          dateEvent: firstNonEmpty(result.dateEvent),
-          imageUrl: firstNonEmpty(result.strThumb),
-        }))
-        .filter((result) => result.eventId.length > 0 && result.eventName.length > 0);
+      let results = this.mapSportsSearchResults(extractEventSearchRows(payload));
+      if (results.length === 0) {
+        results = await this.searchHeadToHeadEvents(normalizedQuery);
+      }
 
       this.searchCache.set(cacheKey, {
         expiresAt: Date.now() + SEARCH_CACHE_TTL_MS,

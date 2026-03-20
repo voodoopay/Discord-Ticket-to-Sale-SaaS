@@ -256,4 +256,142 @@ describe('pickBestSportsSearchResult', () => {
       ],
     });
   });
+
+  it('maps direct event search results when the API returns numeric event IDs', async () => {
+    process.env.SPORTS_API_KEY = 'premium-key';
+    process.env.SPORTS_API_BASE_URL = 'https://example.com/api/v2/json';
+    process.env.SPORTS_API_V1_BASE_URL = 'https://example.com/api/v1/json';
+    resetEnvForTests();
+
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      createJsonResponse({
+        search: [
+          {
+            idEvent: 511661,
+            strEvent: 'Dundee FC vs Rangers',
+            strLeague: 'Scottish Premier League',
+            dateEvent: '2016-08-13',
+            strThumb: null,
+            strSport: 'Soccer',
+          },
+        ],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new SportsDataService();
+    const result = await service.searchEvents('rangers');
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) {
+      throw result.error;
+    }
+
+    expect(result.value).toEqual([
+      {
+        eventId: '511661',
+        eventName: 'Dundee FC vs Rangers',
+        sportName: 'Soccer',
+        leagueName: 'Scottish Premier League',
+        dateEvent: '2016-08-13',
+        imageUrl: null,
+      },
+    ]);
+  });
+
+  it('falls back to team schedules for head-to-head search queries', async () => {
+    process.env.SPORTS_API_KEY = 'premium-key';
+    process.env.SPORTS_API_BASE_URL = 'https://example.com/api/v2/json';
+    process.env.SPORTS_API_V1_BASE_URL = 'https://example.com/api/v1/json';
+    resetEnvForTests();
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          Message: 'No data found',
+        }),
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          search: [
+            {
+              idTeam: 133642,
+              strTeam: 'Rangers',
+              strSport: 'Soccer',
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          search: [
+            {
+              idTeam: 133647,
+              strTeam: 'Celtic',
+              strSport: 'Soccer',
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          schedule: [
+            {
+              idEvent: 2270800,
+              strEvent: 'Rangers vs Celtic',
+              idHomeTeam: 133642,
+              idAwayTeam: 133647,
+              strLeague: 'Scottish Premier League',
+              strSport: 'Soccer',
+              dateEvent: '2026-04-12',
+              strThumb: 'https://img.test/rangers-celtic.jpg',
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          schedule: [
+            {
+              idEvent: 2270700,
+              strEvent: 'St Mirren vs Rangers',
+              idHomeTeam: 133649,
+              idAwayTeam: 133642,
+              strLeague: 'Scottish Premier League',
+              strSport: 'Soccer',
+              dateEvent: '2026-03-15',
+              strThumb: 'https://img.test/stmirren-rangers.jpg',
+            },
+          ],
+        }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new SportsDataService();
+    const result = await service.searchEvents('Rangers v Celtic');
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) {
+      throw result.error;
+    }
+
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://example.com/api/v2/json/search/event/rangers_vs_celtic');
+    expect(fetchMock.mock.calls[1]?.[0]).toBe('https://example.com/api/v2/json/search/team/rangers');
+    expect(fetchMock.mock.calls[2]?.[0]).toBe('https://example.com/api/v2/json/search/team/celtic');
+    expect(fetchMock.mock.calls[3]?.[0]).toBe('https://example.com/api/v2/json/schedule/next/team/133642');
+    expect(fetchMock.mock.calls[4]?.[0]).toBe('https://example.com/api/v2/json/schedule/previous/team/133642');
+
+    expect(result.value).toEqual([
+      {
+        eventId: '2270800',
+        eventName: 'Rangers vs Celtic',
+        sportName: 'Soccer',
+        leagueName: 'Scottish Premier League',
+        dateEvent: '2026-04-12',
+        imageUrl: 'https://img.test/rangers-celtic.jpg',
+      },
+    ]);
+  });
 });
