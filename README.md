@@ -105,7 +105,7 @@ Copy `.env.example` to `.env` and fill values.
 - `/sports sync` creates missing sport channels and refreshes the saved channel bindings without republishing.
 - `/sports refresh` clears the managed sport channels and republishes today’s listings on demand.
 - `/sports status` shows activation state, managed category, channel count, and the next scheduled run.
-- `/search query:"Rangers v Celtic"` finds the best matching event and returns the UK kickoff time, channels, and artwork.
+- `/search query:"Rangers v Celtic"` returns upcoming televised matches from today through the next 7 days, including UK kickoff time, channels, and artwork.
 - `/activation grant guild_id:<server-id> user_id:<user-id>` activates the sports worker for another server without needing to run the command inside that server. Only `SUPER_ADMIN_DISCORD_IDS` can use it.
 - `/activation revoke guild_id:<server-id> user_id:<user-id>` remotely removes a sports worker activation entry. Only `SUPER_ADMIN_DISCORD_IDS` can use it.
 - `/activation list guild_id:<server-id>` lists the current sports worker activation entries for a server. Only `SUPER_ADMIN_DISCORD_IDS` can use it.
@@ -176,7 +176,7 @@ Copy `.env.example` to `.env` and fill values.
 - Telegram DM sale drafts now stay active for 6 hours and refresh their expiry as the customer moves through the private flow.
 - Telegram `/points` now hands off from the linked group into a private DM before collecting the customer email or showing the balance.
 - Telegram `/refer` now hands off from the linked group into a private DM before collecting either email address.
-- Telegram paid confirmations are sent to the customer in DM, while Telegram-origin paid logs and payment-received status updates are also posted back into the linked Telegram group even when a Discord paid-log channel is configured.
+- Telegram paid confirmations are sent only to the customer in DM, and Telegram-origin paid logs stay in the configured Discord paid-log channel instead of being echoed into the linked Telegram group.
 - Telegram orders now ignore internal placeholder checkout emails for points/referral tracking, so paid logs and payment-received messages still deliver even when no real customer email was captured.
 - Dashboard Voodoo integration now supports Hosted Multi-Coin mode with enable/disable toggle and wallet inputs.
 - Hosted Multi-Coin wallet mapping:
@@ -234,7 +234,7 @@ Copy `.env.example` to `.env` and fill values.
 - Super admins listed in `SUPER_ADMIN_DISCORD_IDS` can always run `/nuke authorized`, `/nuke grant`, and `/nuke revoke` to activate or manage a server.
 - Once a server has granted `/nuke` users, only those granted users plus the configured `SUPER_ADMIN_DISCORD_IDS` can use `/nuke`.
 - Manual `/nuke now` posts the final result into the replacement channel after a successful delete so the command does not fail when the original channel no longer exists.
-- Manual `/nuke delete` DMs the final result to the caller because the channel is gone, and it disables any saved daily nuke schedule for that deleted channel.
+- Manual `/nuke delete` no longer DMs the final result to the caller, and it still disables any saved daily nuke schedule for that deleted channel.
 - The nuke worker now polls due schedules immediately on startup and retries channel creation without an explicit `position` if Discord rejects the first clone request.
 - Nuke lock renewal now tolerates MySQL second-level timestamp precision so scheduled and manual nukes do not fail with `Nuke lock could not be renewed.` on otherwise healthy setups.
 - Runtime permission checks require user `Manage Channels` or `Administrator`.

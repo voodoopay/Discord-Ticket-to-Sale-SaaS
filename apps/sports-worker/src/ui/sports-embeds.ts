@@ -1,5 +1,5 @@
 import { EmbedBuilder } from 'discord.js';
-import type { SportsEventDetails, SportsListing } from '@voodoo/core';
+import type { SportsEventDetails, SportsListing, SportsSearchResult } from '@voodoo/core';
 
 const SPORTS_COLOR = 0x0f766e;
 
@@ -92,4 +92,21 @@ export function buildSearchResultEmbed(details: SportsEventDetails): EmbedBuilde
   }
 
   return embed;
+}
+
+export function buildSearchFallbackEmbed(result: SportsSearchResult): EmbedBuilder {
+  return new EmbedBuilder()
+    .setColor(SPORTS_COLOR)
+    .setTitle(result.eventName)
+    .setDescription(
+      [
+        result.leagueName ? `League: **${result.leagueName}**` : null,
+        result.sportName ? `Sport: **${result.sportName}**` : null,
+        result.dateEvent ? `Date: **${result.dateEvent}**` : null,
+        'Detailed channel and start-time data is not available right now.',
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    )
+    .setFooter({ text: 'Search is limited to today through the next 7 days.' });
 }

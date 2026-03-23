@@ -9,15 +9,15 @@ import {
   SportsDataService,
   SportsService,
   getEnv,
-  pickBestSportsSearchResult,
 } from '@voodoo/core';
 
-import { buildSearchResultEmbed } from '../ui/sports-embeds.js';
+import { buildSearchFallbackEmbed, buildSearchResultEmbed } from '../ui/sports-embeds.js';
 import { mapSportsError } from '../sports-runtime.js';
 
 const sportsAccessService = new SportsAccessService();
 const sportsDataService = new SportsDataService();
 const sportsService = new SportsService();
+const MAX_SEARCH_RESULT_EMBEDS = 10;
 
 function isSuperAdminUser(discordUserId: string): boolean {
   return getEnv().superAdminDiscordIds.includes(discordUserId);
@@ -119,11 +119,10 @@ export const searchCommand = {
         return;
       }
 
-      const bestMatch = pickBestSportsSearchResult(query, searchResult.value);
-      if (!bestMatch) {
+      if (searchResult.value.length === 0) {
         await sendEphemeralReply(
           interaction,
-          `No televised sports event match was found for \`${query}\`.`,
+          `No televised sports event match was found for \`${query}\` from today through the next 7 days.`,
         );
         return;
       }
@@ -138,31 +137,32 @@ export const searchCommand = {
       const timezone = guildConfigResult.value?.timezone ?? env.SPORTS_DEFAULT_TIMEZONE;
       const broadcastCountry =
         guildConfigResult.value?.broadcastCountry ?? env.SPORTS_BROADCAST_COUNTRY;
-      const detailsResult = await sportsDataService.getEventDetails({
-        eventId: bestMatch.eventId,
-        timezone,
-        broadcastCountry,
-      });
+      const visibleResults = searchResult.value.slice(0, MAX_SEARCH_RESULT_EMBEDS);
+      const embeds = await Promise.all(
+        visibleResults.map(async (result) => {
+          const detailsResult = await sportsDataService.getEventDetails({
+            eventId: result.eventId,
+            timezone,
+            broadcastCountry,
+          });
 
-      if (detailsResult.isErr()) {
-        await sendEphemeralReply(interaction, mapSportsError(detailsResult.error));
-        return;
-      }
+          if (detailsResult.isErr() || !detailsResult.value) {
+            return buildSearchFallbackEmbed(result);
+          }
 
-      if (!detailsResult.value) {
-        await sendEphemeralReply(
-          interaction,
-          `A match for \`${query}\` was found, but detailed schedule data is not available right now.`,
-        );
-        return;
-      }
+          return buildSearchResultEmbed(detailsResult.value);
+        }),
+      );
+
+      const hiddenCount = searchResult.value.length - visibleResults.length;
+      const summaryParts = [
+        `Found ${searchResult.value.length} upcoming televised event${searchResult.value.length === 1 ? '' : 's'} for \`${query}\` from today through the next 7 days.`,
+        hiddenCount > 0 ? `Showing the first ${visibleResults.length}.` : null,
+      ].filter((value): value is string => value !== null);
 
       await interaction.editReply({
-        content:
-          bestMatch.eventName.toLowerCase() === query.toLowerCase()
-            ? undefined
-            : `Best match: **${bestMatch.eventName}**`,
-        embeds: [buildSearchResultEmbed(detailsResult.value)],
+        content: summaryParts.join(' '),
+        embeds,
       });
     } catch (error) {
       await sendEphemeralReply(interaction, mapSportsError(error));

@@ -25,6 +25,7 @@ describe('pickBestSportsSearchResult', () => {
     resetEnvForTests();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    vi.useRealTimers();
 
     if (ORIGINAL_SPORTS_API_KEY == null) {
       delete process.env.SPORTS_API_KEY;
@@ -257,11 +258,13 @@ describe('pickBestSportsSearchResult', () => {
     });
   });
 
-  it('maps direct event search results when the API returns numeric event IDs', async () => {
+  it('filters direct event search results to today through the next 7 days', async () => {
     process.env.SPORTS_API_KEY = 'premium-key';
     process.env.SPORTS_API_BASE_URL = 'https://example.com/api/v2/json';
     process.env.SPORTS_API_V1_BASE_URL = 'https://example.com/api/v1/json';
     resetEnvForTests();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-23T10:00:00Z'));
 
     const fetchMock = vi.fn().mockResolvedValueOnce(
       createJsonResponse({
@@ -270,7 +273,31 @@ describe('pickBestSportsSearchResult', () => {
             idEvent: 511661,
             strEvent: 'Dundee FC vs Rangers',
             strLeague: 'Scottish Premier League',
+            dateEvent: '2026-03-24',
+            strThumb: null,
+            strSport: 'Soccer',
+          },
+          {
+            idEvent: 511662,
+            strEvent: 'Rangers vs Hearts',
+            strLeague: 'Scottish Premier League',
+            dateEvent: '2026-03-30',
+            strThumb: 'https://img.test/rangers-hearts.jpg',
+            strSport: 'Soccer',
+          },
+          {
+            idEvent: 511663,
+            strEvent: 'Rangers Legends',
+            strLeague: 'Legends League',
             dateEvent: '2016-08-13',
+            strThumb: null,
+            strSport: 'Soccer',
+          },
+          {
+            idEvent: 511664,
+            strEvent: 'Rangers vs Aberdeen',
+            strLeague: 'Scottish Premier League',
+            dateEvent: '2026-03-31',
             strThumb: null,
             strSport: 'Soccer',
           },
@@ -293,8 +320,16 @@ describe('pickBestSportsSearchResult', () => {
         eventName: 'Dundee FC vs Rangers',
         sportName: 'Soccer',
         leagueName: 'Scottish Premier League',
-        dateEvent: '2016-08-13',
+        dateEvent: '2026-03-24',
         imageUrl: null,
+      },
+      {
+        eventId: '511662',
+        eventName: 'Rangers vs Hearts',
+        sportName: 'Soccer',
+        leagueName: 'Scottish Premier League',
+        dateEvent: '2026-03-30',
+        imageUrl: 'https://img.test/rangers-hearts.jpg',
       },
     ]);
   });
@@ -304,6 +339,8 @@ describe('pickBestSportsSearchResult', () => {
     process.env.SPORTS_API_BASE_URL = 'https://example.com/api/v2/json';
     process.env.SPORTS_API_V1_BASE_URL = 'https://example.com/api/v1/json';
     resetEnvForTests();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-20T10:00:00Z'));
 
     const fetchMock = vi
       .fn()
@@ -344,7 +381,7 @@ describe('pickBestSportsSearchResult', () => {
               idAwayTeam: 133647,
               strLeague: 'Scottish Premier League',
               strSport: 'Soccer',
-              dateEvent: '2026-04-12',
+              dateEvent: '2026-03-24',
               strThumb: 'https://img.test/rangers-celtic.jpg',
             },
           ],
@@ -360,7 +397,7 @@ describe('pickBestSportsSearchResult', () => {
               idAwayTeam: 133642,
               strLeague: 'Scottish Premier League',
               strSport: 'Soccer',
-              dateEvent: '2026-03-15',
+              dateEvent: '2026-03-19',
               strThumb: 'https://img.test/stmirren-rangers.jpg',
             },
           ],
@@ -389,7 +426,7 @@ describe('pickBestSportsSearchResult', () => {
         eventName: 'Rangers vs Celtic',
         sportName: 'Soccer',
         leagueName: 'Scottish Premier League',
-        dateEvent: '2026-04-12',
+        dateEvent: '2026-03-24',
         imageUrl: 'https://img.test/rangers-celtic.jpg',
       },
     ]);

@@ -268,6 +268,21 @@ function formatUkDateLong(date: Date, timezone: string): string {
   }).format(date);
 }
 
+function formatLocalDateKey(date: Date, timezone: string): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+function addDaysToDateKey(dateKey: string, days: number): string {
+  const date = new Date(`${dateKey}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 function normalizeForSearch(value: string): string {
   return normalizeWhitespace(value)
     .toLowerCase()
@@ -429,6 +444,28 @@ export function pickBestSportsSearchResult(
 
   scored.sort((left, right) => right.score - left.score);
   return scored[0]?.result ?? null;
+}
+
+function isWithinSportsSearchWindow(input: {
+  dateEvent: string | null;
+  windowStartDate: string;
+  windowEndDate: string;
+}): boolean {
+  if (!input.dateEvent || !/^\d{4}-\d{2}-\d{2}$/u.test(input.dateEvent)) {
+    return false;
+  }
+
+  return input.dateEvent >= input.windowStartDate && input.dateEvent <= input.windowEndDate;
+}
+
+function sortSportsSearchResults(left: SportsSearchResult, right: SportsSearchResult): number {
+  const leftDate = left.dateEvent ?? '9999-99-99';
+  const rightDate = right.dateEvent ?? '9999-99-99';
+  if (leftDate !== rightDate) {
+    return leftDate.localeCompare(rightDate);
+  }
+
+  return left.eventName.localeCompare(right.eventName, UK_LOCALE);
 }
 
 export class SportsDataService {
@@ -793,7 +830,9 @@ export class SportsDataService {
     }
 
     const eventSearchQuery = normalizeForSearch(query);
-    const cacheKey = normalizedQuery.toLowerCase();
+    const searchWindowStartDate = formatLocalDateKey(new Date(), this.env.SPORTS_DEFAULT_TIMEZONE);
+    const searchWindowEndDate = addDaysToDateKey(searchWindowStartDate, 7);
+    const cacheKey = `${normalizedQuery.toLowerCase()}:${searchWindowStartDate}:${searchWindowEndDate}`;
     try {
       const cached = this.searchCache.get(cacheKey);
       if (cached && cached.expiresAt > Date.now()) {
@@ -803,10 +842,27 @@ export class SportsDataService {
       const payload = await this.requestV2<SportsApiV2EventSearchPayload>({
         path: `/search/event/${toApiPathSegment(eventSearchQuery)}`,
       });
-      let results = this.mapSportsSearchResults(extractEventSearchRows(payload));
-      if (results.length === 0) {
-        results = await this.searchHeadToHeadEvents(normalizedQuery);
+      const combinedResults = new Map<string, SportsSearchResult>();
+      for (const result of this.mapSportsSearchResults(extractEventSearchRows(payload))) {
+        combinedResults.set(result.eventId, result);
       }
+
+      const headToHeadResults = await this.searchHeadToHeadEvents(normalizedQuery);
+      for (const result of headToHeadResults) {
+        if (!combinedResults.has(result.eventId)) {
+          combinedResults.set(result.eventId, result);
+        }
+      }
+
+      const results = [...combinedResults.values()]
+        .filter((result) =>
+          isWithinSportsSearchWindow({
+            dateEvent: result.dateEvent,
+            windowStartDate: searchWindowStartDate,
+            windowEndDate: searchWindowEndDate,
+          }),
+        )
+        .sort(sortSportsSearchResults);
 
       this.searchCache.set(cacheKey, {
         expiresAt: Date.now() + SEARCH_CACHE_TTL_MS,

@@ -153,6 +153,10 @@ async function sendManualNukeCompletionNotice(
   interaction: ChatInputCommandInteraction,
   result: NukeExecutionResult,
 ): Promise<void> {
+  if (!result.newChannelId) {
+    return;
+  }
+
   const content = [
     `<@${interaction.user.id}> ${result.message}`,
     `Old Channel: \`${result.oldChannelId}\``,
@@ -177,20 +181,6 @@ async function sendManualNukeCompletionNotice(
         'failed to post nuke completion notice in replacement channel',
       );
     }
-  }
-
-  try {
-    await interaction.user.send(content);
-  } catch (error) {
-    logger.warn(
-      {
-        err: error,
-        userId: interaction.user.id,
-        guildId: interaction.guildId,
-        newChannelId: result.newChannelId,
-      },
-      'failed to DM manual nuke completion notice',
-    );
   }
 }
 
@@ -498,7 +488,7 @@ export const nukeCommand = {
 
         await sendEphemeralReply(
           interaction,
-          'Deleting this channel now without creating a replacement. If it succeeds, I will DM you the result because this channel will be gone.',
+          'Deleting this channel now without creating a replacement.',
         );
 
         const result = await nukeService.runDeleteNow({
@@ -515,7 +505,7 @@ export const nukeCommand = {
           return;
         }
 
-        if (result.value.oldChannelDeleted) {
+        if (result.value.oldChannelDeleted && result.value.newChannelId) {
           await sendManualNukeCompletionNotice(interaction, result.value);
           return;
         }

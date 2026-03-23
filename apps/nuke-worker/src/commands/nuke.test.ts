@@ -425,12 +425,9 @@ describe('nuke command helpers', () => {
 
     expect(editReply).toHaveBeenCalledWith(
       expect.objectContaining({
-        content:
-          'Deleting this channel now without creating a replacement. If it succeeds, I will DM you the result because this channel will be gone.',
+        content: 'Deleting this channel now without creating a replacement.',
       }),
     );
-    expect(userSend).toHaveBeenCalledWith(
-      expect.stringContaining('New Channel: (none)'),
-    );
+    expect(userSend).not.toHaveBeenCalled();
   });
 });

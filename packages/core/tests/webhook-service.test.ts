@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ok } from 'neverthrow';
 
-import * as discordRest from '../src/integrations/discord-rest.js';
 import * as telegramRest from '../src/integrations/telegram-rest.js';
 import type { OrderSessionRecord } from '../src/repositories/order-repository.js';
 import type { ReferralRewardResult } from '../src/services/referral-service.js';
@@ -143,41 +142,80 @@ describe('webhook service', () => {
     expect(markWebhookDuplicate).not.toHaveBeenCalled();
   });
 
-  it('mirrors paid logs to the Telegram fallback channel when a Discord paid-log channel is configured', async () => {
+  it('keeps Telegram paid logs out of the linked Telegram group when a Discord paid-log channel is configured', async () => {
     const service = new WebhookService();
+    const orderSession = makeOrderSession({
+      ticketChannelId: 'tg:-1003889522765',
+      customerDiscordId: 'tg:99887766',
+    });
+    const referralResult: ReferralRewardResult = {
+      status: 'not_applicable',
+      reason: 'no_claim',
+      referredEmailNormalized: orderSession.customerEmailNormalized,
+      claim: null,
+      rewardMinor: 0,
+      pointValueMinor: 100,
+      rewardPoints: 0,
+    };
 
-    const postMessageToDiscordChannel = vi
-      .spyOn(discordRest, 'postMessageToDiscordChannel')
-      .mockResolvedValue(undefined);
-    const postMessageToTelegramChat = vi
-      .spyOn(telegramRest, 'postMessageToTelegramChat')
-      .mockResolvedValue({ messageId: 123 });
-    vi.spyOn(service as any, 'getTelegramBotToken').mockReturnValue('telegram-token');
+    vi.spyOn((service as any).orderRepository, 'getOrderSession').mockResolvedValue(orderSession);
+    vi.spyOn((service as any).productRepository, 'getById').mockResolvedValue({
+      id: orderSession.productId,
+      category: 'Football',
+      name: 'Match Package',
+      variants: [
+        {
+          id: orderSession.variantId,
+          label: 'Standard',
+          priceMinor: 1000,
+          currency: 'GBP',
+        },
+      ],
+    });
+    vi.spyOn((service as any).orderRepository, 'createPaidOrder').mockResolvedValue({
+      paidOrderId: 'paid-order-1',
+      created: false,
+    });
+    vi.spyOn((service as any).orderRepository, 'markOrderSessionPaid').mockResolvedValue(undefined);
+    vi.spyOn((service as any).tenantRepository, 'getGuildConfig').mockResolvedValue({
+      paidLogChannelId: '1472676447603654869',
+      referralLogChannelId: null,
+      referralThankYouTemplate: null,
+    });
+    vi.spyOn(service as any, 'finalizePointsForPaidOrder').mockResolvedValue({
+      updatedPointsBalance: 42,
+      referralResult,
+    });
+    vi.spyOn((service as any).productRepository, 'getSensitiveFieldKeys').mockResolvedValue(new Set<string>());
+    vi.spyOn(service as any, 'getBotTokenCandidates').mockResolvedValue(ok(['bot-token']));
+    const postPaidLogMessage = vi.spyOn(service as any, 'postPaidLogMessage').mockResolvedValue(undefined);
+    vi.spyOn(service as any, 'postTicketPaidConfirmation').mockResolvedValue(undefined);
+    vi.spyOn(service as any, 'postReferralOutcome').mockResolvedValue(undefined);
+    vi.spyOn((service as any).orderRepository, 'markWebhookProcessed').mockResolvedValue(undefined);
 
-    await (service as any).postPaidLogMessage({
-      botTokens: ['bot-token'],
-      preferredChannelId: '1472676447603654869',
-      fallbackChannelId: 'tg:-1003889522765',
-      content: 'Order paid',
-      mirrorTelegramFallback: true,
-      telegramReplyMarkup: { inline_keyboard: [] },
+    await (service as any).processVoodooPayPaidEvent({
+      tenantId: orderSession.tenantId,
+      guildId: orderSession.guildId,
+      orderSessionId: orderSession.id,
+      query: {
+        order_session_id: orderSession.id,
+        status: 'paid',
+        coin: 'polygon_pol',
+        value_forwarded_coin: '15.00',
+        txid_in: 'txid-hash-1',
+      },
+      webhookEventId: 'webhook-telegram-1',
     });
 
-    expect(postMessageToDiscordChannel).toHaveBeenCalledWith({
-      botToken: 'bot-token',
-      channelId: '1472676447603654869',
-      content: 'Order paid',
-      components: undefined,
-    });
-    expect(postMessageToTelegramChat).toHaveBeenCalledWith({
-      botToken: 'telegram-token',
-      chatId: '-1003889522765',
-      content: 'Order paid',
-      replyMarkup: { inline_keyboard: [] },
-    });
+    expect(postPaidLogMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        preferredChannelId: '1472676447603654869',
+        fallbackChannelId: '1472676447603654869',
+      }),
+    );
   });
 
-  it('posts Telegram payment confirmations in the linked group and DMs the Telegram customer', async () => {
+  it('DMs Telegram payment confirmations to the customer without posting in the linked group', async () => {
     const service = new WebhookService();
 
     vi.spyOn(service as any, 'getTelegramBotToken').mockReturnValue('telegram-token');
@@ -200,18 +238,7 @@ describe('webhook service', () => {
       updatedPointsBalance: 12,
     });
 
-    expect(postMessageToTelegramChat).toHaveBeenCalledWith({
-      botToken: 'telegram-token',
-      chatId: '-1003889522765',
-      content: [
-        'Payment received.',
-        'Order Session: order-session-1',
-        'Product: Renew Subscription',
-        'Variant: 1 Month',
-        'Amount: 15.00 GBP',
-        'Updated Points Balance: 12 point(s)',
-      ].join('\n'),
-    });
+    expect(postMessageToTelegramChat).not.toHaveBeenCalled();
     expect(sendDirectMessageToTelegramUser).toHaveBeenCalledWith({
       botToken: 'telegram-token',
       userId: '99887766',

@@ -878,21 +878,50 @@ export class WebhookService {
       this.describeReferralOutcome(finalized.referralResult),
     ].join('\n');
 
-    await this.postPaidLogMessage({
-      botTokens: botTokensResult.value,
-      preferredChannelId: config?.paidLogChannelId ?? null,
-      fallbackChannelId: orderSession.ticketChannelId,
-      content: message,
-      mirrorTelegramFallback: parsePlatformScopedId(orderSession.ticketChannelId).platform === 'telegram',
-      components: buildPaidOrderFulfillmentComponents({
-        paidOrderId: paidOrder.paidOrderId,
-        fulfillmentStatus: 'needs_action',
-      }),
-      telegramReplyMarkup: buildPaidOrderFulfillmentTelegramReplyMarkup({
-        paidOrderId: paidOrder.paidOrderId,
-        fulfillmentStatus: 'needs_action',
-      }),
-    });
+    if (parsePlatformScopedId(orderSession.ticketChannelId).platform === 'telegram') {
+      if (config?.paidLogChannelId) {
+        await this.postPaidLogMessage({
+          botTokens: botTokensResult.value,
+          preferredChannelId: config.paidLogChannelId,
+          fallbackChannelId: config.paidLogChannelId,
+          content: message,
+          components: buildPaidOrderFulfillmentComponents({
+            paidOrderId: paidOrder.paidOrderId,
+            fulfillmentStatus: 'needs_action',
+          }),
+          telegramReplyMarkup: buildPaidOrderFulfillmentTelegramReplyMarkup({
+            paidOrderId: paidOrder.paidOrderId,
+            fulfillmentStatus: 'needs_action',
+          }),
+        });
+      } else {
+        logger.warn(
+          {
+            provider: 'woocommerce',
+            tenantId: orderSession.tenantId,
+            guildId: orderSession.guildId,
+            orderSessionId: orderSession.id,
+            webhookEventId: input.webhookEventId,
+          },
+          'skipping Telegram paid log because no Discord paid-log channel is configured',
+        );
+      }
+    } else {
+      await this.postPaidLogMessage({
+        botTokens: botTokensResult.value,
+        preferredChannelId: config?.paidLogChannelId ?? null,
+        fallbackChannelId: orderSession.ticketChannelId,
+        content: message,
+        components: buildPaidOrderFulfillmentComponents({
+          paidOrderId: paidOrder.paidOrderId,
+          fulfillmentStatus: 'needs_action',
+        }),
+        telegramReplyMarkup: buildPaidOrderFulfillmentTelegramReplyMarkup({
+          paidOrderId: paidOrder.paidOrderId,
+          fulfillmentStatus: 'needs_action',
+        }),
+      });
+    }
     await this.postTicketPaidConfirmation({
       botTokens: botTokensResult.value,
       ticketChannelId: orderSession.ticketChannelId,
@@ -1106,21 +1135,50 @@ export class WebhookService {
       this.describeReferralOutcome(finalized.referralResult),
     ].join('\n');
 
-    await this.postPaidLogMessage({
-      botTokens: botTokensResult.value,
-      preferredChannelId: config?.paidLogChannelId ?? null,
-      fallbackChannelId: orderSession.ticketChannelId,
-      content: message,
-      mirrorTelegramFallback: parsePlatformScopedId(orderSession.ticketChannelId).platform === 'telegram',
-      components: buildPaidOrderFulfillmentComponents({
-        paidOrderId: paidOrder.paidOrderId,
-        fulfillmentStatus: 'needs_action',
-      }),
-      telegramReplyMarkup: buildPaidOrderFulfillmentTelegramReplyMarkup({
-        paidOrderId: paidOrder.paidOrderId,
-        fulfillmentStatus: 'needs_action',
-      }),
-    });
+    if (parsePlatformScopedId(orderSession.ticketChannelId).platform === 'telegram') {
+      if (config?.paidLogChannelId) {
+        await this.postPaidLogMessage({
+          botTokens: botTokensResult.value,
+          preferredChannelId: config.paidLogChannelId,
+          fallbackChannelId: config.paidLogChannelId,
+          content: message,
+          components: buildPaidOrderFulfillmentComponents({
+            paidOrderId: paidOrder.paidOrderId,
+            fulfillmentStatus: 'needs_action',
+          }),
+          telegramReplyMarkup: buildPaidOrderFulfillmentTelegramReplyMarkup({
+            paidOrderId: paidOrder.paidOrderId,
+            fulfillmentStatus: 'needs_action',
+          }),
+        });
+      } else {
+        logger.warn(
+          {
+            provider: 'voodoopay',
+            tenantId: orderSession.tenantId,
+            guildId: orderSession.guildId,
+            orderSessionId: orderSession.id,
+            webhookEventId: input.webhookEventId,
+          },
+          'skipping Telegram paid log because no Discord paid-log channel is configured',
+        );
+      }
+    } else {
+      await this.postPaidLogMessage({
+        botTokens: botTokensResult.value,
+        preferredChannelId: config?.paidLogChannelId ?? null,
+        fallbackChannelId: orderSession.ticketChannelId,
+        content: message,
+        components: buildPaidOrderFulfillmentComponents({
+          paidOrderId: paidOrder.paidOrderId,
+          fulfillmentStatus: 'needs_action',
+        }),
+        telegramReplyMarkup: buildPaidOrderFulfillmentTelegramReplyMarkup({
+          paidOrderId: paidOrder.paidOrderId,
+          fulfillmentStatus: 'needs_action',
+        }),
+      });
+    }
     await this.postTicketPaidConfirmation({
       botTokens: botTokensResult.value,
       ticketChannelId: orderSession.ticketChannelId,
@@ -1424,7 +1482,6 @@ export class WebhookService {
     preferredChannelId: string | null;
     fallbackChannelId: string;
     content: string;
-    mirrorTelegramFallback?: boolean;
     components?: Array<Record<string, unknown>>;
     telegramReplyMarkup?: Record<string, unknown>;
   }): Promise<void> {
@@ -1513,35 +1570,6 @@ export class WebhookService {
       throw new AbortError('Failed to post paid-order log message');
     }
 
-    const fallbackScopedChannelId = parsePlatformScopedId(input.fallbackChannelId);
-    const shouldMirrorTelegramFallback =
-      input.mirrorTelegramFallback === true &&
-      fallbackScopedChannelId.platform === 'telegram' &&
-      !deliveredChannels.has(input.fallbackChannelId);
-
-    if (shouldMirrorTelegramFallback) {
-      try {
-        await this.postPaidLogToSingleChannel({
-          channelId: input.fallbackChannelId,
-          botTokens: uniqueTokens,
-          telegramBotToken,
-          content: input.content,
-          components: input.components,
-          telegramReplyMarkup: input.telegramReplyMarkup,
-        });
-      } catch (error) {
-        logger.warn(
-          {
-            provider: 'webhook-paid-log',
-            channelId: fallbackScopedChannelId.rawId,
-            platform: fallbackScopedChannelId.platform,
-            unauthorized: false,
-            errorMessage: error instanceof Error ? error.message : 'unknown',
-          },
-          'failed to mirror paid log to Telegram fallback channel',
-        );
-      }
-    }
   }
 
   private async postPaidLogToSingleChannel(input: {
@@ -1631,34 +1659,6 @@ export class WebhookService {
           'skipping Telegram paid confirmation DM because no Telegram bot token is available',
         );
         return;
-      }
-
-      const groupMessage = [
-        'Payment received.',
-        `Order Session: ${input.orderSessionId}`,
-        `Product: ${input.productName}`,
-        `Variant: ${input.variantLabel}`,
-        `Amount: ${(input.priceMinor / 100).toFixed(2)} ${input.currency}`,
-        input.updatedPointsBalance === null
-          ? 'Updated Points Balance: unavailable'
-          : `Updated Points Balance: ${input.updatedPointsBalance} point(s)`,
-      ].join('\n');
-
-      try {
-        await postMessageToTelegramChat({
-          botToken: telegramBotToken,
-          chatId: scopedChannelId.rawId,
-          content: groupMessage,
-        });
-      } catch (error) {
-        logger.warn(
-          {
-            err: error,
-            ticketChannelId: input.ticketChannelId,
-            customerDiscordId: input.customerDiscordId,
-          },
-          'failed to post Telegram paid confirmation to linked group',
-        );
       }
 
       const scopedCustomerId = parsePlatformScopedId(input.customerDiscordId);

@@ -36,9 +36,6 @@ vi.mock('@voodoo/core', () => {
       SPORTS_DEFAULT_TIMEZONE: 'Europe/London',
       SPORTS_BROADCAST_COUNTRY: 'United Kingdom',
     }),
-    pickBestSportsSearchResult: vi.fn((query: string, results: Array<{ eventId: string }>) =>
-      results.find(Boolean) ?? null,
-    ),
     resetEnvForTests: () => undefined,
   };
 });
@@ -49,6 +46,7 @@ vi.mock('../sports-runtime.js', () => ({
 
 vi.mock('../ui/sports-embeds.js', () => ({
   buildSearchResultEmbed: vi.fn((details: unknown) => ({ details })),
+  buildSearchFallbackEmbed: vi.fn((result: unknown) => ({ result })),
 }));
 
 import {
@@ -147,7 +145,7 @@ describe('search command', () => {
     });
   });
 
-  it('returns the best matching sports event details', async () => {
+  it('returns all upcoming sports event details found in the next 7 days', async () => {
     process.env.SUPER_ADMIN_DISCORD_IDS = 'owner-1';
     resetEnvForTests();
 
@@ -167,27 +165,53 @@ describe('search command', () => {
           dateEvent: '2026-03-21',
           imageUrl: null,
         },
+        {
+          eventId: 'event-2',
+          eventName: 'Rangers vs Hearts',
+          sportName: 'Soccer',
+          leagueName: 'Scottish Premiership',
+          dateEvent: '2026-03-24',
+          imageUrl: null,
+        },
       ]) as Awaited<ReturnType<SportsDataService['searchEvents']>>,
     );
     vi.spyOn(SportsService.prototype, 'getGuildConfig').mockResolvedValue(
       createOkResult(null) as Awaited<ReturnType<SportsService['getGuildConfig']>>,
     );
-    vi.spyOn(SportsDataService.prototype, 'getEventDetails').mockResolvedValue(
-      createOkResult({
-        eventId: 'event-1',
-        eventName: 'Rangers vs Celtic',
-        sportName: 'Soccer',
-        leagueName: 'Scottish Premiership',
-        venueName: 'Ibrox',
-        country: 'United Kingdom',
-        city: 'Glasgow',
-        dateUkLabel: 'Saturday, 21 March 2026',
-        startTimeUkLabel: '12:30',
-        imageUrl: null,
-        description: null,
-        broadcasters: [],
-      }) as Awaited<ReturnType<SportsDataService['getEventDetails']>>,
-    );
+    const getEventDetails = vi
+      .spyOn(SportsDataService.prototype, 'getEventDetails')
+      .mockResolvedValueOnce(
+        createOkResult({
+          eventId: 'event-1',
+          eventName: 'Rangers vs Celtic',
+          sportName: 'Soccer',
+          leagueName: 'Scottish Premiership',
+          venueName: 'Ibrox',
+          country: 'United Kingdom',
+          city: 'Glasgow',
+          dateUkLabel: 'Saturday, 21 March 2026',
+          startTimeUkLabel: '12:30',
+          imageUrl: null,
+          description: null,
+          broadcasters: [],
+        }) as Awaited<ReturnType<SportsDataService['getEventDetails']>>,
+      )
+      .mockResolvedValueOnce(
+        createOkResult({
+          eventId: 'event-2',
+          eventName: 'Rangers vs Hearts',
+          sportName: 'Soccer',
+          leagueName: 'Scottish Premiership',
+          venueName: 'Ibrox',
+          country: 'United Kingdom',
+          city: 'Glasgow',
+          dateUkLabel: 'Tuesday, 24 March 2026',
+          startTimeUkLabel: '19:45',
+          imageUrl: null,
+          description: null,
+          broadcasters: [],
+        }) as Awaited<ReturnType<SportsDataService['getEventDetails']>>,
+      );
 
     const { interaction, editReply } = createInteractionMock({
       userId: 'user-2',
@@ -196,9 +220,10 @@ describe('search command', () => {
 
     await searchCommand.execute(interaction);
 
+    expect(getEventDetails).toHaveBeenCalledTimes(2);
     expect(editReply).toHaveBeenCalledWith({
-      content: 'Best match: **Rangers vs Celtic**',
-      embeds: [expect.any(Object)],
+      content: 'Found 2 upcoming televised events for `Rangers v Celtic` from today through the next 7 days.',
+      embeds: [expect.any(Object), expect.any(Object)],
     });
   });
 });
