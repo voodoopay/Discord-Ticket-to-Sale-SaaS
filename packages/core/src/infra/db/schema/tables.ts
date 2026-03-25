@@ -266,6 +266,7 @@ export const discountCoupons = mysqlTable(
     code: varchar('code', { length: 40 }).notNull(),
     discountMinor: int('discount_minor').notNull(),
     active: boolean('active').notNull().default(true),
+    allowedCategories: json('allowed_categories').$type<string[]>().notNull().default([]),
     allowedProductIds: json('allowed_product_ids').$type<string[]>().notNull().default([]),
     allowedVariantIds: json('allowed_variant_ids').$type<string[]>().notNull().default([]),
     createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),

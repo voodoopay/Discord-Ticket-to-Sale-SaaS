@@ -12,8 +12,24 @@ import { GuildFeatureService } from './guild-feature-service.js';
 
 const emailSchema = z.string().trim().min(3).max(320).email();
 const manualAdjustSchema = z.object({
-  action: z.enum(['add', 'remove']),
-  points: z.number().int().positive(),
+  action: z.enum(['add', 'remove', 'set', 'clear']),
+  points: z.number().int().nonnegative(),
+}).superRefine((value, context) => {
+  if ((value.action === 'add' || value.action === 'remove') && value.points <= 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['points'],
+      message: 'Add and remove actions require a positive whole number of points.',
+    });
+  }
+
+  if (value.action === 'set' && value.points < 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['points'],
+      message: 'Set balance must be zero or a positive whole number.',
+    });
+  }
 });
 
 export type PointsBalanceView = {
@@ -28,6 +44,21 @@ type NormalizedEmail = {
   emailNormalized: string;
   emailDisplay: string;
 };
+
+function toPointsBalanceView(account: {
+  emailNormalized: string;
+  emailDisplay: string;
+  balancePoints: number;
+  reservedPoints: number;
+}): PointsBalanceView {
+  return {
+    emailNormalized: account.emailNormalized,
+    emailDisplay: account.emailDisplay,
+    balancePoints: account.balancePoints,
+    reservedPoints: account.reservedPoints,
+    availablePoints: Math.max(0, account.balancePoints - account.reservedPoints),
+  };
+}
 
 export class PointsService {
   private readonly pointsRepository = new PointsRepository();
@@ -210,7 +241,7 @@ export class PointsService {
       tenantId: string;
       guildId: string;
       email: string;
-      action: 'add' | 'remove';
+      action: 'add' | 'remove' | 'set' | 'clear';
       points: number;
     },
   ): Promise<Result<PointsBalanceView, AppError>> {
@@ -253,6 +284,13 @@ export class PointsService {
         return err(validationError(parsedAdjust.error.issues));
       }
 
+      const existingAccount = await this.pointsRepository.getAccount({
+        tenantId: input.tenantId,
+        guildId: input.guildId,
+        emailNormalized: normalized.value.emailNormalized,
+      });
+      const currentBalance = existingAccount?.balancePoints ?? 0;
+
       if (parsedAdjust.data.action === 'add') {
         const account = await this.pointsRepository.addPoints({
           tenantId: input.tenantId,
@@ -273,13 +311,117 @@ export class PointsService {
           },
         });
 
-        return ok({
-          emailNormalized: account.emailNormalized,
-          emailDisplay: account.emailDisplay,
-          balancePoints: account.balancePoints,
-          reservedPoints: account.reservedPoints,
-          availablePoints: Math.max(0, account.balancePoints - account.reservedPoints),
+        return ok(toPointsBalanceView(account));
+      }
+
+      if (parsedAdjust.data.action === 'remove') {
+        const removed = await this.pointsRepository.removePointsClampToZero({
+          tenantId: input.tenantId,
+          guildId: input.guildId,
+          emailNormalized: normalized.value.emailNormalized,
+          emailDisplay: normalized.value.emailDisplay,
+          points: parsedAdjust.data.points,
         });
+        await this.pointsRepository.insertLedgerEvent({
+          tenantId: input.tenantId,
+          guildId: input.guildId,
+          emailNormalized: normalized.value.emailNormalized,
+          deltaPoints: -removed.removedPoints,
+          eventType: 'manual_remove',
+          actorUserId: actor.userId,
+          metadata: {
+            source: 'dashboard',
+            requestedPoints: parsedAdjust.data.points,
+            removedPoints: removed.removedPoints,
+          },
+        });
+
+        return ok(toPointsBalanceView(removed.account));
+      }
+
+      if (parsedAdjust.data.action === 'clear') {
+        const removed = await this.pointsRepository.removePointsClampToZero({
+          tenantId: input.tenantId,
+          guildId: input.guildId,
+          emailNormalized: normalized.value.emailNormalized,
+          emailDisplay: normalized.value.emailDisplay,
+          points: currentBalance,
+        });
+
+        await this.pointsRepository.insertLedgerEvent({
+          tenantId: input.tenantId,
+          guildId: input.guildId,
+          emailNormalized: normalized.value.emailNormalized,
+          deltaPoints: -removed.removedPoints,
+          eventType: 'manual_clear',
+          actorUserId: actor.userId,
+          metadata: {
+            source: 'dashboard',
+            previousBalance: currentBalance,
+            removedPoints: removed.removedPoints,
+          },
+        });
+
+        return ok(toPointsBalanceView(removed.account));
+      }
+
+      const targetBalance = parsedAdjust.data.points;
+      if (targetBalance === currentBalance) {
+        const ensuredAccount =
+          existingAccount ??
+          (
+            await this.pointsRepository.removePointsClampToZero({
+              tenantId: input.tenantId,
+              guildId: input.guildId,
+              emailNormalized: normalized.value.emailNormalized,
+              emailDisplay: normalized.value.emailDisplay,
+              points: 0,
+            })
+          ).account;
+
+        await this.pointsRepository.insertLedgerEvent({
+          tenantId: input.tenantId,
+          guildId: input.guildId,
+          emailNormalized: normalized.value.emailNormalized,
+          deltaPoints: 0,
+          eventType: 'manual_set',
+          actorUserId: actor.userId,
+          metadata: {
+            source: 'dashboard',
+            previousBalance: currentBalance,
+            targetBalance,
+            changed: false,
+          },
+        });
+
+        return ok(toPointsBalanceView(ensuredAccount));
+      }
+
+      if (targetBalance > currentBalance) {
+        const delta = targetBalance - currentBalance;
+        const account = await this.pointsRepository.addPoints({
+          tenantId: input.tenantId,
+          guildId: input.guildId,
+          emailNormalized: normalized.value.emailNormalized,
+          emailDisplay: normalized.value.emailDisplay,
+          points: delta,
+        });
+
+        await this.pointsRepository.insertLedgerEvent({
+          tenantId: input.tenantId,
+          guildId: input.guildId,
+          emailNormalized: normalized.value.emailNormalized,
+          deltaPoints: delta,
+          eventType: 'manual_set',
+          actorUserId: actor.userId,
+          metadata: {
+            source: 'dashboard',
+            previousBalance: currentBalance,
+            targetBalance,
+          },
+        });
+
+        return ok(toPointsBalanceView(account));
       }
 
       const removed = await this.pointsRepository.removePointsClampToZero({
@@ -287,29 +429,24 @@ export class PointsService {
         guildId: input.guildId,
         emailNormalized: normalized.value.emailNormalized,
         emailDisplay: normalized.value.emailDisplay,
-        points: parsedAdjust.data.points,
+        points: currentBalance - targetBalance,
       });
       await this.pointsRepository.insertLedgerEvent({
         tenantId: input.tenantId,
         guildId: input.guildId,
         emailNormalized: normalized.value.emailNormalized,
         deltaPoints: -removed.removedPoints,
-        eventType: 'manual_remove',
+        eventType: 'manual_set',
         actorUserId: actor.userId,
         metadata: {
           source: 'dashboard',
-          requestedPoints: parsedAdjust.data.points,
+          previousBalance: currentBalance,
+          targetBalance,
           removedPoints: removed.removedPoints,
         },
       });
 
-      return ok({
-        emailNormalized: removed.account.emailNormalized,
-        emailDisplay: removed.account.emailDisplay,
-        balancePoints: removed.account.balancePoints,
-        reservedPoints: removed.account.reservedPoints,
-        availablePoints: Math.max(0, removed.account.balancePoints - removed.account.reservedPoints),
-      });
+      return ok(toPointsBalanceView(removed.account));
     } catch (error) {
       return err(fromUnknownError(error));
     }

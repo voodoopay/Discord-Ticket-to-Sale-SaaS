@@ -20,7 +20,7 @@ export async function POST(
     const body = await readJson<{
       tenantId: string;
       email: string;
-      action: 'add' | 'remove';
+      action: 'add' | 'remove' | 'set' | 'clear';
       points: number;
     }>(request);
 

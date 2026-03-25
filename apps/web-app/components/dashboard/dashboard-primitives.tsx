@@ -1,7 +1,7 @@
 'use client';
 
 import { Info } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 
 import { cn } from '@/lib/utils';
 
@@ -102,6 +102,99 @@ export function SectionShell({
   );
 }
 
+export type SectionMenuItem<T extends string = string> = {
+  id: T;
+  label: string;
+  description?: string;
+  info?: string;
+};
+
+export function InfoButton({ label }: { label: string }) {
+  const tooltipId = useId();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <span
+      className="relative inline-flex"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        type="button"
+        aria-label={label}
+        aria-describedby={open ? tooltipId : undefined}
+        className="inline-flex size-7 items-center justify-center rounded-full border border-border/70 bg-background/70 text-muted-foreground transition hover:border-primary/35 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+        onClick={() => setOpen((current) => !current)}
+        onBlur={() => setOpen(false)}
+      >
+        <Info className="size-3.5" />
+      </button>
+      {open ? (
+        <span
+          id={tooltipId}
+          role="tooltip"
+          className="absolute right-0 top-full z-30 mt-2 w-64 rounded-[1rem] border border-border/70 bg-card/95 px-3 py-2 text-xs leading-5 text-muted-foreground shadow-[0_18px_40px_-24px_rgba(0,0,0,0.7)] backdrop-blur"
+        >
+          {label}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+export function SectionMenu<T extends string>({
+  title,
+  items,
+  activeId,
+  onChange,
+}: {
+  title: string;
+  items: readonly SectionMenuItem<T>[];
+  activeId: T;
+  onChange: (id: T) => void;
+}) {
+  return (
+    <aside className="rounded-[1.6rem] border border-border/70 bg-card/85 p-4 shadow-[0_18px_50px_-28px_rgba(0,0,0,0.55)] backdrop-blur">
+      <div className="space-y-1 border-b border-border/70 pb-4">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{title}</p>
+        <p className="text-sm text-muted-foreground">
+          Switch between focused configuration steps without crowding the page.
+        </p>
+      </div>
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+        {items.map((item) => {
+          const active = item.id === activeId;
+
+          return (
+            <div
+              key={item.id}
+              className={cn(
+                'flex min-h-12 items-start justify-between gap-3 rounded-[1.2rem] border px-4 py-3 transition',
+                active
+                  ? 'border-primary/45 bg-primary/10 shadow-[0_14px_34px_-24px_rgba(56,189,248,0.8)]'
+                  : 'border-border/70 bg-background/70 hover:border-primary/25 hover:bg-background/85',
+              )}
+            >
+              <button
+                type="button"
+                onClick={() => onChange(item.id)}
+                className="min-w-0 flex-1 text-left"
+              >
+                <span className="block font-medium text-foreground">{item.label}</span>
+                {item.description ? (
+                  <span className="mt-1 block text-xs leading-5 text-muted-foreground">{item.description}</span>
+                ) : null}
+              </button>
+              {item.info ? <InfoButton label={item.info} /> : null}
+            </div>
+          );
+        })}
+      </div>
+    </aside>
+  );
+}
+
 export function Panel({
   title,
   description,
@@ -109,7 +202,7 @@ export function Panel({
   children,
   className,
 }: {
-  title: string;
+  title: ReactNode;
   description?: string;
   action?: ReactNode;
   children: ReactNode;

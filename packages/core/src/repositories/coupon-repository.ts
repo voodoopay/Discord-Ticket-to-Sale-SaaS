@@ -11,6 +11,7 @@ export type CouponRecord = {
   code: string;
   discountMinor: number;
   active: boolean;
+  allowedCategories: string[];
   allowedProductIds: string[];
   allowedVariantIds: string[];
   createdAt: Date;
@@ -33,6 +34,7 @@ export class CouponRepository {
       code: row.code,
       discountMinor: row.discountMinor,
       active: row.active,
+      allowedCategories: Array.isArray(row.allowedCategories) ? row.allowedCategories : [],
       allowedProductIds: Array.isArray(row.allowedProductIds) ? row.allowedProductIds : [],
       allowedVariantIds: Array.isArray(row.allowedVariantIds) ? row.allowedVariantIds : [],
       createdAt: row.createdAt,
@@ -64,6 +66,7 @@ export class CouponRepository {
       code: row.code,
       discountMinor: row.discountMinor,
       active: row.active,
+      allowedCategories: Array.isArray(row.allowedCategories) ? row.allowedCategories : [],
       allowedProductIds: Array.isArray(row.allowedProductIds) ? row.allowedProductIds : [],
       allowedVariantIds: Array.isArray(row.allowedVariantIds) ? row.allowedVariantIds : [],
       createdAt: row.createdAt,
@@ -77,6 +80,7 @@ export class CouponRepository {
     code: string;
     discountMinor: number;
     active: boolean;
+    allowedCategories: string[];
     allowedProductIds: string[];
     allowedVariantIds: string[];
   }): Promise<CouponRecord> {
@@ -88,6 +92,7 @@ export class CouponRepository {
       code: input.code,
       discountMinor: input.discountMinor,
       active: input.active,
+      allowedCategories: input.allowedCategories,
       allowedProductIds: input.allowedProductIds,
       allowedVariantIds: input.allowedVariantIds,
     });
@@ -99,6 +104,7 @@ export class CouponRepository {
       code: input.code,
       discountMinor: input.discountMinor,
       active: input.active,
+      allowedCategories: input.allowedCategories,
       allowedProductIds: input.allowedProductIds,
       allowedVariantIds: input.allowedVariantIds,
       createdAt: new Date(),
@@ -113,6 +119,7 @@ export class CouponRepository {
     code: string;
     discountMinor: number;
     active: boolean;
+    allowedCategories: string[];
     allowedProductIds: string[];
     allowedVariantIds: string[];
   }): Promise<void> {
@@ -122,6 +129,7 @@ export class CouponRepository {
         code: input.code,
         discountMinor: input.discountMinor,
         active: input.active,
+        allowedCategories: input.allowedCategories,
         allowedProductIds: input.allowedProductIds,
         allowedVariantIds: input.allowedVariantIds,
         updatedAt: new Date(),

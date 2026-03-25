@@ -3,9 +3,8 @@
 ## Server Settings
 
 - Open dashboard and select workspace + Discord server.
-- Expand the **Sales Settings** panel.
-- In **Sales Settings**, enable or disable:
-  - `Ask customer for optional tip before checkout link generation`.
+- Open the relevant dashboard pages from the sidebar.
+- Payments, coupons, points, referrals, and products each use focused page layouts instead of one long combined settings view.
 
 ## Coupon Management
 
@@ -14,7 +13,7 @@
   - `Code` (e.g. `SAVE10`).
   - `Discount Amount (GBP)` (fixed amount).
   - `Active` toggle.
-  - Optional `Product Scope` and `Variation Scope`.
+  - Optional `Category Scope`, `Product Scope`, and `Variation Scope`.
 - Coupons are scoped per server.
 - Coupons can be edited or deleted at any time.
 - If both scope lists are empty, the coupon applies to all basket items.

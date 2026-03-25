@@ -1461,10 +1461,12 @@ async function handleCouponModal(interaction: ModalSubmitInteraction, draft: Sal
 
   const eligibleSubtotalMinor = computeCouponEligibleSubtotalMinor(
     {
+      allowedCategories: coupon.allowedCategories,
       allowedProductIds: coupon.allowedProductIds,
       allowedVariantIds: coupon.allowedVariantIds,
     },
     draft.basketItems.map((item) => ({
+      category: item.category,
       productId: item.productId,
       variantId: item.variantId,
       priceMinor: item.priceMinor,

@@ -807,6 +807,7 @@ export class SaleService {
 
     const eligibleSubtotalMinor = computeCouponEligibleSubtotalMinor(
       {
+        allowedCategories: coupon.allowedCategories,
         allowedProductIds: coupon.allowedProductIds,
         allowedVariantIds: coupon.allowedVariantIds,
       },

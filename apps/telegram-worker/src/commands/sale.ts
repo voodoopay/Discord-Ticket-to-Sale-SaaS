@@ -684,8 +684,17 @@ async function handleCouponInput(api: Api, draft: SaleDraft, rawCoupon: string):
   }
 
   const eligibleSubtotalMinor = computeCouponEligibleSubtotalMinor(
-    { allowedProductIds: coupon.allowedProductIds, allowedVariantIds: coupon.allowedVariantIds },
-    draft.basketItems.map((item) => ({ productId: item.productId, variantId: item.variantId, priceMinor: item.priceMinor })),
+    {
+      allowedCategories: coupon.allowedCategories,
+      allowedProductIds: coupon.allowedProductIds,
+      allowedVariantIds: coupon.allowedVariantIds,
+    },
+    draft.basketItems.map((item) => ({
+      category: item.category,
+      productId: item.productId,
+      variantId: item.variantId,
+      priceMinor: item.priceMinor,
+    })),
   );
   if (eligibleSubtotalMinor <= 0) {
     await editDraftMessage({ api, draft, content: `Coupon ${couponCode} does not apply to the selected products or variations.`, keyboard: invalidButtons });

@@ -13,6 +13,27 @@ const idListSchema = z
   .default([])
   .transform((values) => Array.from(new Set(values.map((value) => value.trim()).filter(Boolean))));
 
+const categoryListSchema = z
+  .array(z.string().trim().min(1).max(80))
+  .default([])
+  .transform((values) => {
+    const seen = new Set<string>();
+    const result: string[] = [];
+
+    for (const value of values) {
+      const trimmed = value.trim();
+      const normalized = trimmed.toLowerCase();
+      if (!trimmed || seen.has(normalized)) {
+        continue;
+      }
+
+      seen.add(normalized);
+      result.push(trimmed);
+    }
+
+    return result;
+  });
+
 const couponPayloadSchema = z.object({
   code: z
     .string()
@@ -23,6 +44,7 @@ const couponPayloadSchema = z.object({
     .transform((value) => value.toUpperCase()),
   discountMinor: z.number().int().positive(),
   active: z.boolean().default(true),
+  allowedCategories: categoryListSchema,
   allowedProductIds: idListSchema,
   allowedVariantIds: idListSchema,
 });
@@ -43,6 +65,7 @@ export class CouponService {
         code: string;
         discountMinor: number;
         active: boolean;
+        allowedCategories: string[];
         allowedProductIds: string[];
         allowedVariantIds: string[];
       }>,
@@ -70,6 +93,7 @@ export class CouponService {
           code: coupon.code,
           discountMinor: coupon.discountMinor,
           active: coupon.active,
+          allowedCategories: coupon.allowedCategories,
           allowedProductIds: coupon.allowedProductIds,
           allowedVariantIds: coupon.allowedVariantIds,
         })),
@@ -89,6 +113,7 @@ export class CouponService {
         code: string;
         discountMinor: number;
         active: boolean;
+        allowedCategories: string[];
         allowedProductIds: string[];
         allowedVariantIds: string[];
       },
@@ -126,6 +151,7 @@ export class CouponService {
       const scopeValidation = await this.validateCouponScopes({
         tenantId: input.tenantId,
         guildId: input.guildId,
+        allowedCategories: parsed.data.allowedCategories,
         allowedProductIds: parsed.data.allowedProductIds,
         allowedVariantIds: parsed.data.allowedVariantIds,
       });
@@ -140,6 +166,7 @@ export class CouponService {
           code: parsed.data.code,
           discountMinor: parsed.data.discountMinor,
           active: parsed.data.active,
+          allowedCategories: parsed.data.allowedCategories,
           allowedProductIds: parsed.data.allowedProductIds,
           allowedVariantIds: parsed.data.allowedVariantIds,
         });
@@ -149,6 +176,7 @@ export class CouponService {
           code: created.code,
           discountMinor: created.discountMinor,
           active: created.active,
+          allowedCategories: created.allowedCategories,
           allowedProductIds: created.allowedProductIds,
           allowedVariantIds: created.allowedVariantIds,
         });
@@ -204,6 +232,7 @@ export class CouponService {
       const scopeValidation = await this.validateCouponScopes({
         tenantId: input.tenantId,
         guildId: input.guildId,
+        allowedCategories: parsed.data.allowedCategories,
         allowedProductIds: parsed.data.allowedProductIds,
         allowedVariantIds: parsed.data.allowedVariantIds,
       });
@@ -219,6 +248,7 @@ export class CouponService {
           code: parsed.data.code,
           discountMinor: parsed.data.discountMinor,
           active: parsed.data.active,
+          allowedCategories: parsed.data.allowedCategories,
           allowedProductIds: parsed.data.allowedProductIds,
           allowedVariantIds: parsed.data.allowedVariantIds,
         });
@@ -278,10 +308,15 @@ export class CouponService {
   private async validateCouponScopes(input: {
     tenantId: string;
     guildId: string;
+    allowedCategories: string[];
     allowedProductIds: string[];
     allowedVariantIds: string[];
   }): Promise<Result<void, AppError>> {
-    if (input.allowedProductIds.length === 0 && input.allowedVariantIds.length === 0) {
+    if (
+      input.allowedCategories.length === 0 &&
+      input.allowedProductIds.length === 0 &&
+      input.allowedVariantIds.length === 0
+    ) {
       return ok(undefined);
     }
 
@@ -289,16 +324,23 @@ export class CouponService {
       tenantId: input.tenantId,
       guildId: input.guildId,
     });
+    const validCategoryKeys = new Set(products.map((product) => product.category.trim().toLowerCase()).filter(Boolean));
     const validProductIds = new Set(products.map((product) => product.id));
     const validVariantIds = new Set(
       products.flatMap((product) => product.variants.map((variant) => variant.id)),
     );
 
+    const invalidCategories = input.allowedCategories.filter(
+      (category) => !validCategoryKeys.has(category.trim().toLowerCase()),
+    );
     const invalidProductIds = input.allowedProductIds.filter((productId) => !validProductIds.has(productId));
     const invalidVariantIds = input.allowedVariantIds.filter((variantId) => !validVariantIds.has(variantId));
 
-    if (invalidProductIds.length > 0 || invalidVariantIds.length > 0) {
+    if (invalidCategories.length > 0 || invalidProductIds.length > 0 || invalidVariantIds.length > 0) {
       const details = [
+        invalidCategories.length > 0
+          ? `unknown categories: ${invalidCategories.slice(0, 5).join(', ')}`
+          : null,
         invalidProductIds.length > 0
           ? `unknown product IDs: ${invalidProductIds.slice(0, 5).join(', ')}`
           : null,

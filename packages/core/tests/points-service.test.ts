@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { OrderSessionRecord } from '../src/repositories/order-repository.js';
+import { ok } from 'neverthrow';
 import { PointsService } from '../src/services/points-service.js';
 
 function makeOrderSession(overrides: Partial<OrderSessionRecord> = {}): OrderSessionRecord {
@@ -165,5 +166,124 @@ describe('points service', () => {
       return;
     }
     expect(result.value).toBeNull();
+  });
+
+  it('supports setting a customer balance from the dashboard', async () => {
+    const service = new PointsService();
+    const actor = {
+      userId: 'user-1',
+      tenantMemberships: [{ tenantId: 'tenant-1', role: 'owner' as const }],
+      isSuperAdmin: false,
+    };
+
+    vi.spyOn((service as any).authorizationService, 'ensureTenantRole').mockResolvedValue(ok(undefined));
+    vi.spyOn((service as any).authorizationService, 'ensureGuildBoundToTenant').mockResolvedValue(ok(undefined));
+    vi.spyOn((service as any).guildFeatureService, 'ensureFeatureEnabled').mockResolvedValue(ok(undefined));
+    vi.spyOn((service as any).pointsRepository, 'getAccount').mockResolvedValue({
+      id: 'acct-1',
+      tenantId: 'tenant-1',
+      guildId: 'guild-1',
+      emailNormalized: 'customer@example.com',
+      emailDisplay: 'customer@example.com',
+      balancePoints: 25,
+      reservedPoints: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    vi.spyOn((service as any).pointsRepository, 'addPoints').mockResolvedValue({
+      id: 'acct-1',
+      tenantId: 'tenant-1',
+      guildId: 'guild-1',
+      emailNormalized: 'customer@example.com',
+      emailDisplay: 'customer@example.com',
+      balancePoints: 40,
+      reservedPoints: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const insertLedgerEvent = vi
+      .spyOn((service as any).pointsRepository, 'insertLedgerEvent')
+      .mockResolvedValue(undefined);
+
+    const result = await service.manualAdjust(actor, {
+      tenantId: 'tenant-1',
+      guildId: 'guild-1',
+      email: 'customer@example.com',
+      action: 'set',
+      points: 40,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(insertLedgerEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'manual_set',
+        deltaPoints: 15,
+      }),
+    );
+    if (result.isErr()) {
+      return;
+    }
+    expect(result.value.balancePoints).toBe(40);
+  });
+
+  it('supports clearing a customer balance from the dashboard', async () => {
+    const service = new PointsService();
+    const actor = {
+      userId: 'user-1',
+      tenantMemberships: [{ tenantId: 'tenant-1', role: 'owner' as const }],
+      isSuperAdmin: false,
+    };
+
+    vi.spyOn((service as any).authorizationService, 'ensureTenantRole').mockResolvedValue(ok(undefined));
+    vi.spyOn((service as any).authorizationService, 'ensureGuildBoundToTenant').mockResolvedValue(ok(undefined));
+    vi.spyOn((service as any).guildFeatureService, 'ensureFeatureEnabled').mockResolvedValue(ok(undefined));
+    vi.spyOn((service as any).pointsRepository, 'getAccount').mockResolvedValue({
+      id: 'acct-1',
+      tenantId: 'tenant-1',
+      guildId: 'guild-1',
+      emailNormalized: 'customer@example.com',
+      emailDisplay: 'customer@example.com',
+      balancePoints: 18,
+      reservedPoints: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    vi.spyOn((service as any).pointsRepository, 'removePointsClampToZero').mockResolvedValue({
+      removedPoints: 18,
+      account: {
+        id: 'acct-1',
+        tenantId: 'tenant-1',
+        guildId: 'guild-1',
+        emailNormalized: 'customer@example.com',
+        emailDisplay: 'customer@example.com',
+        balancePoints: 0,
+        reservedPoints: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    const insertLedgerEvent = vi
+      .spyOn((service as any).pointsRepository, 'insertLedgerEvent')
+      .mockResolvedValue(undefined);
+
+    const result = await service.manualAdjust(actor, {
+      tenantId: 'tenant-1',
+      guildId: 'guild-1',
+      email: 'customer@example.com',
+      action: 'clear',
+      points: 0,
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(insertLedgerEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'manual_clear',
+        deltaPoints: -18,
+      }),
+    );
+    if (result.isErr()) {
+      return;
+    }
+    expect(result.value.balancePoints).toBe(0);
   });
 });

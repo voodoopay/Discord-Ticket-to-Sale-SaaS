@@ -12,7 +12,14 @@ In the dashboard:
 
 1. Open `/dashboard`, select the workspace and Discord server, then enter the server panel.
 2. Open the **Points** page in the sidebar.
-3. Enable the feature if needed, then configure:
+3. Use the internal Points menu to move between:
+
+- `Reward Settings`
+- `Earning Categories`
+- `Redemption Categories`
+- `Customer Points`
+
+4. Enable the feature if needed, then configure:
 
 - Set `Value of 1 point` (major currency input, stored as minor integer).
   - This controls redemption value (discount per point), not how many points are earned per 1.00 spent.
@@ -27,7 +34,8 @@ Inside the **Points** page, the **Customer Points** area supports:
 - List customer emails with `balance`, `reserved`, and `available` points.
 - Search by email.
 - Manual `Add Points`.
-- Manual `Remove Points` (overdraw is clamped to zero).
+- Manual `Edit Balance` (set an exact balance).
+- Manual `Delete Balance` (clear back to zero).
 
 ## Checkout Behavior
 

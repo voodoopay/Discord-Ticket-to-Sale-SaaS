@@ -18,7 +18,15 @@ import {
 import { useDeferredValue, useEffect, useEffectEvent, useState } from 'react';
 
 import { createEmptyIntegration, useDashboardContext } from '@/components/dashboard/dashboard-provider';
-import { FeatureToggle, InfoTip, Panel, SectionShell, StatusPill } from '@/components/dashboard/dashboard-primitives';
+import {
+  FeatureToggle,
+  InfoButton,
+  InfoTip,
+  Panel,
+  SectionMenu,
+  SectionShell,
+  StatusPill,
+} from '@/components/dashboard/dashboard-primitives';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -67,6 +75,75 @@ const cryptoWalletFields: Array<{
   { key: 'trc20', label: 'TRC20 wallet' },
   { key: 'solana', label: 'Solana wallet' },
 ];
+
+const settingsMenuItems = [
+  {
+    id: 'default-currency',
+    label: 'Default Currency',
+    description: 'Choose the money format used across checkout and summary cards.',
+    info: 'This becomes the primary dashboard currency display for the selected Discord server.',
+  },
+  {
+    id: 'staff-roles',
+    label: 'Staff Roles',
+    description: 'Control which Discord roles can manage sales operations.',
+    info: 'Only the roles selected here should be able to work paid-order and support flows.',
+  },
+  {
+    id: 'paid-log-channel',
+    label: 'Paid Log Channel',
+    description: 'Pick where successful payment notifications should land.',
+    info: 'Use a private channel that your moderators or staff can monitor without cluttering public chat.',
+  },
+  {
+    id: 'telegram',
+    label: 'Telegram Integration',
+    description: 'Enable the bridge, generate an invite, and connect a Telegram chat.',
+    info: 'When disabled, Telegram connect controls stay hidden and the backend rejects new connection attempts.',
+  },
+] as const;
+
+const pointsMenuItems = [
+  {
+    id: 'reward-settings',
+    label: 'Reward Settings',
+    description: 'Set the value per point and save the main reward configuration.',
+    info: 'This controls how much one point is worth when points are redeemed.',
+  },
+  {
+    id: 'earning-categories',
+    label: 'Earning Categories',
+    description: 'Choose which product categories can earn points.',
+    info: 'Only successful sales in these categories will generate customer points.',
+  },
+  {
+    id: 'redemption-categories',
+    label: 'Redemption Categories',
+    description: 'Choose which categories accept points as discounts.',
+    info: 'Use this to protect restricted or low-margin categories from point redemption.',
+  },
+  {
+    id: 'customer-points',
+    label: 'Customer Points',
+    description: 'View balances and add, edit, remove, or clear customer points.',
+    info: 'This is the admin control center for manual balance management.',
+  },
+] as const;
+
+const productsMenuItems = [
+  {
+    id: 'categories',
+    label: 'Categories & Questions',
+    description: 'Create category drafts, manage custom questions, and maintain templates.',
+    info: 'Question templates are prepared here first so product creation stays step-by-step and consistent.',
+  },
+  {
+    id: 'products',
+    label: 'Products',
+    description: 'Create or edit products with category selection, pricing, and rewards.',
+    info: 'Products inherit category context and can include multiple price variations plus referral rewards.',
+  },
+] as const;
 
 function getMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message) {
@@ -349,6 +426,8 @@ export function SettingsSection() {
   const [paidLogChannelId, setPaidLogChannelId] = useState('');
   const [staffRoleIds, setStaffRoleIds] = useState<string[]>([]);
   const [telegramEnabled, setTelegramEnabled] = useState(false);
+  const [activeSettingsPanel, setActiveSettingsPanel] =
+    useState<(typeof settingsMenuItems)[number]['id']>('default-currency');
   const [generatedTelegram, setGeneratedTelegram] = useState<Awaited<
     ReturnType<typeof generateTelegramLink>
   > | null>(null);
@@ -407,188 +486,240 @@ export function SettingsSection() {
       <DashboardSetupState />
 
       {isLinkedToCurrentTenant ? (
-        <div className="space-y-5">
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-            <Panel title="General" description="Core server defaults used across checkout and log output.">
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="default-currency">Default currency</Label>
-                  <select
-                    id="default-currency"
-                    className={nativeSelectClass}
-                    value={defaultCurrency}
-                    onChange={(event) => setDefaultCurrency(event.target.value)}
-                  >
-                    {['GBP', 'USD', 'EUR'].map((currency) => (
-                      <option key={currency} value={currency}>
-                        {currency}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+        <div className="grid gap-5 xl:grid-cols-[17rem_minmax(0,1fr)]">
+          <SectionMenu
+            title="Settings Menu"
+            items={settingsMenuItems}
+            activeId={activeSettingsPanel}
+            onChange={setActiveSettingsPanel}
+          />
 
-                <div className="space-y-2">
-                  <Label htmlFor="paid-log-channel">Paid log channel</Label>
-                  <select
-                    id="paid-log-channel"
-                    className={nativeSelectClass}
-                    value={paidLogChannelId}
-                    onChange={(event) => setPaidLogChannelId(event.target.value)}
-                  >
-                    <option value="">Select channel</option>
-                    {resources?.channels.map((channel) => (
-                      <option key={channel.id} value={channel.id}>
-                        #{channel.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </Panel>
-
-            <Panel title="Staff roles" description="Roles allowed to work ticket-to-sale flows for this server.">
-              <div className="space-y-3">
-                {resources?.roles.length ? (
-                  resources.roles.map((role) => {
-                    const checked = staffRoleIds.includes(role.id);
-                    return (
-                      <label
-                        key={role.id}
-                        className="flex items-center gap-3 rounded-[1.1rem] border border-border/70 bg-background/70 px-3 py-3 text-sm"
-                      >
-                        <Checkbox
-                          checked={checked}
-                          onCheckedChange={(value) =>
-                            setStaffRoleIds((current) =>
-                              value === true
-                                ? [...new Set([...current, role.id])]
-                                : current.filter((item) => item !== role.id),
-                            )
-                          }
-                        />
-                        <span className="truncate">{role.name}</span>
-                      </label>
-                    );
-                  })
-                ) : (
-                  <p className="text-sm text-muted-foreground">No guild roles were returned by Discord.</p>
-                )}
-              </div>
-            </Panel>
-          </div>
-
-          <Panel title="Telegram bot integration" description="Enable the Telegram bridge only when you want operators to connect a Telegram group for this server.">
-            <div className="space-y-5">
-              <div className="flex flex-col gap-4 rounded-[1.2rem] border border-border/70 bg-background/70 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="font-medium">Enable Telegram bot integration</p>
-                  <p className="text-sm text-muted-foreground">
-                    Disabled servers hide all Telegram controls and reject connection attempts.
-                  </p>
-                </div>
-                <FeatureToggle
-                  checked={telegramEnabled}
-                  label="Enable Telegram integration"
-                  onChange={setTelegramEnabled}
-                />
-              </div>
-
-              {telegramEnabled ? (
+          <div className="space-y-5">
+            {activeSettingsPanel === 'default-currency' ? (
+              <Panel
+                title={
+                  <span className="flex items-center gap-2">
+                    Default currency
+                    <InfoButton label="This is the default currency shown across the panel and checkout summaries for this server." />
+                  </span>
+                }
+                description="Choose the primary currency for this Discord server."
+              >
                 <div className="space-y-4">
-                  <InfoTip>
-                    Enable the toggle first, save the page, then use the invite and regenerate actions below
-                    to connect the Telegram side cleanly.
-                  </InfoTip>
+                  <div className="space-y-2">
+                    <Label htmlFor="default-currency">Currency</Label>
+                    <select
+                      id="default-currency"
+                      className={nativeSelectClass}
+                      value={defaultCurrency}
+                      onChange={(event) => setDefaultCurrency(event.target.value)}
+                    >
+                      {['GBP', 'USD', 'EUR'].map((currency) => (
+                        <option key={currency} value={currency}>
+                          {currency}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <InfoTip>Save after changing the default currency so the dashboard and sales summaries stay in sync.</InfoTip>
+                </div>
+              </Panel>
+            ) : null}
 
-                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-                    <div className="rounded-[1.2rem] border border-border/70 bg-background/70 p-4">
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Invite link</p>
-                      <p className="mt-2 break-all text-sm">
-                        {telegramState?.inviteUrl ?? generatedTelegram?.inviteUrl ?? 'Save first to generate the live invite link.'}
-                      </p>
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        {(telegramState?.inviteUrl ?? generatedTelegram?.inviteUrl) ? (
-                          <>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() =>
-                                void handleCopy(
-                                  telegramState?.inviteUrl ?? generatedTelegram?.inviteUrl ?? '',
-                                  'Telegram invite link copied.',
-                                )
-                              }
-                            >
-                              <Copy className="size-4" />
-                              Copy link
-                            </Button>
-                            <Button asChild size="sm">
-                              <a
-                                href={telegramState?.inviteUrl ?? generatedTelegram?.inviteUrl ?? '#'}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                Add Bot To Telegram
-                                <ArrowUpRight className="size-4" />
-                              </a>
-                            </Button>
-                          </>
-                        ) : null}
-                        <Button type="button" variant="outline" size="sm" onClick={() => void handleGenerateTelegram()}>
-                          <RefreshCcw className="size-4" />
-                          Regenerate link
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="rounded-[1.2rem] border border-border/70 bg-background/70 p-4">
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Connection status</p>
-                      <div className="mt-2 flex items-center gap-2">
-                        <StatusPill
-                          active={Boolean(telegramState?.linkedChat)}
-                          activeLabel="Connected"
-                          inactiveLabel="Pending"
-                        />
-                      </div>
-                      <p className="mt-3 text-sm text-muted-foreground">
-                        {telegramState?.linkedChat
-                          ? `Linked chat: ${telegramState.linkedChat.chatTitle}`
-                          : 'No Telegram chat is linked to this server yet.'}
-                      </p>
-                      {generatedTelegram ? (
-                        <div className="mt-4 space-y-2">
-                          <Label htmlFor="telegram-command">Latest connect command</Label>
-                          <Textarea
-                            id="telegram-command"
-                            value={generatedTelegram.command}
-                            readOnly
-                            className="min-h-24"
-                          />
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                              void handleCopy(
-                                generatedTelegram.command,
-                                'Telegram connect command copied.',
+            {activeSettingsPanel === 'staff-roles' ? (
+              <Panel
+                title={
+                  <span className="flex items-center gap-2">
+                    Staff roles
+                    <InfoButton label="These roles should represent the team members allowed to work order, payment, and support tasks inside the server." />
+                  </span>
+                }
+                description="Select the Discord roles that should be treated as sales staff."
+              >
+                <div className="space-y-3">
+                  {resources?.roles.length ? (
+                    resources.roles.map((role) => {
+                      const checked = staffRoleIds.includes(role.id);
+                      return (
+                        <label
+                          key={role.id}
+                          className="flex items-center gap-3 rounded-[1.1rem] border border-border/70 bg-background/70 px-3 py-3 text-sm"
+                        >
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={(value) =>
+                              setStaffRoleIds((current) =>
+                                value === true
+                                  ? [...new Set([...current, role.id])]
+                                  : current.filter((item) => item !== role.id),
                               )
                             }
-                          >
-                            <Copy className="size-4" />
-                            Copy command
-                          </Button>
-                        </div>
-                      ) : null}
-                    </div>
+                          />
+                          <span className="truncate">{role.name}</span>
+                        </label>
+                      );
+                    })
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No guild roles were returned by Discord.</p>
+                  )}
+                </div>
+              </Panel>
+            ) : null}
+
+            {activeSettingsPanel === 'paid-log-channel' ? (
+              <Panel
+                title={
+                  <span className="flex items-center gap-2">
+                    Paid log channel
+                    <InfoButton label="Successful payment notifications and paid-order events should go here so staff have one clean audit channel." />
+                  </span>
+                }
+                description="Choose the channel that receives the paid-order log feed."
+              >
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="paid-log-channel">Paid log channel</Label>
+                    <select
+                      id="paid-log-channel"
+                      className={nativeSelectClass}
+                      value={paidLogChannelId}
+                      onChange={(event) => setPaidLogChannelId(event.target.value)}
+                    >
+                      <option value="">Select channel</option>
+                      {resources?.channels.map((channel) => (
+                        <option key={channel.id} value={channel.id}>
+                          #{channel.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
-              ) : (
-                <InfoTip>Telegram bot is currently disabled for this server.</InfoTip>
-              )}
-            </div>
-          </Panel>
+              </Panel>
+            ) : null}
+
+            {activeSettingsPanel === 'telegram' ? (
+              <Panel
+                title={
+                  <span className="flex items-center gap-2">
+                    Telegram bot integration
+                    <InfoButton label="Enable this when you want staff to connect a Telegram group and mirror the operational flow outside Discord." />
+                  </span>
+                }
+                description="Enable the bridge, then invite the Telegram bot and connect the chat."
+              >
+                <div className="space-y-5">
+                  <div className="flex flex-col gap-4 rounded-[1.2rem] border border-border/70 bg-background/70 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="font-medium">Enable Telegram bot integration</p>
+                      <p className="text-sm text-muted-foreground">
+                        Disabled servers hide all Telegram controls and reject connection attempts.
+                      </p>
+                    </div>
+                    <FeatureToggle
+                      checked={telegramEnabled}
+                      label="Enable Telegram integration"
+                      onChange={setTelegramEnabled}
+                    />
+                  </div>
+
+                  {telegramEnabled ? (
+                    <div className="space-y-4">
+                      <InfoTip>
+                        Enable the toggle first, save the page, then use the invite and regenerate actions below
+                        to connect the Telegram side cleanly.
+                      </InfoTip>
+
+                      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                        <div className="rounded-[1.2rem] border border-border/70 bg-background/70 p-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Telegram bot invite link</p>
+                          <p className="mt-2 break-all text-sm">
+                            {telegramState?.inviteUrl ?? generatedTelegram?.inviteUrl ?? 'Save first to generate the live invite link.'}
+                          </p>
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            {(telegramState?.inviteUrl ?? generatedTelegram?.inviteUrl) ? (
+                              <>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() =>
+                                    void handleCopy(
+                                      telegramState?.inviteUrl ?? generatedTelegram?.inviteUrl ?? '',
+                                      'Telegram invite link copied.',
+                                    )
+                                  }
+                                >
+                                  <Copy className="size-4" />
+                                  Copy link
+                                </Button>
+                                <Button asChild size="sm">
+                                  <a
+                                    href={telegramState?.inviteUrl ?? generatedTelegram?.inviteUrl ?? '#'}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    Add Bot To Telegram
+                                    <ArrowUpRight className="size-4" />
+                                  </a>
+                                </Button>
+                              </>
+                            ) : null}
+                            <Button type="button" variant="outline" size="sm" onClick={() => void handleGenerateTelegram()}>
+                              <RefreshCcw className="size-4" />
+                              Regenerate link
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="rounded-[1.2rem] border border-border/70 bg-background/70 p-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Connection status</p>
+                          <div className="mt-2 flex items-center gap-2">
+                            <StatusPill
+                              active={Boolean(telegramState?.linkedChat)}
+                              activeLabel="Connected"
+                              inactiveLabel="Pending"
+                            />
+                          </div>
+                          <p className="mt-3 text-sm text-muted-foreground">
+                            {telegramState?.linkedChat
+                              ? `Linked chat: ${telegramState.linkedChat.chatTitle}`
+                              : 'No Telegram chat is linked to this server yet.'}
+                          </p>
+                          {generatedTelegram ? (
+                            <div className="mt-4 space-y-2">
+                              <Label htmlFor="telegram-command">Latest connect command</Label>
+                              <Textarea
+                                id="telegram-command"
+                                value={generatedTelegram.command}
+                                readOnly
+                                className="min-h-24"
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                  void handleCopy(
+                                    generatedTelegram.command,
+                                    'Telegram connect command copied.',
+                                  )
+                                }
+                              >
+                                <Copy className="size-4" />
+                                Copy command
+                              </Button>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <InfoTip>Telegram bot is currently disabled for this server.</InfoTip>
+                  )}
+                </div>
+              </Panel>
+            ) : null}
+          </div>
         </div>
       ) : null}
     </SectionShell>
@@ -758,7 +889,7 @@ export function PaymentsSection() {
 }
 
 export function CouponsSection() {
-  const { actionPending, config, guildId, isLinkedToCurrentTenant, products, saveConfig, showFlash, tenantId } =
+  const { actionPending, categories, config, guildId, isLinkedToCurrentTenant, products, saveConfig, showFlash, tenantId } =
     useDashboardContext();
   const [loadingCoupons, setLoadingCoupons] = useState(false);
   const [coupons, setCoupons] = useState<CouponRecord[]>([]);
@@ -766,6 +897,7 @@ export function CouponsSection() {
   const [couponCode, setCouponCode] = useState('');
   const [discountMajor, setDiscountMajor] = useState('');
   const [couponActive, setCouponActive] = useState(true);
+  const [allowedCategories, setAllowedCategories] = useState<string[]>([]);
   const [allowedProductIds, setAllowedProductIds] = useState<string[]>([]);
   const [allowedVariantIds, setAllowedVariantIds] = useState<string[]>([]);
 
@@ -801,6 +933,7 @@ export function CouponsSection() {
     setCouponCode('');
     setDiscountMajor('');
     setCouponActive(true);
+    setAllowedCategories([]);
     setAllowedProductIds([]);
     setAllowedVariantIds([]);
   }
@@ -811,6 +944,7 @@ export function CouponsSection() {
         code: couponCode.trim(),
         discountMinor: parsePriceToMinor(discountMajor),
         active: couponActive,
+        allowedCategories,
         allowedProductIds,
         allowedVariantIds,
       };
@@ -855,6 +989,7 @@ export function CouponsSection() {
     setCouponCode(coupon.code);
     setDiscountMajor(formatMinorToMajor(coupon.discountMinor));
     setCouponActive(coupon.active);
+    setAllowedCategories(coupon.allowedCategories);
     setAllowedProductIds(coupon.allowedProductIds);
     setAllowedVariantIds(coupon.allowedVariantIds);
   }
@@ -901,7 +1036,15 @@ export function CouponsSection() {
 
           {config?.couponsEnabled ? (
             <>
-              <Panel title={editingCouponId ? 'Edit coupon' : 'Create coupon'} description="Choose a code, discount value, and optional product or variation scope.">
+              <Panel
+                title={
+                  <span className="flex items-center gap-2">
+                    {editingCouponId ? 'Edit coupon' : 'Create coupon'}
+                    <InfoButton label="Coupons can apply server-wide or be narrowed to categories, specific products, and even individual variations." />
+                  </span>
+                }
+                description="Choose a code, discount value, and optional category, product, or variation scope."
+              >
                 <div className="space-y-4">
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
@@ -929,7 +1072,33 @@ export function CouponsSection() {
                     <span>Coupon active</span>
                   </label>
 
-                  <div className="grid gap-4 xl:grid-cols-2">
+                  <div className="grid gap-4 xl:grid-cols-3">
+                    <div className="space-y-3">
+                      <p className="text-sm font-semibold">Categories</p>
+                      {categories.length ? (
+                        categories.map((category) => (
+                          <label
+                            key={category.name}
+                            className="flex items-center gap-3 rounded-[1.05rem] border border-border/70 bg-background/70 px-3 py-3 text-sm"
+                          >
+                            <Checkbox
+                              checked={allowedCategories.includes(category.name)}
+                              onCheckedChange={(checked) =>
+                                setAllowedCategories((current) =>
+                                  checked === true
+                                    ? [...new Set([...current, category.name])]
+                                    : current.filter((entry) => entry !== category.name),
+                                )
+                              }
+                            />
+                            <span className="truncate">{category.name}</span>
+                          </label>
+                        ))
+                      ) : (
+                        <p className="text-sm text-muted-foreground">Create categories before scoping coupons by category.</p>
+                      )}
+                    </div>
+
                     <div className="space-y-3">
                       <p className="text-sm font-semibold">Specific products</p>
                       {products.length ? (
@@ -989,6 +1158,11 @@ export function CouponsSection() {
                     </div>
                   </div>
 
+                  <InfoTip>
+                    Leave all scope lists empty to apply the coupon to everything. Add categories, products, or
+                    variations only when you want to narrow where the coupon works.
+                  </InfoTip>
+
                   <div className="flex flex-col gap-3 sm:flex-row">
                     <Button type="button" className="min-h-11 sm:flex-1" onClick={() => void handleSaveCoupon()}>
                       <Save className="size-4" />
@@ -1007,32 +1181,40 @@ export function CouponsSection() {
                 {coupons.length ? (
                   <div className="space-y-3">
                     {coupons.map((coupon) => (
-                      <div
-                        key={coupon.id}
-                        className="flex flex-col gap-3 rounded-[1.2rem] border border-border/70 bg-background/70 px-4 py-4 xl:flex-row xl:items-center xl:justify-between"
-                      >
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="font-semibold">{coupon.code}</p>
-                            <Badge variant="outline">{formatCurrencyMinor(coupon.discountMinor)}</Badge>
-                            <Badge variant="outline">{coupon.active ? 'Active' : 'Inactive'}</Badge>
+                      (() => {
+                        const scopeParts = [
+                          coupon.allowedCategories.length ? `${coupon.allowedCategories.length} categor${coupon.allowedCategories.length === 1 ? 'y' : 'ies'}` : null,
+                          coupon.allowedProductIds.length ? `${coupon.allowedProductIds.length} product${coupon.allowedProductIds.length === 1 ? '' : 's'}` : null,
+                          coupon.allowedVariantIds.length ? `${coupon.allowedVariantIds.length} variation${coupon.allowedVariantIds.length === 1 ? '' : 's'}` : null,
+                        ].filter((value): value is string => Boolean(value));
+
+                        return (
+                          <div
+                            key={coupon.id}
+                            className="flex flex-col gap-3 rounded-[1.2rem] border border-border/70 bg-background/70 px-4 py-4 xl:flex-row xl:items-center xl:justify-between"
+                          >
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="font-semibold">{coupon.code}</p>
+                                <Badge variant="outline">{formatCurrencyMinor(coupon.discountMinor)}</Badge>
+                                <Badge variant="outline">{coupon.active ? 'Active' : 'Inactive'}</Badge>
+                              </div>
+                              <p className="mt-1 text-sm text-muted-foreground">
+                                {scopeParts.length ? `Scoped to ${scopeParts.join(', ')}.` : 'Applies to all categories and products.'}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <Button type="button" size="sm" variant="outline" onClick={() => editCoupon(coupon)}>
+                                Edit
+                              </Button>
+                              <Button type="button" size="sm" variant="outline" onClick={() => void deleteCoupon(coupon.id)}>
+                                <Trash2 className="size-4" />
+                                Delete
+                              </Button>
+                            </div>
                           </div>
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            {coupon.allowedProductIds.length || coupon.allowedVariantIds.length
-                              ? 'Scoped to selected products or variations.'
-                              : 'Applies to all products.'}
-                          </p>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <Button type="button" size="sm" variant="outline" onClick={() => editCoupon(coupon)}>
-                            Edit
-                          </Button>
-                          <Button type="button" size="sm" variant="outline" onClick={() => void deleteCoupon(coupon.id)}>
-                            <Trash2 className="size-4" />
-                            Delete
-                          </Button>
-                        </div>
-                      </div>
+                        );
+                      })()
                     ))}
                   </div>
                 ) : (
@@ -1055,12 +1237,14 @@ export function PointsSection() {
   const [pointValueMajor, setPointValueMajor] = useState(DEFAULT_POINT_VALUE_MAJOR);
   const [earnCategories, setEarnCategories] = useState<string[]>([]);
   const [redeemCategories, setRedeemCategories] = useState<string[]>([]);
+  const [activePointsPanel, setActivePointsPanel] =
+    useState<(typeof pointsMenuItems)[number]['id']>('reward-settings');
   const [search, setSearch] = useState('');
   const deferredSearch = useDeferredValue(search);
   const [customers, setCustomers] = useState<PointsCustomerRecord[]>([]);
   const [loadingCustomers, setLoadingCustomers] = useState(false);
   const [adjustEmail, setAdjustEmail] = useState('');
-  const [adjustAction, setAdjustAction] = useState<'add' | 'remove'>('add');
+  const [adjustAction, setAdjustAction] = useState<'add' | 'set' | 'clear'>('add');
   const [adjustPoints, setAdjustPoints] = useState('');
 
   useEffect(() => {
@@ -1111,7 +1295,7 @@ export function PointsSection() {
     } catch {}
   }
 
-  async function adjustCustomerPoints(email: string, action: 'add' | 'remove', points: number) {
+  async function adjustCustomerPoints(email: string, action: 'add' | 'set' | 'clear', points: number) {
     try {
       await dashboardApi(`/api/guilds/${encodeURIComponent(guildId)}/points/adjust`, 'POST', {
         tenantId,
@@ -1127,18 +1311,55 @@ export function PointsSection() {
     }
   }
 
+  function prepareCustomerAction(customer: PointsCustomerRecord, action: 'add' | 'set' | 'clear') {
+    setActivePointsPanel('customer-points');
+    setAdjustEmail(customer.emailDisplay);
+    setAdjustAction(action);
+    setAdjustPoints(action === 'set' ? String(customer.balancePoints) : '');
+  }
+
+  function parseCustomerActionPoints(): number {
+    if (adjustAction === 'clear') {
+      return 0;
+    }
+
+    if (adjustAction === 'set') {
+      const trimmed = adjustPoints.trim();
+      if (!/^\d+$/.test(trimmed)) {
+        throw new Error('Balance must be zero or a positive whole number.');
+      }
+
+      const parsed = Number.parseInt(trimmed, 10);
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        throw new Error('Balance must be zero or a positive whole number.');
+      }
+
+      return parsed;
+    }
+
+    return parseWholePoints(adjustPoints);
+  }
+
   return (
     <SectionShell
       eyebrow="Points"
       title="Points system"
-      description="Use a clear feature gate, category-based earn and redeem rules, then manage individual balances from the same screen."
+      description="Use a clean feature gate, focused sidebar steps, and a guided customer balance manager."
     >
       <FlashBanner />
       <DashboardSetupState />
 
       {isLinkedToCurrentTenant ? (
         <div className="space-y-5">
-          <Panel title="Feature toggle" description="Disable points to hide balances and stop points usage in sales flows.">
+          <Panel
+            title={
+              <span className="flex items-center gap-2">
+                Feature toggle
+                <InfoButton label="Turning points off hides the controls in the panel and blocks point usage in checkout and admin flows." />
+              </span>
+            }
+            description="Disable points to hide balances and stop points usage in sales flows."
+          >
             <div className="flex flex-col gap-4 rounded-[1.2rem] border border-border/70 bg-background/70 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="font-medium">Enable points</p>
@@ -1156,31 +1377,66 @@ export function PointsSection() {
           </Panel>
 
           {config?.pointsEnabled ? (
-            <>
-              <Panel
-                title="Reward settings"
-                description="Set the cash value of each point and choose which categories can earn or redeem points."
-                action={
-                  <Button type="button" className="min-h-10" disabled={actionPending} onClick={() => void handleSaveRules()}>
-                    <Save className="size-4" />
-                    Save Rules
-                  </Button>
-                }
-              >
-                <div className="space-y-5">
-                  <div className="space-y-2">
-                    <Label htmlFor="point-value">Value per point</Label>
-                    <Input
-                      id="point-value"
-                      value={pointValueMajor}
-                      onChange={(event) => setPointValueMajor(event.target.value)}
-                      placeholder={DEFAULT_POINT_VALUE_MAJOR}
-                    />
-                  </div>
+            <div className="grid gap-5 xl:grid-cols-[17rem_minmax(0,1fr)]">
+              <SectionMenu
+                title="Points Menu"
+                items={pointsMenuItems}
+                activeId={activePointsPanel}
+                onChange={setActivePointsPanel}
+              />
 
-                  <div className="grid gap-4 xl:grid-cols-2">
+              <div className="space-y-5">
+                {activePointsPanel === 'reward-settings' ? (
+                  <Panel
+                    title={
+                      <span className="flex items-center gap-2">
+                        Reward settings
+                        <InfoButton label="Set how much each point is worth when customers redeem them in checkout." />
+                      </span>
+                    }
+                    description="Define the value per point for this server."
+                    action={
+                      <Button type="button" className="min-h-10" disabled={actionPending} onClick={() => void handleSaveRules()}>
+                        <Save className="size-4" />
+                        Save Rules
+                      </Button>
+                    }
+                  >
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="point-value">Value per point</Label>
+                        <Input
+                          id="point-value"
+                          value={pointValueMajor}
+                          onChange={(event) => setPointValueMajor(event.target.value)}
+                          placeholder={DEFAULT_POINT_VALUE_MAJOR}
+                        />
+                      </div>
+                      <InfoTip>
+                        Reward value is saved separately from category eligibility so you can tune the value without
+                        changing where points are earned or redeemed.
+                      </InfoTip>
+                    </div>
+                  </Panel>
+                ) : null}
+
+                {activePointsPanel === 'earning-categories' ? (
+                  <Panel
+                    title={
+                      <span className="flex items-center gap-2">
+                        Earning categories
+                        <InfoButton label="Customers only earn points from paid sales in the categories you check here." />
+                      </span>
+                    }
+                    description="Choose which product categories should generate points."
+                    action={
+                      <Button type="button" className="min-h-10" disabled={actionPending} onClick={() => void handleSaveRules()}>
+                        <Save className="size-4" />
+                        Save Rules
+                      </Button>
+                    }
+                  >
                     <div className="space-y-3">
-                      <p className="text-sm font-semibold">Earning categories</p>
                       {categories.length ? (
                         categories.map((category) => (
                           <label
@@ -1204,9 +1460,26 @@ export function PointsSection() {
                         <p className="text-sm text-muted-foreground">Create product categories first.</p>
                       )}
                     </div>
+                  </Panel>
+                ) : null}
 
+                {activePointsPanel === 'redemption-categories' ? (
+                  <Panel
+                    title={
+                      <span className="flex items-center gap-2">
+                        Redemption categories
+                        <InfoButton label="Only the categories selected here will allow points to be spent during checkout." />
+                      </span>
+                    }
+                    description="Choose which categories can accept points as a discount."
+                    action={
+                      <Button type="button" className="min-h-10" disabled={actionPending} onClick={() => void handleSaveRules()}>
+                        <Save className="size-4" />
+                        Save Rules
+                      </Button>
+                    }
+                  >
                     <div className="space-y-3">
-                      <p className="text-sm font-semibold">Redemption categories</p>
                       {categories.length ? (
                         categories.map((category) => (
                           <label
@@ -1230,127 +1503,150 @@ export function PointsSection() {
                         <p className="text-sm text-muted-foreground">Create product categories first.</p>
                       )}
                     </div>
-                  </div>
-                </div>
-              </Panel>
+                  </Panel>
+                ) : null}
 
-              <Panel title="Customer points" description="Search balances, add points, remove points, or reset a customer balance to zero.">
-                <div className="space-y-5">
-                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
-                    <div className="space-y-3">
-                      <Label htmlFor="customer-search">Search customers</Label>
-                      <Input
-                        id="customer-search"
-                        value={search}
-                        onChange={(event) => setSearch(event.target.value)}
-                        placeholder="customer@example.com"
-                      />
-                      {loadingCustomers ? (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Loader2 className="size-4 animate-spin" />
-                          Loading balances...
-                        </div>
-                      ) : null}
-                      <div className="space-y-3">
-                        {customers.length ? (
-                          customers.map((customer) => (
-                            <div
-                              key={customer.emailNormalized}
-                              className="rounded-[1.15rem] border border-border/70 bg-background/70 px-4 py-4"
-                            >
-                              <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                                <div className="min-w-0">
-                                  <p className="truncate font-medium">{customer.emailDisplay}</p>
-                                  <p className="mt-1 text-sm text-muted-foreground">
-                                    Balance {customer.balancePoints} / Reserved {customer.reservedPoints} / Available {customer.availablePoints}
-                                  </p>
-                                </div>
-                                <div className="flex flex-wrap gap-2">
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => setAdjustEmail(customer.emailDisplay)}
-                                  >
-                                    Edit
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() =>
-                                      void adjustCustomerPoints(
-                                        customer.emailDisplay,
-                                        'remove',
-                                        Math.max(0, customer.balancePoints),
-                                      )
-                                    }
-                                  >
-                                    <Trash2 className="size-4" />
-                                    Reset
-                                  </Button>
-                                </div>
-                              </div>
+                {activePointsPanel === 'customer-points' ? (
+                  <Panel
+                    title={
+                      <span className="flex items-center gap-2">
+                        Customer points
+                        <InfoButton label="Search a customer, inspect their balance, then add points, edit their balance, or clear it back to zero." />
+                      </span>
+                    }
+                    description="View, add, edit, and delete customer point balances."
+                  >
+                    <div className="space-y-5">
+                      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
+                        <div className="space-y-3">
+                          <Label htmlFor="customer-search">Search customers</Label>
+                          <Input
+                            id="customer-search"
+                            value={search}
+                            onChange={(event) => setSearch(event.target.value)}
+                            placeholder="customer@example.com"
+                          />
+                          {loadingCustomers ? (
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <Loader2 className="size-4 animate-spin" />
+                              Loading balances...
                             </div>
-                          ))
-                        ) : (
-                          <p className="text-sm text-muted-foreground">No customer balances found for this query.</p>
-                        )}
-                      </div>
-                    </div>
+                          ) : null}
+                          <div className="space-y-3">
+                            {customers.length ? (
+                              customers.map((customer) => (
+                                <div
+                                  key={customer.emailNormalized}
+                                  className="rounded-[1.15rem] border border-border/70 bg-background/70 px-4 py-4"
+                                >
+                                  <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                                    <div className="min-w-0">
+                                      <p className="truncate font-medium">{customer.emailDisplay}</p>
+                                      <p className="mt-1 text-sm text-muted-foreground">
+                                        Balance {customer.balancePoints} / Reserved {customer.reservedPoints} / Available {customer.availablePoints}
+                                      </p>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => prepareCustomerAction(customer, 'add')}
+                                      >
+                                        Add
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => prepareCustomerAction(customer, 'set')}
+                                      >
+                                        Edit
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => prepareCustomerAction(customer, 'clear')}
+                                      >
+                                        Delete
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-sm text-muted-foreground">No customer balances found for this query.</p>
+                            )}
+                          </div>
+                        </div>
 
-                    <div className="space-y-3 rounded-[1.2rem] border border-border/70 bg-background/70 p-4">
-                      <p className="font-semibold">Manual adjustment</p>
-                      <div className="space-y-2">
-                        <Label htmlFor="adjust-email">Customer email</Label>
-                        <Input
-                          id="adjust-email"
-                          value={adjustEmail}
-                          onChange={(event) => setAdjustEmail(event.target.value)}
-                          placeholder="customer@example.com"
-                        />
+                        <div className="space-y-3 rounded-[1.2rem] border border-border/70 bg-background/70 p-4">
+                          <p className="font-semibold">Manage customer points</p>
+                          <div className="space-y-2">
+                            <Label htmlFor="adjust-email">Customer email</Label>
+                            <Input
+                              id="adjust-email"
+                              value={adjustEmail}
+                              onChange={(event) => setAdjustEmail(event.target.value)}
+                              placeholder="customer@example.com"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="adjust-action">Action</Label>
+                            <select
+                              id="adjust-action"
+                              className={nativeSelectClass}
+                              value={adjustAction}
+                              onChange={(event) => setAdjustAction(event.target.value as 'add' | 'set' | 'clear')}
+                            >
+                              <option value="add">Add points</option>
+                              <option value="set">Edit balance</option>
+                              <option value="clear">Delete balance</option>
+                            </select>
+                          </div>
+                          {adjustAction !== 'clear' ? (
+                            <div className="space-y-2">
+                              <Label htmlFor="adjust-points">{adjustAction === 'set' ? 'New balance' : 'Points'}</Label>
+                              <Input
+                                id="adjust-points"
+                                value={adjustPoints}
+                                onChange={(event) => setAdjustPoints(event.target.value)}
+                                placeholder={adjustAction === 'set' ? '0' : '100'}
+                              />
+                            </div>
+                          ) : (
+                            <InfoTip>Delete balance will clear the customer balance back to zero.</InfoTip>
+                          )}
+                          <Button
+                            type="button"
+                            className="min-h-11 w-full"
+                            onClick={() => {
+                              try {
+                                const points = parseCustomerActionPoints();
+                                void adjustCustomerPoints(adjustEmail.trim(), adjustAction, points);
+                              } catch (parseError) {
+                                showFlash(
+                                  'error',
+                                  getMessage(parseError, 'Points must be entered as a whole number.'),
+                                );
+                              }
+                            }}
+                          >
+                            <Gift className="size-4" />
+                            {adjustAction === 'add'
+                              ? 'Add Points'
+                              : adjustAction === 'set'
+                                ? 'Save Balance'
+                                : 'Delete Balance'}
+                          </Button>
+                        </div>
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="adjust-action">Action</Label>
-                        <select
-                          id="adjust-action"
-                          className={nativeSelectClass}
-                          value={adjustAction}
-                          onChange={(event) => setAdjustAction(event.target.value as 'add' | 'remove')}
-                        >
-                          <option value="add">Add points</option>
-                          <option value="remove">Remove points</option>
-                        </select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="adjust-points">Points</Label>
-                        <Input
-                          id="adjust-points"
-                          value={adjustPoints}
-                          onChange={(event) => setAdjustPoints(event.target.value)}
-                          placeholder="100"
-                        />
-                      </div>
-                      <Button
-                        type="button"
-                        className="min-h-11 w-full"
-                        onClick={() => {
-                          try {
-                            const points = parseWholePoints(adjustPoints);
-                            void adjustCustomerPoints(adjustEmail.trim(), adjustAction, points);
-                          } catch (parseError) {
-                            showFlash('error', getMessage(parseError, 'Points must be a positive whole number.'));
-                          }
-                        }}
-                      >
-                        <Gift className="size-4" />
-                        Apply Adjustment
-                      </Button>
                     </div>
-                  </div>
-                </div>
-              </Panel>
-            </>
+                  </Panel>
+                ) : null}
+              </div>
+            </div>
           ) : (
             <InfoTip>Points are currently disabled. Enable the feature to manage earning, redemption, and customer balances.</InfoTip>
           )}
@@ -1560,6 +1856,8 @@ function blankVariant(): PriceOptionDraft {
 export function ProductsSection() {
   const { categories, config, guildId, isLinkedToCurrentTenant, products, refreshProducts, showFlash, tenantId } =
     useDashboardContext();
+  const [activeProductsPanel, setActiveProductsPanel] =
+    useState<(typeof productsMenuItems)[number]['id']>('categories');
   const [categoryName, setCategoryName] = useState('');
   const [categoryRenameTo, setCategoryRenameTo] = useState('');
   const [categoryProductId, setCategoryProductId] = useState<string | null>(null);
@@ -1573,6 +1871,16 @@ export function ProductsSection() {
   const [variants, setVariants] = useState<PriceOptionDraft[]>([]);
   const [variantDraft, setVariantDraft] = useState(blankVariant());
   const [editingVariantIndex, setEditingVariantIndex] = useState<number | null>(null);
+  const draftCategoryOption = categoryName.trim();
+  const productCategoryOptions = [
+    ...categories.map((category) => category.name),
+    ...(
+      draftCategoryOption &&
+      !categories.some((category) => normalizeCategoryKey(category.name) === normalizeCategoryKey(draftCategoryOption))
+        ? [draftCategoryOption]
+        : []
+    ),
+  ];
 
   function resetCategoryEditor() {
     setCategoryName('');
@@ -1597,6 +1905,7 @@ export function ProductsSection() {
       (entry) => normalizeCategoryKey(entry.name) === normalizeCategoryKey(categoryNameValue),
     );
     const product = products.find((entry) => entry.id === category?.productId) ?? null;
+    setActiveProductsPanel('categories');
     setCategoryName(category?.name ?? categoryNameValue);
     setCategoryRenameTo(category?.name ?? categoryNameValue);
     setCategoryProductId(category?.productId ?? null);
@@ -1604,6 +1913,7 @@ export function ProductsSection() {
   }
 
   function editProduct(product: ProductRecord) {
+    setActiveProductsPanel('products');
     setEditingProductId(product.id);
     setProductCategory(product.category);
     setProductName(product.name);
@@ -1675,8 +1985,10 @@ export function ProductsSection() {
 
       showFlash(
         'info',
-        'Category draft prepared. Create the first product in this category to publish the questions.',
+        'Category draft created. Move to Products and select this category to publish the first product with these questions.',
       );
+      setProductCategory(categoryName.trim());
+      setActiveProductsPanel('products');
     } catch (saveError) {
       showFlash('error', getMessage(saveError, 'Failed to save category questions.'));
     }
@@ -1812,8 +2124,25 @@ export function ProductsSection() {
 
       {isLinkedToCurrentTenant ? (
         <div className="space-y-5">
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-            <Panel title="Categories & questions" description="Edit an existing category template, or prepare a new category draft before creating its first product.">
+          <div className="grid gap-5 xl:grid-cols-[17rem_minmax(0,1fr)]">
+            <SectionMenu
+              title="Products Menu"
+              items={productsMenuItems}
+              activeId={activeProductsPanel}
+              onChange={setActiveProductsPanel}
+            />
+
+            <div className="space-y-5">
+            {activeProductsPanel === 'categories' ? (
+            <Panel
+              title={
+                <span className="flex items-center gap-2">
+                  Categories & questions
+                  <InfoButton label="Create the category structure and custom question set here first, then move to Products to build the actual sellable item." />
+                </span>
+              }
+              description="Edit an existing category template, or prepare a new category draft before creating its first product."
+            >
               <div className="space-y-5">
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -1997,29 +2326,56 @@ export function ProductsSection() {
                     <Plus className="size-4" />
                     Add Question
                   </Button>
-                  <Button type="button" className="min-h-11 sm:flex-1" onClick={() => void saveCategoryQuestions()}>
-                    <Save className="size-4" />
-                    Save Questions
-                  </Button>
-                  <Button type="button" variant="outline" className="min-h-11 sm:flex-1" onClick={() => void renameCategory()}>
-                    Rename Category
-                  </Button>
-                </div>
-              </div>
-            </Panel>
+                      <Button type="button" className="min-h-11 sm:flex-1" onClick={() => void saveCategoryQuestions()}>
+                        <Save className="size-4" />
+                        {categoryProductId ? 'Save Questions' : 'Create Category Draft'}
+                      </Button>
+                      {categoryProductId ? (
+                        <Button type="button" variant="outline" className="min-h-11 sm:flex-1" onClick={() => void renameCategory()}>
+                          Rename Category
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                </Panel>
+            ) : null}
 
-            <div className="space-y-5">
-              <Panel title={editingProductId ? 'Edit product' : 'Add product'} description="Create a clean step-by-step product entry with category, description, pricing, and referral reward support.">
+            {activeProductsPanel === 'products' ? (
+            <>
+              <Panel
+                title={
+                  <span className="flex items-center gap-2">
+                    {editingProductId ? 'Edit product' : 'Add product'}
+                    <InfoButton label="Select an existing category or a prepared draft category, then build the product with description, pricing, and optional referral reward." />
+                  </span>
+                }
+                description="Create a clean step-by-step product entry with category, description, pricing, and referral reward support."
+              >
                 <div className="space-y-4">
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
-                      <Label htmlFor="product-category">Category</Label>
-                      <Input
+                      <Label htmlFor="product-category">Select category</Label>
+                      <select
                         id="product-category"
+                        className={nativeSelectClass}
                         value={productCategory}
                         onChange={(event) => setProductCategory(event.target.value)}
-                        placeholder="Boosting"
-                      />
+                        disabled={productCategoryOptions.length === 0}
+                      >
+                        <option value="">
+                          {productCategoryOptions.length ? 'Select category' : 'Create or draft a category first'}
+                        </option>
+                        {productCategoryOptions.map((category) => (
+                          <option key={category} value={category}>
+                            {category === draftCategoryOption &&
+                            !categories.some(
+                              (entry) => normalizeCategoryKey(entry.name) === normalizeCategoryKey(category),
+                            )
+                              ? `${category} (Draft questions ready)`
+                              : category}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="product-name">Product name</Label>
@@ -2031,6 +2387,10 @@ export function ProductsSection() {
                       />
                     </div>
                   </div>
+
+                  {productCategoryOptions.length === 0 ? (
+                    <InfoTip>Build a category first in Categories & Questions, then come back here to select it.</InfoTip>
+                  ) : null}
 
                   <div className="space-y-2">
                     <Label htmlFor="product-description">Description</Label>
@@ -2206,6 +2566,8 @@ export function ProductsSection() {
                   <p className="text-sm text-muted-foreground">No products have been created yet.</p>
                 )}
               </Panel>
+            </>
+            ) : null}
             </div>
           </div>
         </div>

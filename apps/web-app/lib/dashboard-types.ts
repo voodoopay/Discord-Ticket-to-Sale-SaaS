@@ -109,6 +109,7 @@ export type CouponRecord = {
   code: string;
   discountMinor: number;
   active: boolean;
+  allowedCategories: string[];
   allowedProductIds: string[];
   allowedVariantIds: string[];
 };

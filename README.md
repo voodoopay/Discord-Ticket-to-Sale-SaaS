@@ -122,10 +122,10 @@ Copy `.env.example` to `.env` and fill values.
 - A Discord server is now bound to exactly one workspace at a time; reconnecting a server moves it to the current workspace mapping.
 - Main panel navigation is now sidebar-based with dedicated pages for `Overview`, `Settings`, `Payments`, `Coupons`, `Points`, `Referrals`, and `Products`.
 - Overview now exposes live cards for bot status, payment readiness, Telegram status, recent sales, and today’s total sales.
-- Settings now keeps default currency, staff roles, paid-log channel, and Telegram integration together in one page, including add/copy/regenerate Telegram actions when the Telegram feature is enabled.
+- Settings now uses an internal sidebar flow for default currency, staff roles, paid-log channel, and Telegram integration, including add/copy/regenerate Telegram actions when the Telegram feature is enabled.
 - Payments now separates the Voodoo Pay wallet, checkout domain, callback secret rotation, and hosted crypto wallet controls into a dedicated page.
 - Coupons, points, referrals, and Telegram now use persisted feature toggles in `guild_configs`; when disabled, the UI hides those controls and the backend rejects the related actions.
-- Product management now lives in a dedicated catalog page with category question editing, product creation, variation management, and referral reward inputs.
+- Product management now lives in a dedicated catalog page with an internal sidebar for `Categories & Questions` and `Products`, plus category selection in the product builder.
 - Dashboard now includes a Telegram group link command generator for the selected workspace + Discord server.
 - Telegram groups reuse the selected Discord server store configuration instead of duplicating catalog, coupon, points, or integration data.
 - Telegram sales now hand off from the group into a private DM with the bot so product choices, customer answers, coupon codes, and checkout links are no longer exposed to the whole group.
@@ -145,9 +145,9 @@ Copy `.env.example` to `.env` and fill values.
   - `referral log channel` (optional, referral submissions and payout events)
   - `referral thank-you template` for DM placeholders
 - Product variants now support per-variant referral reward amounts in the product builder.
-- Dashboard now includes customer points management (list balances, manual add/remove, search).
+- Dashboard now includes customer points management (list balances, search, manual add, edit/set balance, and clear/delete balance).
 - Workspace deletion is available from dashboard for owner/super-admin cleanup.
-- Coupons can be created, edited, and deleted per server from dashboard (`code`, fixed discount amount, active flag, optional product/variation scope).
+- Coupons can be created, edited, and deleted per server from dashboard (`code`, fixed discount amount, active flag, optional category/product/variation scope).
 - Dashboard keeps the selected workspace/server context and links the selected server to that workspace automatically.
 
 ## Ticket Sale Flow

@@ -76,6 +76,7 @@ describe('feature gate enforcement', () => {
         code: 'WELCOME10',
         discountMinor: 500,
         active: true,
+        allowedCategories: [],
         allowedProductIds: [],
         allowedVariantIds: [],
       },

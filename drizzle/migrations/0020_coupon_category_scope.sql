@@ -1,0 +1,1 @@
+ALTER TABLE `discount_coupons` ADD `allowed_categories` json DEFAULT ('[]') NOT NULL;

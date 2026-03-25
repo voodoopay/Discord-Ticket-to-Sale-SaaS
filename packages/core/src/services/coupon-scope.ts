@@ -1,9 +1,11 @@
 export type CouponScopeConfig = {
+  allowedCategories: string[];
   allowedProductIds: string[];
   allowedVariantIds: string[];
 };
 
 export type CouponScopeLine = {
+  category?: string | null;
   productId: string;
   variantId: string;
   priceMinor: number;
@@ -19,14 +21,17 @@ function toNonNegativeInt(value: number): number {
 
 export function isCouponApplicableToLine(
   scope: CouponScopeConfig,
-  line: { productId: string; variantId: string },
+  line: { category?: string | null; productId: string; variantId: string },
 ): boolean {
+  const categoryKey = line.category?.trim().toLowerCase() ?? '';
+  const categoryKeys = new Set(scope.allowedCategories.map((value) => value.trim().toLowerCase()).filter(Boolean));
   const productIds = new Set(scope.allowedProductIds);
   const variantIds = new Set(scope.allowedVariantIds);
+  const categoryEligible = categoryKeys.size === 0 || (categoryKey.length > 0 && categoryKeys.has(categoryKey));
   const productEligible = productIds.size === 0 || productIds.has(line.productId);
   const variantEligible = variantIds.size === 0 || variantIds.has(line.variantId);
 
-  return productEligible && variantEligible;
+  return categoryEligible && productEligible && variantEligible;
 }
 
 export function computeCouponEligibleSubtotalMinor(
