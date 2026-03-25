@@ -64,7 +64,9 @@ import type {
   PriceOptionDraft,
   ProductRecord,
   QuestionDraft,
+  TenantMemberRole,
   WorkspaceAccessState,
+  WorkspaceMemberCandidateRecord,
   WorkspaceMemberRecord,
 } from '@/lib/dashboard-types';
 import { cn } from '@/lib/utils';
@@ -160,6 +162,10 @@ function getMessage(error: unknown, fallback: string): string {
   }
 
   return fallback;
+}
+
+function formatTenantRole(role: TenantMemberRole): string {
+  return role.charAt(0).toUpperCase() + role.slice(1);
 }
 
 async function copyToClipboard(text: string) {
@@ -317,12 +323,20 @@ function WorkspaceOperationsPanel() {
   } = useDashboardContext();
   const [workspaceAccess, setWorkspaceAccess] = useState<WorkspaceAccessState | null>(null);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
+  const [memberSearch, setMemberSearch] = useState('');
+  const deferredMemberSearch = useDeferredValue(memberSearch);
+  const [memberCandidates, setMemberCandidates] = useState<WorkspaceMemberCandidateRecord[]>([]);
+  const [memberLookupLoading, setMemberLookupLoading] = useState(false);
+  const [memberLookupMessage, setMemberLookupMessage] = useState('Search by username or nickname to invite a server member.');
+  const [selectedCandidate, setSelectedCandidate] = useState<WorkspaceMemberCandidateRecord | null>(null);
+  const [inviteRole, setInviteRole] = useState<'admin' | 'member'>('member');
   const [memberToRemove, setMemberToRemove] = useState<WorkspaceMemberRecord | null>(null);
   const [disconnectGuildOpen, setDisconnectGuildOpen] = useState(false);
   const [disconnectTelegramOpen, setDisconnectTelegramOpen] = useState(false);
-  const [pendingAction, setPendingAction] = useState<'remove-member' | 'disconnect-guild' | 'disconnect-telegram' | null>(
-    null,
-  );
+  const [pendingAction, setPendingAction] = useState<
+    'add-member' | 'remove-member' | 'disconnect-guild' | 'disconnect-telegram' | null
+  >(null);
+  const memberLookupRequestRef = useRef(0);
 
   const loadWorkspaceAccess = useEffectEvent(async (showSpinner: boolean) => {
     if (!isLinkedToCurrentTenant) {
@@ -350,6 +364,110 @@ function WorkspaceOperationsPanel() {
     void loadWorkspaceAccess(true);
   }, [isLinkedToCurrentTenant, loadWorkspaceAccess, tenantId]);
 
+  const searchGuildMembers = useEffectEvent(async (query: string) => {
+    if (!isLinkedToCurrentTenant || !workspaceAccess?.canManageMembers) {
+      setMemberCandidates([]);
+      setSelectedCandidate(null);
+      setMemberLookupLoading(false);
+      setMemberLookupMessage('Only the workspace owner or a super admin can invite members.');
+      return;
+    }
+
+    if (!query) {
+      memberLookupRequestRef.current += 1;
+      setMemberCandidates([]);
+      setSelectedCandidate(null);
+      setMemberLookupLoading(false);
+      setMemberLookupMessage('Search by username or nickname to invite a server member.');
+      return;
+    }
+
+    if (query.length < 2) {
+      memberLookupRequestRef.current += 1;
+      setMemberCandidates([]);
+      setSelectedCandidate(null);
+      setMemberLookupLoading(false);
+      setMemberLookupMessage('Type at least 2 characters to search this Discord server.');
+      return;
+    }
+
+    const requestId = memberLookupRequestRef.current + 1;
+    memberLookupRequestRef.current = requestId;
+    setMemberLookupLoading(true);
+    setMemberLookupMessage('Searching Discord members...');
+
+    try {
+      const response = await dashboardApi<{ candidates: WorkspaceMemberCandidateRecord[] }>(
+        `/api/discord/guilds/${encodeURIComponent(guildId)}/members?tenantId=${encodeURIComponent(tenantId)}&query=${encodeURIComponent(query)}`,
+      );
+
+      if (memberLookupRequestRef.current !== requestId) {
+        return;
+      }
+
+      setMemberCandidates(response.candidates);
+      setSelectedCandidate((current) =>
+        current
+          ? response.candidates.find((candidate) => candidate.discordUserId === current.discordUserId) ?? null
+          : null,
+      );
+      setMemberLookupMessage(
+        response.candidates.length === 0
+          ? 'No matching server members were found for that search.'
+          : 'Choose a server member to grant workspace access.',
+      );
+    } catch (error) {
+      if (memberLookupRequestRef.current !== requestId) {
+        return;
+      }
+
+      setMemberCandidates([]);
+      setSelectedCandidate(null);
+      setMemberLookupMessage(getMessage(error, 'Failed to search Discord members.'));
+    } finally {
+      if (memberLookupRequestRef.current === requestId) {
+        setMemberLookupLoading(false);
+      }
+    }
+  });
+
+  useEffect(() => {
+    void searchGuildMembers(deferredMemberSearch.trim());
+  }, [deferredMemberSearch, guildId, isLinkedToCurrentTenant, searchGuildMembers, tenantId, workspaceAccess?.canManageMembers]);
+
+  function resetInviteComposer() {
+    memberLookupRequestRef.current += 1;
+    setMemberSearch('');
+    setMemberCandidates([]);
+    setSelectedCandidate(null);
+    setInviteRole('member');
+    setMemberLookupLoading(false);
+    setMemberLookupMessage('Search by username or nickname to invite a server member.');
+  }
+
+  async function addMember() {
+    if (!selectedCandidate || selectedCandidate.alreadyInWorkspace) {
+      return;
+    }
+
+    setPendingAction('add-member');
+    try {
+      await dashboardApi<WorkspaceMemberRecord>(`/api/tenants/${encodeURIComponent(tenantId)}/members`, 'POST', {
+        discordUserId: selectedCandidate.discordUserId,
+        username: selectedCandidate.username,
+        avatarUrl: selectedCandidate.avatarUrl,
+        role: inviteRole,
+      });
+      resetInviteComposer();
+      await loadWorkspaceAccess(false);
+      showFlash('success', `${selectedCandidate.displayName} now has ${formatTenantRole(inviteRole)} access.`);
+    } catch (error) {
+      showFlash('error', getMessage(error, 'Failed to add this workspace member.'));
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
   async function removeMember() {
     if (!memberToRemove) {
       return;
@@ -363,6 +481,7 @@ function WorkspaceOperationsPanel() {
       );
       setMemberToRemove(null);
       await loadWorkspaceAccess(false);
+      await searchGuildMembers(deferredMemberSearch.trim());
       showFlash('success', `${memberToRemove.username} was removed from the workspace.`);
     } catch (error) {
       showFlash('error', getMessage(error, 'Failed to remove this workspace member.'));
@@ -408,21 +527,16 @@ function WorkspaceOperationsPanel() {
     return null;
   }
 
-  const currentRoleLabel = workspaceAccess?.currentRole
-    ? workspaceAccess.currentRole.charAt(0).toUpperCase() + workspaceAccess.currentRole.slice(1)
-    : 'Super Admin';
+  const canManageMembers = Boolean(workspaceAccess?.canManageMembers);
+  const currentRoleLabel = workspaceAccess?.currentRole ? formatTenantRole(workspaceAccess.currentRole) : 'Super Admin';
 
   return (
     <>
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
         <Panel
           title="Workspace access"
-          description="Review who can operate this merchant workspace and remove non-owner members when access should be revoked."
-          action={
-            workspaceAccess ? (
-              <Badge variant="outline">{currentRoleLabel}</Badge>
-            ) : null
-          }
+          description="Review active workers, invite new Discord members without manual IDs, and remove non-owner members when access should be revoked."
+          action={workspaceAccess ? <Badge variant="outline">{currentRoleLabel}</Badge> : null}
         >
           {workspaceLoading && !workspaceAccess ? (
             <div className="flex items-center gap-3 text-sm text-muted-foreground">
@@ -430,40 +544,211 @@ function WorkspaceOperationsPanel() {
               Loading workspace members...
             </div>
           ) : workspaceAccess ? (
-            <div className="space-y-3">
-              {workspaceAccess.members.map((member) => (
-                <div
-                  key={member.userId}
-                  className="flex flex-col gap-3 rounded-[1.15rem] border border-border/70 bg-background/70 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-3">
-                      <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-border/70 bg-card/80 text-sm font-semibold text-primary">
-                        {member.username.charAt(0).toUpperCase()}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="truncate font-medium">{member.username}</p>
-                        <p className="truncate text-sm text-muted-foreground">{member.discordUserId}</p>
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(20rem,0.8fr)]">
+              <div className="space-y-3">
+                {workspaceAccess.members.map((member) => (
+                  <div
+                    key={member.userId}
+                    className="flex flex-col gap-3 rounded-[1.15rem] border border-border/70 bg-background/70 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-3">
+                        {member.avatarUrl ? (
+                          <img
+                            src={member.avatarUrl}
+                            alt={`${member.username} avatar`}
+                            className="size-10 shrink-0 rounded-full border border-border/70 object-cover"
+                          />
+                        ) : (
+                          <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-border/70 bg-card/80 text-sm font-semibold text-primary">
+                            {member.username.charAt(0).toUpperCase()}
+                          </span>
+                        )}
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">{member.username}</p>
+                          <p className="truncate text-sm text-muted-foreground">{member.discordUserId}</p>
+                        </div>
                       </div>
                     </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="outline">{formatTenantRole(member.role)}</Badge>
+                      {member.removable ? (
+                        <Button type="button" size="sm" variant="outline" onClick={() => setMemberToRemove(member)}>
+                          <Trash2 className="size-4" />
+                          Remove
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="outline">{member.role}</Badge>
-                    {member.removable ? (
-                      <Button type="button" size="sm" variant="outline" onClick={() => setMemberToRemove(member)}>
-                        <Trash2 className="size-4" />
-                        Remove
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
+                ))}
 
-              {!workspaceAccess.canManageMembers ? (
-                <InfoTip>
-                  Only the workspace owner or a super admin can remove members. Owners are always protected from removal.
-                </InfoTip>
-              ) : null}
+                {!canManageMembers ? (
+                  <InfoTip>
+                    Only the workspace owner or a super admin can invite or remove members. Owners are always protected from removal.
+                  </InfoTip>
+                ) : null}
+              </div>
+
+              <div className="rounded-[1.2rem] border border-border/70 bg-background/60 p-4">
+                <div className="space-y-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-medium">Invite member</p>
+                      <p className="text-sm leading-6 text-muted-foreground">
+                        Search the connected Discord server, pick an access role, and add the worker without pasting Discord IDs.
+                      </p>
+                    </div>
+                    <InfoButton label="Only the workspace owner or a super admin can invite members. Search uses the currently connected Discord server and only returns matching human members." />
+                  </div>
+
+                  {canManageMembers ? (
+                    <div className="space-y-4 pt-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="workspace-member-search">Search Discord member</Label>
+                        <Input
+                          id="workspace-member-search"
+                          value={memberSearch}
+                          onChange={(event) => {
+                            setMemberSearch(event.target.value);
+                            setSelectedCandidate(null);
+                          }}
+                          placeholder="Search username or nickname"
+                          autoComplete="off"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Start typing a username or nickname from <strong>{guildName}</strong>.
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="workspace-member-role">Workspace role</Label>
+                        <select
+                          id="workspace-member-role"
+                          className={nativeSelectClass}
+                          value={inviteRole}
+                          onChange={(event) => setInviteRole(event.target.value as 'admin' | 'member')}
+                        >
+                          <option value="member">Member</option>
+                          <option value="admin">Admin</option>
+                        </select>
+                      </div>
+
+                      <div className="rounded-[1.1rem] border border-border/70 bg-card/70 p-3">
+                        {memberLookupLoading ? (
+                          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                            <Loader2 className="size-4 animate-spin" />
+                            Searching Discord members...
+                          </div>
+                        ) : memberCandidates.length ? (
+                          <div className="space-y-2">
+                            {memberCandidates.map((candidate) => {
+                              const selected = selectedCandidate?.discordUserId === candidate.discordUserId;
+                              return (
+                                <button
+                                  key={candidate.discordUserId}
+                                  type="button"
+                                  className={cn(
+                                    'w-full rounded-[1rem] border px-3 py-3 text-left transition',
+                                    selected
+                                      ? 'border-primary/45 bg-primary/10'
+                                      : 'border-border/70 bg-background/80 hover:border-primary/25 hover:bg-background',
+                                  )}
+                                  onClick={() => setSelectedCandidate(candidate)}
+                                >
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div className="flex min-w-0 items-center gap-3">
+                                      {candidate.avatarUrl ? (
+                                        <img
+                                          src={candidate.avatarUrl}
+                                          alt={`${candidate.displayName} avatar`}
+                                          className="size-10 shrink-0 rounded-full border border-border/70 object-cover"
+                                        />
+                                      ) : (
+                                        <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-border/70 bg-card/80 text-sm font-semibold text-primary">
+                                          {candidate.displayName.charAt(0).toUpperCase()}
+                                        </span>
+                                      )}
+                                      <div className="min-w-0">
+                                        <p className="truncate font-medium">{candidate.displayName}</p>
+                                        <p className="truncate text-sm text-muted-foreground">{candidate.username}</p>
+                                      </div>
+                                    </div>
+                                    <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                                      {candidate.alreadyInWorkspace ? (
+                                        <Badge variant="outline">
+                                          Already {candidate.currentRole ? formatTenantRole(candidate.currentRole) : 'Added'}
+                                        </Badge>
+                                      ) : null}
+                                      {selected ? <Badge variant="outline">Selected</Badge> : null}
+                                    </div>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <p className="text-sm leading-6 text-muted-foreground">{memberLookupMessage}</p>
+                        )}
+                      </div>
+
+                      {selectedCandidate ? (
+                        <div className="rounded-[1.1rem] border border-border/70 bg-background/70 p-4">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <p className="font-medium">{selectedCandidate.displayName}</p>
+                              <p className="text-sm text-muted-foreground">{selectedCandidate.discordUserId}</p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <Badge variant="outline">{formatTenantRole(inviteRole)}</Badge>
+                              {selectedCandidate.alreadyInWorkspace ? (
+                                <Badge variant="outline">
+                                  Existing {selectedCandidate.currentRole ? formatTenantRole(selectedCandidate.currentRole) : 'Member'}
+                                </Badge>
+                              ) : null}
+                            </div>
+                          </div>
+                          <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                            {selectedCandidate.alreadyInWorkspace
+                              ? 'This Discord user already has workspace access. Remove them first if you need to reset their access.'
+                              : inviteRole === 'admin'
+                                ? 'Admins can manage merchant configuration, Telegram disconnect, and most dashboard flows inside this workspace.'
+                                : 'Members can access the merchant workspace, review data, and use allowed day-to-day dashboard tools.'}
+                          </p>
+                        </div>
+                      ) : null}
+
+                      <div className="flex flex-col gap-3 sm:flex-row">
+                        <Button
+                          type="button"
+                          className="min-h-11 sm:flex-1"
+                          disabled={!selectedCandidate || selectedCandidate.alreadyInWorkspace || pendingAction === 'add-member'}
+                          onClick={() => void addMember()}
+                        >
+                          {pendingAction === 'add-member' ? (
+                            <Loader2 className="size-4 animate-spin" />
+                          ) : (
+                            <Plus className="size-4" />
+                          )}
+                          {pendingAction === 'add-member' ? 'Adding...' : 'Add Workspace Member'}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="min-h-11 sm:flex-1"
+                          disabled={!memberSearch && !selectedCandidate && memberCandidates.length === 0}
+                          onClick={resetInviteComposer}
+                        >
+                          Reset
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="pt-3">
+                      <InfoTip>Invite controls appear only for the workspace owner or a super admin.</InfoTip>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">Workspace access controls are unavailable right now.</p>

@@ -194,6 +194,19 @@ export class TenantRepository {
       });
   }
 
+  public async createTenantMember(input: {
+    tenantId: string;
+    userId: string;
+    role: 'admin' | 'member';
+  }): Promise<void> {
+    await this.db.insert(tenantMembers).values({
+      id: ulid(),
+      tenantId: input.tenantId,
+      userId: input.userId,
+      role: input.role,
+    });
+  }
+
   public async listAllTenants(): Promise<TenantRecord[]> {
     const rows = await this.db.query.tenants.findMany({
       orderBy: [desc(tenants.createdAt)],

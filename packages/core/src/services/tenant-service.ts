@@ -165,6 +165,91 @@ export class TenantService {
     }
   }
 
+  public async addTenantMember(
+    actor: ActorContext,
+    input: {
+      tenantId: string;
+      discordUserId: string;
+      username: string;
+      avatarUrl: string | null;
+      role: 'admin' | 'member';
+    },
+  ): Promise<
+    Result<
+      {
+        userId: string;
+        discordUserId: string;
+        username: string;
+        avatarUrl: string | null;
+        role: 'admin' | 'member';
+      },
+      AppError
+    >
+  > {
+    try {
+      if (!actor.isSuperAdmin) {
+        const access = await this.assertTenantAccess(actor, input.tenantId, 'owner');
+        if (access.isErr()) {
+          return err(access.error);
+        }
+      }
+
+      const discordUserId = input.discordUserId.trim();
+      const username = input.username.trim();
+      const avatarUrl = input.avatarUrl?.trim() ? input.avatarUrl.trim() : null;
+
+      if (!discordUserId) {
+        return err(new AppError('TENANT_MEMBER_DISCORD_ID_REQUIRED', 'Select a Discord user to add.', 422));
+      }
+
+      if (!username) {
+        return err(new AppError('TENANT_MEMBER_USERNAME_REQUIRED', 'Select a valid Discord user to add.', 422));
+      }
+
+      if (input.role !== 'admin' && input.role !== 'member') {
+        return err(new AppError('TENANT_MEMBER_ROLE_INVALID', 'Select either admin or member access.', 422));
+      }
+
+      const user = await this.userRepository.upsertDiscordUser({
+        discordUserId,
+        username,
+        avatarUrl,
+      });
+
+      const existingRole = await this.userRepository.getMemberRole({
+        tenantId: input.tenantId,
+        userId: user.id,
+      });
+      if (existingRole) {
+        return err(
+          new AppError(
+            'TENANT_MEMBER_EXISTS',
+            existingRole === 'owner'
+              ? 'That Discord user already owns this workspace.'
+              : 'That Discord user already has workspace access.',
+            409,
+          ),
+        );
+      }
+
+      await this.tenantRepository.createTenantMember({
+        tenantId: input.tenantId,
+        userId: user.id,
+        role: input.role,
+      });
+
+      return ok({
+        userId: user.id,
+        discordUserId: user.discordUserId,
+        username: user.username,
+        avatarUrl: user.avatarUrl,
+        role: input.role,
+      });
+    } catch (error) {
+      return err(fromUnknownError(error));
+    }
+  }
+
   public async listTenants(actor: ActorContext): Promise<Result<Array<{ id: string; name: string; status: string }>, AppError>> {
     try {
       if (actor.isSuperAdmin) {

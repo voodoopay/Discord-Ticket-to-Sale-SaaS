@@ -68,6 +68,59 @@ describe('tenant service destructive controls', () => {
     ]);
   });
 
+  it('lets a workspace owner add a worker with the requested role', async () => {
+    const service = new TenantService();
+
+    vi.spyOn((service as any).userRepository, 'getMemberRole')
+      .mockResolvedValueOnce('owner')
+      .mockResolvedValueOnce(null);
+    vi.spyOn((service as any).userRepository, 'upsertDiscordUser').mockResolvedValue({
+      id: 'user-2',
+      discordUserId: 'discord-user-2',
+      username: 'worker-user',
+      avatarUrl: 'https://cdn.discordapp.com/avatars/discord-user-2/avatar.png',
+    });
+    const createTenantMember = vi.spyOn((service as any).tenantRepository, 'createTenantMember').mockResolvedValue(undefined);
+
+    const result = await service.addTenantMember(makeSession(), {
+      tenantId: 'tenant-1',
+      discordUserId: 'discord-user-2',
+      username: 'worker-user',
+      avatarUrl: 'https://cdn.discordapp.com/avatars/discord-user-2/avatar.png',
+      role: 'admin',
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(createTenantMember).toHaveBeenCalledWith({
+      tenantId: 'tenant-1',
+      userId: 'user-2',
+      role: 'admin',
+    });
+  });
+
+  it('blocks non-owner tenant members from adding workers', async () => {
+    const service = new TenantService();
+
+    vi.spyOn((service as any).userRepository, 'getMemberRole').mockResolvedValue('admin');
+    const createTenantMember = vi.spyOn((service as any).tenantRepository, 'createTenantMember');
+
+    const result = await service.addTenantMember(makeSession(), {
+      tenantId: 'tenant-1',
+      discordUserId: 'discord-user-2',
+      username: 'worker-user',
+      avatarUrl: null,
+      role: 'member',
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) {
+      return;
+    }
+
+    expect(result.error.code).toBe('TENANT_ROLE_DENIED');
+    expect(createTenantMember).not.toHaveBeenCalled();
+  });
+
   it('blocks owner removal even for a workspace owner', async () => {
     const service = new TenantService();
 

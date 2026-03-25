@@ -210,6 +210,15 @@ export type WorkspaceMemberRecord = {
   removable: boolean;
 };
 
+export type WorkspaceMemberCandidateRecord = {
+  discordUserId: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+  alreadyInWorkspace: boolean;
+  currentRole: TenantMemberRole | null;
+};
+
 export type WorkspaceAccessState = {
   currentRole: TenantMemberRole | null;
   members: WorkspaceMemberRecord[];

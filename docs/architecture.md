@@ -5,6 +5,7 @@
 1. `web-app`
 - Hosts dashboard pages and API/webhook routes.
 - Handles Discord OAuth and session cookie auth.
+- Manages workspace member invites/removals plus Discord/Telegram connection controls from the dashboard.
 - Runs Woo webhook receiver and enqueue/retry logic.
 
 2. `bot-worker`

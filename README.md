@@ -151,7 +151,7 @@ Copy `.env.example` to `.env` and fill values.
 - Dashboard now includes customer points management (list balances, search, manual add, edit/set balance, and clear/delete balance).
 - Workspace deletion is available from dashboard for owner/super-admin cleanup.
 - Super-admin launchpad controls can now permanently delete a merchant workspace with a typed confirmation step.
-- Overview now includes workspace member access controls so owners can remove non-owner workers from a merchant workspace.
+- Overview now includes workspace member access controls so owners can search Discord server members, invite them as `admin` or `member`, and remove non-owner workers from a merchant workspace.
 - Overview now includes connection controls to disconnect a linked Telegram chat or fully disconnect the current Discord server from the selected merchant workspace with confirmation prompts.
 - Coupons can be created, edited, and deleted per server from dashboard (`code`, fixed discount amount, active flag, optional category/product/variation scope).
 - Dashboard keeps the selected workspace/server context and links the selected server to that workspace automatically.
