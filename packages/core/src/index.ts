@@ -33,6 +33,8 @@ export * from './services/auth-service.js';
 export * from './services/authorization-service.js';
 export * from './services/coupon-service.js';
 export * from './services/coupon-scope.js';
+export * from './services/dashboard-service.js';
+export * from './services/guild-feature-service.js';
 export * from './services/integration-service.js';
 export * from './services/join-gate-access-service.js';
 export * from './services/join-gate-service.js';

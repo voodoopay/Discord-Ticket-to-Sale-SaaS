@@ -1,7 +1,8 @@
-import { TelegramLinkRepository, type TelegramChatLinkRecord } from '@voodoo/core';
+import { TelegramLinkRepository, TenantRepository, type TelegramChatLinkRecord } from '@voodoo/core';
 import type { Api } from 'grammy';
 
 const telegramLinkRepository = new TelegramLinkRepository();
+const tenantRepository = new TenantRepository();
 
 export type LinkedTelegramStore = TelegramChatLinkRecord;
 export type TelegramCommandUser = {
@@ -146,7 +147,20 @@ export function canTelegramUserAccessSaleDraft(input: {
 }
 
 export async function getLinkedStoreForChat(chatId: string): Promise<LinkedTelegramStore | null> {
-  return telegramLinkRepository.getByChatId(chatId);
+  const linkedStore = await telegramLinkRepository.getByChatId(chatId);
+  if (!linkedStore) {
+    return null;
+  }
+
+  const config = await tenantRepository.getGuildConfig({
+    tenantId: linkedStore.tenantId,
+    guildId: linkedStore.guildId,
+  });
+  if (!config?.telegramEnabled) {
+    return null;
+  }
+
+  return linkedStore;
 }
 
 export async function isTelegramChatAdmin(

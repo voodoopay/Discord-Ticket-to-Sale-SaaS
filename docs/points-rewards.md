@@ -8,7 +8,11 @@
 
 ## Merchant Setup
 
-In dashboard, expand **Sales Settings**:
+In the dashboard:
+
+1. Open `/dashboard`, select the workspace and Discord server, then enter the server panel.
+2. Open the **Points** page in the sidebar.
+3. Enable the feature if needed, then configure:
 
 - Set `Value of 1 point` (major currency input, stored as minor integer).
   - This controls redemption value (discount per point), not how many points are earned per 1.00 spent.
@@ -18,7 +22,7 @@ In dashboard, expand **Sales Settings**:
 
 ## Customer Management
 
-Inside the **Sales Settings** panel, the **Customer Points** area supports:
+Inside the **Points** page, the **Customer Points** area supports:
 
 - List customer emails with `balance`, `reserved`, and `available` points.
 - Search by email.

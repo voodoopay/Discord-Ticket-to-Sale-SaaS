@@ -57,6 +57,10 @@ export async function PATCH(
       paidLogChannelId: string | null;
       staffRoleIds: string[];
       defaultCurrency: string;
+      couponsEnabled?: boolean;
+      pointsEnabled?: boolean;
+      referralsEnabled?: boolean;
+      telegramEnabled?: boolean;
       tipEnabled?: boolean;
       pointsEarnCategoryKeys?: string[];
       pointsRedeemCategoryKeys?: string[];
@@ -81,6 +85,10 @@ export async function PATCH(
       paidLogChannelId: body.paidLogChannelId,
       staffRoleIds: body.staffRoleIds,
       defaultCurrency: body.defaultCurrency,
+      couponsEnabled: body.couponsEnabled ?? true,
+      pointsEnabled: body.pointsEnabled ?? true,
+      referralsEnabled: body.referralsEnabled ?? true,
+      telegramEnabled: body.telegramEnabled ?? false,
       tipEnabled: body.tipEnabled ?? false,
       pointsEarnCategoryKeys: body.pointsEarnCategoryKeys ?? [],
       pointsRedeemCategoryKeys: body.pointsRedeemCategoryKeys ?? [],

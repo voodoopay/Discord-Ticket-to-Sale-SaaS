@@ -205,6 +205,10 @@ export class TenantService {
       paidLogChannelId: string | null;
       staffRoleIds: string[];
       defaultCurrency: string;
+      couponsEnabled: boolean;
+      pointsEnabled: boolean;
+      referralsEnabled: boolean;
+      telegramEnabled: boolean;
       tipEnabled: boolean;
       pointsEarnCategoryKeys: string[];
       pointsRedeemCategoryKeys: string[];
@@ -226,6 +230,10 @@ export class TenantService {
     paidLogChannelId: string | null;
     staffRoleIds: string[];
     defaultCurrency: string;
+    couponsEnabled: boolean;
+    pointsEnabled: boolean;
+    referralsEnabled: boolean;
+    telegramEnabled: boolean;
     tipEnabled: boolean;
     pointsEarnCategoryKeys: string[];
     pointsRedeemCategoryKeys: string[];
@@ -292,6 +300,10 @@ export class TenantService {
         paidLogChannelId: config.paidLogChannelId,
         staffRoleIds: config.staffRoleIds,
         defaultCurrency: config.defaultCurrency,
+        couponsEnabled: config.couponsEnabled,
+        pointsEnabled: config.pointsEnabled,
+        referralsEnabled: config.referralsEnabled,
+        telegramEnabled: config.telegramEnabled,
         tipEnabled: config.tipEnabled,
         pointsEarnCategoryKeys: config.pointsEarnCategoryKeys,
         pointsRedeemCategoryKeys: config.pointsRedeemCategoryKeys,
@@ -323,6 +335,10 @@ export class TenantService {
         paidLogChannelId: string | null;
         staffRoleIds: string[];
         defaultCurrency: string;
+        couponsEnabled: boolean;
+        pointsEnabled: boolean;
+        referralsEnabled: boolean;
+        telegramEnabled: boolean;
         tipEnabled: boolean;
         pointsEarnCategoryKeys: string[];
         pointsRedeemCategoryKeys: string[];
@@ -358,6 +374,10 @@ export class TenantService {
         paidLogChannelId: config.paidLogChannelId,
         staffRoleIds: config.staffRoleIds,
         defaultCurrency: config.defaultCurrency,
+        couponsEnabled: config.couponsEnabled,
+        pointsEnabled: config.pointsEnabled,
+        referralsEnabled: config.referralsEnabled,
+        telegramEnabled: config.telegramEnabled,
         tipEnabled: config.tipEnabled,
         pointsEarnCategoryKeys: config.pointsEarnCategoryKeys,
         pointsRedeemCategoryKeys: config.pointsRedeemCategoryKeys,

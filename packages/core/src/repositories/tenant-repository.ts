@@ -41,6 +41,10 @@ export type GuildConfigRecord = {
   paidLogChannelId: string | null;
   staffRoleIds: string[];
   defaultCurrency: string;
+  couponsEnabled: boolean;
+  pointsEnabled: boolean;
+  referralsEnabled: boolean;
+  telegramEnabled: boolean;
   tipEnabled: boolean;
   pointsEarnCategoryKeys: string[];
   pointsRedeemCategoryKeys: string[];
@@ -238,6 +242,10 @@ export class TenantRepository {
           paidLogChannelId: null,
           staffRoleIds: [],
           defaultCurrency: 'GBP',
+          couponsEnabled: true,
+          pointsEnabled: true,
+          referralsEnabled: true,
+          telegramEnabled: false,
           tipEnabled: false,
           pointsEarnCategoryKeys: [],
           pointsRedeemCategoryKeys: [],
@@ -339,6 +347,10 @@ export class TenantRepository {
       paidLogChannelId: row.paidLogChannelId,
       staffRoleIds: row.staffRoleIds,
       defaultCurrency: row.defaultCurrency,
+      couponsEnabled: row.couponsEnabled,
+      pointsEnabled: row.pointsEnabled,
+      referralsEnabled: row.referralsEnabled,
+      telegramEnabled: row.telegramEnabled,
       tipEnabled: row.tipEnabled,
       pointsEarnCategoryKeys: row.pointsEarnCategoryKeys,
       pointsRedeemCategoryKeys: row.pointsRedeemCategoryKeys,
@@ -367,6 +379,10 @@ export class TenantRepository {
     paidLogChannelId: string | null;
     staffRoleIds: string[];
     defaultCurrency: string;
+    couponsEnabled: boolean;
+    pointsEnabled: boolean;
+    referralsEnabled: boolean;
+    telegramEnabled: boolean;
     tipEnabled: boolean;
     pointsEarnCategoryKeys: string[];
     pointsRedeemCategoryKeys: string[];
@@ -425,6 +441,10 @@ export class TenantRepository {
           paidLogChannelId: input.paidLogChannelId,
           staffRoleIds: input.staffRoleIds,
           defaultCurrency: input.defaultCurrency,
+          couponsEnabled: input.couponsEnabled,
+          pointsEnabled: input.pointsEnabled,
+          referralsEnabled: input.referralsEnabled,
+          telegramEnabled: input.telegramEnabled,
           tipEnabled: input.tipEnabled,
           pointsEarnCategoryKeys: input.pointsEarnCategoryKeys,
           pointsRedeemCategoryKeys: input.pointsRedeemCategoryKeys,
@@ -455,6 +475,10 @@ export class TenantRepository {
         paidLogChannelId: input.paidLogChannelId,
         staffRoleIds: input.staffRoleIds,
         defaultCurrency: input.defaultCurrency,
+        couponsEnabled: input.couponsEnabled,
+        pointsEnabled: input.pointsEnabled,
+        referralsEnabled: input.referralsEnabled,
+        telegramEnabled: input.telegramEnabled,
         tipEnabled: input.tipEnabled,
         pointsEarnCategoryKeys: input.pointsEarnCategoryKeys,
         pointsRedeemCategoryKeys: input.pointsRedeemCategoryKeys,
@@ -494,6 +518,10 @@ export class TenantRepository {
       paidLogChannelId: input.paidLogChannelId,
       staffRoleIds: input.staffRoleIds,
       defaultCurrency: input.defaultCurrency,
+      couponsEnabled: input.couponsEnabled,
+      pointsEnabled: input.pointsEnabled,
+      referralsEnabled: input.referralsEnabled,
+      telegramEnabled: input.telegramEnabled,
       tipEnabled: input.tipEnabled,
       pointsEarnCategoryKeys: input.pointsEarnCategoryKeys,
       pointsRedeemCategoryKeys: input.pointsRedeemCategoryKeys,
@@ -522,6 +550,10 @@ export class TenantRepository {
       paidLogChannelId: input.paidLogChannelId,
       staffRoleIds: input.staffRoleIds,
       defaultCurrency: input.defaultCurrency,
+      couponsEnabled: input.couponsEnabled,
+      pointsEnabled: input.pointsEnabled,
+      referralsEnabled: input.referralsEnabled,
+      telegramEnabled: input.telegramEnabled,
       tipEnabled: input.tipEnabled,
       pointsEarnCategoryKeys: input.pointsEarnCategoryKeys,
       pointsRedeemCategoryKeys: input.pointsRedeemCategoryKeys,

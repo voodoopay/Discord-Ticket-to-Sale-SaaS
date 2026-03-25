@@ -8,6 +8,7 @@ import { PointsRepository } from '../repositories/points-repository.js';
 import type { SessionPayload } from '../security/session-token.js';
 import { resolveOrderSessionCustomerEmail } from '../utils/customer-email.js';
 import { AuthorizationService } from './authorization-service.js';
+import { GuildFeatureService } from './guild-feature-service.js';
 
 const emailSchema = z.string().trim().min(3).max(320).email();
 const manualAdjustSchema = z.object({
@@ -32,6 +33,7 @@ export class PointsService {
   private readonly pointsRepository = new PointsRepository();
   private readonly orderRepository = new OrderRepository();
   private readonly authorizationService = new AuthorizationService();
+  private readonly guildFeatureService = new GuildFeatureService();
 
   public normalizeEmail(email: string): Result<NormalizedEmail, AppError> {
     const parsed = emailSchema.safeParse(email);
@@ -52,6 +54,15 @@ export class PointsService {
     email: string;
   }): Promise<Result<PointsBalanceView, AppError>> {
     try {
+      const featureCheck = await this.guildFeatureService.ensureFeatureEnabled({
+        tenantId: input.tenantId,
+        guildId: input.guildId,
+        feature: 'points',
+      });
+      if (featureCheck.isErr()) {
+        return err(featureCheck.error);
+      }
+
       const normalized = this.normalizeEmail(input.email);
       if (normalized.isErr()) {
         return err(normalized.error);
@@ -155,6 +166,15 @@ export class PointsService {
         return err(guildCheck.error);
       }
 
+      const featureCheck = await this.guildFeatureService.ensureFeatureEnabled({
+        tenantId: input.tenantId,
+        guildId: input.guildId,
+        feature: 'points',
+      });
+      if (featureCheck.isErr()) {
+        return err(featureCheck.error);
+      }
+
       const released = await this.releaseExpiredReservations({
         tenantId: input.tenantId,
         guildId: input.guildId,
@@ -209,6 +229,15 @@ export class PointsService {
       });
       if (guildCheck.isErr()) {
         return err(guildCheck.error);
+      }
+
+      const featureCheck = await this.guildFeatureService.ensureFeatureEnabled({
+        tenantId: input.tenantId,
+        guildId: input.guildId,
+        feature: 'points',
+      });
+      if (featureCheck.isErr()) {
+        return err(featureCheck.error);
       }
 
       const normalized = this.normalizeEmail(input.email);

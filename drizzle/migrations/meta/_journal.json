@@ -134,6 +134,13 @@
       "when": 1774006024889,
       "tag": "0018_add_sports_worker",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "5",
+      "when": 1774461316711,
+      "tag": "0019_rapid_earthquake",
+      "breakpoints": true
     }
   ]
 }

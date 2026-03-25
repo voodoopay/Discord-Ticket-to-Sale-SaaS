@@ -6,6 +6,7 @@ import type { SessionPayload } from '../security/session-token.js';
 import { CouponRepository } from '../repositories/coupon-repository.js';
 import { ProductRepository } from '../repositories/product-repository.js';
 import { AuthorizationService } from './authorization-service.js';
+import { GuildFeatureService } from './guild-feature-service.js';
 
 const idListSchema = z
   .array(z.string().trim().min(1).max(64))
@@ -30,6 +31,7 @@ export class CouponService {
   private readonly couponRepository = new CouponRepository();
   private readonly productRepository = new ProductRepository();
   private readonly authorizationService = new AuthorizationService();
+  private readonly guildFeatureService = new GuildFeatureService();
 
   public async listCoupons(
     actor: SessionPayload,
@@ -107,6 +109,15 @@ export class CouponService {
         return err(guildCheck.error);
       }
 
+      const featureCheck = await this.guildFeatureService.ensureFeatureEnabled({
+        tenantId: input.tenantId,
+        guildId: input.guildId,
+        feature: 'coupons',
+      });
+      if (featureCheck.isErr()) {
+        return err(featureCheck.error);
+      }
+
       const parsed = couponPayloadSchema.safeParse(input.coupon);
       if (!parsed.success) {
         return err(validationError(parsed.error.issues));
@@ -176,6 +187,15 @@ export class CouponService {
         return err(guildCheck.error);
       }
 
+      const featureCheck = await this.guildFeatureService.ensureFeatureEnabled({
+        tenantId: input.tenantId,
+        guildId: input.guildId,
+        feature: 'coupons',
+      });
+      if (featureCheck.isErr()) {
+        return err(featureCheck.error);
+      }
+
       const parsed = couponPayloadSchema.safeParse(input.coupon);
       if (!parsed.success) {
         return err(validationError(parsed.error.issues));
@@ -237,6 +257,15 @@ export class CouponService {
       const guildCheck = await this.authorizationService.ensureGuildBoundToTenant(input);
       if (guildCheck.isErr()) {
         return err(guildCheck.error);
+      }
+
+      const featureCheck = await this.guildFeatureService.ensureFeatureEnabled({
+        tenantId: input.tenantId,
+        guildId: input.guildId,
+        feature: 'coupons',
+      });
+      if (featureCheck.isErr()) {
+        return err(featureCheck.error);
       }
 
       await this.couponRepository.delete(input);

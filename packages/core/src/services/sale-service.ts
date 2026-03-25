@@ -15,6 +15,7 @@ import { signVoodooCallbackToken } from '../security/voodoo-callback-token.js';
 import { resolveOrderSessionCustomerEmail } from '../utils/customer-email.js';
 import { AuthorizationService } from './authorization-service.js';
 import { computeCouponEligibleSubtotalMinor } from './coupon-scope.js';
+import { GuildFeatureService } from './guild-feature-service.js';
 import { IntegrationService, normalizeCheckoutDomain } from './integration-service.js';
 import {
   calculatePointsOrderTotals,
@@ -210,6 +211,7 @@ export class SaleService {
   private readonly ticketMetadataRepository = new TicketMetadataRepository();
   private readonly authorizationService = new AuthorizationService();
   private readonly pointsService = new PointsService();
+  private readonly guildFeatureService = new GuildFeatureService();
 
   public async getSaleOptions(input: {
     tenantId: string;
@@ -785,6 +787,15 @@ export class SaleService {
       return ok(0);
     }
 
+    const featureCheck = await this.guildFeatureService.ensureFeatureEnabled({
+      tenantId: input.tenantId,
+      guildId: input.guildId,
+      feature: 'coupons',
+    });
+    if (featureCheck.isErr()) {
+      return err(featureCheck.error);
+    }
+
     const coupon = await this.couponRepository.getByCode({
       tenantId: input.tenantId,
       guildId: input.guildId,
@@ -825,10 +836,14 @@ export class SaleService {
 
     return ok({
       pointValueMinor: Math.max(1, config.pointValueMinor),
-      earnCategoryKeys: normalizeCategoryKeyList(config.pointsEarnCategoryKeys),
-      redeemCategoryKeys: normalizeCategoryKeyList(config.pointsRedeemCategoryKeys),
-      referralRewardMinor: Math.max(0, config.referralRewardMinor),
-      referralRewardCategoryKeys: normalizeCategoryKeyList(config.referralRewardCategoryKeys),
+      earnCategoryKeys: config.pointsEnabled ? normalizeCategoryKeyList(config.pointsEarnCategoryKeys) : [],
+      redeemCategoryKeys: config.pointsEnabled ? normalizeCategoryKeyList(config.pointsRedeemCategoryKeys) : [],
+      referralRewardMinor:
+        config.pointsEnabled && config.referralsEnabled ? Math.max(0, config.referralRewardMinor) : 0,
+      referralRewardCategoryKeys:
+        config.pointsEnabled && config.referralsEnabled
+          ? normalizeCategoryKeyList(config.referralRewardCategoryKeys)
+          : [],
     });
   }
 

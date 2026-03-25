@@ -117,25 +117,22 @@ Copy `.env.example` to `.env` and fill values.
 - Login endpoint: `GET /api/auth/discord/login`
 - Callback endpoint: `GET /api/auth/discord/callback`
 - Dashboard page: `/dashboard`
-- Dashboard now loads Discord servers from OAuth (manage-server capable guilds), auto-checks bot installation, and auto-links selected server to workspace.
+- Dashboard now uses a launchpad flow: login -> choose workspace -> choose Discord server -> open `/dashboard/<tenantId>/<guildId>`.
+- Dashboard loads Discord servers from OAuth (manage-server capable guilds), checks bot installation, and links the selected server to the chosen workspace on entry when needed.
 - A Discord server is now bound to exactly one workspace at a time; reconnecting a server moves it to the current workspace mapping.
+- Main panel navigation is now sidebar-based with dedicated pages for `Overview`, `Settings`, `Payments`, `Coupons`, `Points`, `Referrals`, and `Products`.
+- Overview now exposes live cards for bot status, payment readiness, Telegram status, recent sales, and today’s total sales.
+- Settings now keeps default currency, staff roles, paid-log channel, and Telegram integration together in one page, including add/copy/regenerate Telegram actions when the Telegram feature is enabled.
+- Payments now separates the Voodoo Pay wallet, checkout domain, callback secret rotation, and hosted crypto wallet controls into a dedicated page.
+- Coupons, points, referrals, and Telegram now use persisted feature toggles in `guild_configs`; when disabled, the UI hides those controls and the backend rejects the related actions.
+- Product management now lives in a dedicated catalog page with category question editing, product creation, variation management, and referral reward inputs.
 - Dashboard now includes a Telegram group link command generator for the selected workspace + Discord server.
 - Telegram groups reuse the selected Discord server store configuration instead of duplicating catalog, coupon, points, or integration data.
 - Telegram sales now hand off from the group into a private DM with the bot so product choices, customer answers, coupon codes, and checkout links are no longer exposed to the whole group.
 - Telegram checkout buttons now use the exact provider checkout URLs from the sale session, with no Telegram-specific wrapper around the payment link.
 - Server settings now use Discord channel/role selectors instead of manual ID fields.
-- Dashboard now includes a first-launch interactive tutorial prompt with explicit `Run Tutorial` and `Skip Tutorial` actions.
-- Tutorial completion/skip state is persisted using a long-lived marker cookie plus local storage fallback.
-- Tutorial can be rerun at any time from the header `Run Tutorial` action in the dashboard.
-- Tutorial walkthrough is role-aware and includes Super Admin-only steps only for super-admin sessions.
-- Tutorial popover now includes a `Jump to section` control for direct navigation to major dashboard parts.
-- Each major dashboard section now includes an `(i)` info action that starts the tutorial at that section.
 - Dashboard header now supports branded light/dark logos from the repo `assets` folder.
 - Dashboard header now includes a direct link to `https://voodoopay.online/` and uses a larger branded logo treatment.
-- Dashboard navigation now keeps regular merchant work in a one-section-at-a-time flow so mobile setup feels less crowded.
-- Dashboard now opens with a mobile-first setup flow strip and compact current-context card so merchants can jump straight to Workspace, Sales, Payments, Coupons, or Catalog without scanning the whole page.
-- Dashboard navigation now uses collapsible section cards, and catalog management uses four guided step panels so merchants can review products, manage category questions, edit product details, and handle variations without keeping the full builder open at once.
-- Category question loading now prefers the most complete template already used in that category, and the dashboard explains when the pay bot must be added before those question changes can be saved.
 - Server settings now include a `tip enabled` toggle (ask customer for optional GBP tip before checkout link generation).
 - Server settings now include rewards configuration:
   - `point value` (minor currency based)

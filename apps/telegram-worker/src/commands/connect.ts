@@ -45,6 +45,15 @@ export async function handleConnectCommand(ctx: Context): Promise<void> {
     return;
   }
 
+  const config = await tenantRepository.getGuildConfig({
+    tenantId: payload.tenantId,
+    guildId: payload.guildId,
+  });
+  if (!config?.telegramEnabled) {
+    await ctx.reply('Telegram is currently disabled for this server. Re-enable it in the dashboard first.');
+    return;
+  }
+
   await telegramLinkRepository.upsertLink({
     tenantId: payload.tenantId,
     guildId: payload.guildId,

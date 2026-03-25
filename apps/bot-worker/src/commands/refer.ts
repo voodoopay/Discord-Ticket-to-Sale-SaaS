@@ -153,6 +153,18 @@ export const referCommand = {
       return;
     }
 
+    const config = await tenantRepository.getGuildConfig({
+      tenantId: tenant.tenantId,
+      guildId: interaction.guildId,
+    });
+    if (!config?.referralsEnabled) {
+      await interaction.reply({
+        content: 'Referrals are currently disabled for this server.',
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
     await interaction.showModal(buildReferModal());
   },
 };

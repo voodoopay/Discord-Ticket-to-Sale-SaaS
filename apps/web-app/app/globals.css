@@ -121,6 +121,7 @@
 
   body {
     @apply min-h-screen bg-background text-foreground antialiased;
+    font-family: var(--font-sans), sans-serif;
   }
 }
 

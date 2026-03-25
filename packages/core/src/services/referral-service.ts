@@ -12,6 +12,7 @@ import {
 } from '../repositories/referral-repository.js';
 import { resolveOrderSessionCustomerEmail } from '../utils/customer-email.js';
 import { formatUserReference } from '../utils/platform-ids.js';
+import { GuildFeatureService } from './guild-feature-service.js';
 import { PointsService } from './points-service.js';
 
 const emailSchema = z.string().trim().min(3).max(320).email();
@@ -63,6 +64,7 @@ export class ReferralService {
   private readonly referralRepository = new ReferralRepository();
   private readonly pointsService = new PointsService();
   private readonly pointsRepository = new PointsRepository();
+  private readonly guildFeatureService = new GuildFeatureService();
 
   public async createClaimFromCommand(input: {
     tenantId: string;
@@ -72,6 +74,15 @@ export class ReferralService {
     referredEmail: string;
   }): Promise<Result<ReferralClaimCreateResult, AppError>> {
     try {
+      const featureCheck = await this.guildFeatureService.ensureFeatureEnabled({
+        tenantId: input.tenantId,
+        guildId: input.guildId,
+        feature: 'referrals',
+      });
+      if (featureCheck.isErr()) {
+        return err(featureCheck.error);
+      }
+
       const parsed = claimInputSchema.safeParse(input);
       if (!parsed.success) {
         return err(validationError(parsed.error.issues));
@@ -125,6 +136,14 @@ export class ReferralService {
     referralThankYouTemplate: string | null;
   }): Promise<Result<ReferralRewardResult, AppError>> {
     try {
+      const config = await this.guildFeatureService.getGuildConfig({
+        tenantId: input.orderSession.tenantId,
+        guildId: input.orderSession.guildId,
+      });
+      if (config.isErr()) {
+        return err(config.error);
+      }
+
       const referredEmail = resolveOrderSessionCustomerEmail(input.orderSession);
       if (!referredEmail) {
         return ok({
@@ -134,6 +153,18 @@ export class ReferralService {
           claim: null,
           rewardMinor: 0,
           pointValueMinor: 1,
+          rewardPoints: 0,
+        });
+      }
+
+      if (!config.value.referralsEnabled || !config.value.pointsEnabled) {
+        return ok({
+          status: 'not_applicable',
+          reason: 'reward_disabled',
+          referredEmailNormalized: referredEmail,
+          claim: null,
+          rewardMinor: 0,
+          pointValueMinor: Math.max(1, input.orderSession.pointsConfigSnapshot?.pointValueMinor ?? 1),
           rewardPoints: 0,
         });
       }

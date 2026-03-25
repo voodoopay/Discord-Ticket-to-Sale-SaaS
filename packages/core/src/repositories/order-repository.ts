@@ -1,4 +1,4 @@
-import { and, eq, lt } from 'drizzle-orm';
+import { and, desc, eq, gte, lt } from 'drizzle-orm';
 import { ulid } from 'ulid';
 
 import { getDb } from '../infra/db/client.js';
@@ -437,6 +437,27 @@ export class OrderRepository {
     }
 
     return mapPaidOrderRow(row);
+  }
+
+  public async listPaidOrdersByGuild(input: {
+    tenantId: string;
+    guildId: string;
+    limit?: number;
+    since?: Date;
+  }): Promise<PaidOrderRecord[]> {
+    const rows = await this.db.query.ordersPaid.findMany({
+      where: input.since
+        ? and(
+            eq(ordersPaid.tenantId, input.tenantId),
+            eq(ordersPaid.guildId, input.guildId),
+            gte(ordersPaid.paidAt, input.since),
+          )
+        : and(eq(ordersPaid.tenantId, input.tenantId), eq(ordersPaid.guildId, input.guildId)),
+      orderBy: [desc(ordersPaid.paidAt)],
+      limit: Math.max(1, Math.min(500, input.limit ?? 50)),
+    });
+
+    return rows.map(mapPaidOrderRow);
   }
 
   public async markPaidOrderFulfilled(input: {

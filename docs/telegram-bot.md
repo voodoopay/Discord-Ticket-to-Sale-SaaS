@@ -16,10 +16,11 @@ Telegram does not create a second catalog or second server config.
 
 Instead:
 
-1. Select the workspace and Discord server in the dashboard.
-2. Generate the Telegram link command in `Workspace & Server`.
-3. Add the Telegram bot to the target group.
-4. Run `/connect <token>` in that group as a Telegram admin.
+1. Open `/dashboard` and select the workspace + Discord server from the launchpad.
+2. Enter the server panel and open `Settings`.
+3. Enable Telegram integration, save, then generate the Telegram link command or invite link.
+4. Add the Telegram bot to the target group.
+5. Run `/connect <token>` in that group as a Telegram admin.
 
 The linked Telegram chat then reuses the selected Discord server store data:
 

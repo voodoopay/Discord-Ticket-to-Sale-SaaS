@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ok } from 'neverthrow';
 
 import type { OrderSessionRecord } from '../src/repositories/order-repository.js';
 import { ReferralService } from '../src/services/referral-service.js';
@@ -42,6 +43,16 @@ describe('referral service', () => {
     vi.restoreAllMocks();
   });
 
+  function mockFeatureFlagsEnabled(service: ReferralService) {
+    vi.spyOn((service as any).guildFeatureService, 'ensureFeatureEnabled').mockResolvedValue(ok(undefined));
+    vi.spyOn((service as any).guildFeatureService, 'getGuildConfig').mockResolvedValue(
+      ok({
+        pointsEnabled: true,
+        referralsEnabled: true,
+      }),
+    );
+  }
+
   it('renders thank-you template placeholders', () => {
     const service = new ReferralService();
 
@@ -66,6 +77,7 @@ describe('referral service', () => {
 
   it('blocks self-referral when creating claim', async () => {
     const service = new ReferralService();
+    mockFeatureFlagsEnabled(service);
 
     const created = await service.createClaimFromCommand({
       tenantId: '01HKTENANT0000000000000001',
@@ -84,6 +96,7 @@ describe('referral service', () => {
 
   it('returns no_customer_email outcome without DB side effects', async () => {
     const service = new ReferralService();
+    mockFeatureFlagsEnabled(service);
 
     const result = await service.processPaidOrderReward({
       orderSession: makeOrderSession({
@@ -106,6 +119,7 @@ describe('referral service', () => {
 
   it('ignores Telegram placeholder emails when processing referral rewards', async () => {
     const service = new ReferralService();
+    mockFeatureFlagsEnabled(service);
 
     const result = await service.processPaidOrderReward({
       orderSession: makeOrderSession({
@@ -130,6 +144,7 @@ describe('referral service', () => {
 
   it('returns the rewarded outcome again when the same paid order is retried', async () => {
     const service = new ReferralService();
+    mockFeatureFlagsEnabled(service);
     const orderSession = makeOrderSession({
       customerEmailNormalized: 'new@example.com',
       referralRewardMinorSnapshot: 500,
