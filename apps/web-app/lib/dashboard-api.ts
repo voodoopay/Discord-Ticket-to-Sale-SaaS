@@ -10,8 +10,26 @@ function safeJsonParse(text: string): unknown {
   }
 }
 
+async function performDashboardFetch(path: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(path, init);
+  } catch (error) {
+    if (error instanceof Error && /failed to fetch/i.test(error.message)) {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      try {
+        return await fetch(path, init);
+      } catch {
+        throw new Error('Dashboard request failed. Refresh the page and try again.');
+      }
+    }
+
+    throw error;
+  }
+}
+
 export async function dashboardApi<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
-  const response = await fetch(path, {
+  const response = await performDashboardFetch(path, {
     method,
     headers: {
       'Content-Type': 'application/json',

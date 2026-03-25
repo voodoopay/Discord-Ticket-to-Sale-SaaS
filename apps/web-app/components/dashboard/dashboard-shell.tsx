@@ -11,7 +11,6 @@ import {
   Sparkles,
 } from 'lucide-react';
 import Image from 'next/image';
-import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 
@@ -61,7 +60,7 @@ export function DashboardShell({
             )}
           >
             <div className="flex items-center justify-between gap-3 border-b border-border/70 pb-4">
-              <Link href="/dashboard" className="flex min-w-0 items-center gap-3">
+              <a href="/dashboard" className="flex min-w-0 items-center gap-3">
                 <Image src={lightModeLogo} alt="Voodoo Pay" className="h-10 w-auto dark:hidden" priority />
                 <Image src={darkModeLogo} alt="Voodoo Pay" className="hidden h-10 w-auto dark:block" priority />
                 <div className="min-w-0">
@@ -70,7 +69,7 @@ export function DashboardShell({
                   </p>
                   <p className="truncate text-xs text-muted-foreground">Merchant control panel</p>
                 </div>
-              </Link>
+              </a>
               <Button
                 type="button"
                 variant="ghost"
@@ -96,7 +95,7 @@ export function DashboardShell({
                 const active = pathname === href;
                 const Icon = item.icon;
                 return (
-                  <Link
+                  <a
                     key={item.label}
                     href={href}
                     onClick={() => setMobileOpen(false)}
@@ -118,7 +117,7 @@ export function DashboardShell({
                       <Icon className="size-4" />
                     </span>
                     <span>{item.label}</span>
-                  </Link>
+                  </a>
                 );
               })}
             </nav>
@@ -135,7 +134,7 @@ export function DashboardShell({
                   </a>
                 </Button>
                 <Button asChild size="sm" variant="outline" className="min-h-10">
-                  <Link href="/dashboard">Change Server</Link>
+                  <a href="/dashboard">Change Server</a>
                 </Button>
               </div>
             </div>
