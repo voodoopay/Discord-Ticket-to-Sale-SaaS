@@ -41,6 +41,8 @@ import {
   DEFAULT_POINT_VALUE_MAJOR,
   DEFAULT_REFERRAL_REWARD_MAJOR,
   DEFAULT_REFERRAL_SUBMISSION_TEMPLATE,
+  REFERRAL_SUBMISSION_TEMPLATE_PLACEHOLDERS,
+  REFERRAL_THANK_YOU_TEMPLATE_PLACEHOLDERS,
   DEFAULT_REFERRAL_THANK_YOU_TEMPLATE,
   ensureRequiredEmailQuestion,
   formatCurrencyMinor,
@@ -2428,6 +2430,11 @@ export function ReferralsSection() {
                       onChange={(event) => setSubmissionTemplate(event.target.value)}
                       className="min-h-28"
                     />
+                    <ReferralTemplatePlaceholderCard
+                      title="Available placeholder codes"
+                      description="Use these in the private success reply shown after a member submits /refer."
+                      placeholders={REFERRAL_SUBMISSION_TEMPLATE_PLACEHOLDERS}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="thank-you-template">Thank you message</Label>
@@ -2436,6 +2443,11 @@ export function ReferralsSection() {
                       value={thankYouTemplate}
                       onChange={(event) => setThankYouTemplate(event.target.value)}
                       className="min-h-28"
+                    />
+                    <ReferralTemplatePlaceholderCard
+                      title="Available placeholder codes"
+                      description="Use these in the payout thank-you message sent after the first paid referral order is completed."
+                      placeholders={REFERRAL_THANK_YOU_TEMPLATE_PLACEHOLDERS}
                     />
                   </div>
                 </div>
@@ -2459,6 +2471,35 @@ function blankQuestion(sortOrder: number): QuestionDraft {
     sensitive: false,
     sortOrder,
   };
+}
+
+function ReferralTemplatePlaceholderCard({
+  title,
+  description,
+  placeholders,
+}: {
+  title: string;
+  description: string;
+  placeholders: readonly string[];
+}) {
+  return (
+    <div className="rounded-[1.1rem] border border-border/70 bg-background/70 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{title}</p>
+          <p className="text-sm leading-6 text-muted-foreground">{description}</p>
+        </div>
+        <InfoButton label="Each placeholder is replaced automatically when the message is sent, so you can keep the referral copy dynamic without editing it for every payout or submission." />
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {placeholders.map((placeholder) => (
+          <Badge key={placeholder} variant="outline" className="rounded-full px-3 py-1 font-mono text-[11px]">
+            {placeholder}
+          </Badge>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function questionDraftsFromProduct(product: ProductRecord | null): QuestionDraft[] {

@@ -7,6 +7,19 @@ export const DEFAULT_REFERRAL_THANK_YOU_TEMPLATE =
   'Thanks for your referral. You earned {points} point(s) ({amount_gbp} GBP) after {referred_email} paid.';
 export const DEFAULT_REFERRAL_SUBMISSION_TEMPLATE =
   'Referral submitted successfully. We will reward points automatically after the first paid order.';
+export const REFERRAL_SUBMISSION_TEMPLATE_PLACEHOLDERS = [
+  '{submitter_mention}',
+  '{referrer_email}',
+  '{referred_email}',
+] as const;
+export const REFERRAL_THANK_YOU_TEMPLATE_PLACEHOLDERS = [
+  '{referrer_mention}',
+  '{referrer_email}',
+  '{referred_email}',
+  '{points}',
+  '{amount_gbp}',
+  '{order_session_id}',
+] as const;
 export const REQUIRED_EMAIL_QUESTION_KEY = 'email';
 export const REQUIRED_EMAIL_QUESTION_LABEL = 'What is your email?';
 

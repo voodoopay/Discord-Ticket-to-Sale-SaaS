@@ -214,6 +214,9 @@ Copy `.env.example` to `.env` and fill values.
   - new customer email
 - First valid referral claim for a customer email wins.
 - Successful `/refer` reply is private (ephemeral) and customizable via server settings.
+- Dashboard referral message editors now show the supported placeholder codes inline:
+  - submission message: `{submitter_mention}`, `{referrer_email}`, `{referred_email}`
+  - thank-you message: `{referrer_mention}`, `{referrer_email}`, `{referred_email}`, `{points}`, `{amount_gbp}`, `{order_session_id}`
 - Owner/staff can monitor submission and payout outcomes via referral log channel.
 - Telegram `/refer` starts in the linked group but collects both email addresses and returns the result only in the requester's DM with the bot.
 

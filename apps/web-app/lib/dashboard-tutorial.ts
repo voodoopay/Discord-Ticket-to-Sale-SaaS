@@ -156,7 +156,7 @@ export const DASHBOARD_TUTORIAL_STEP_DEFS: DashboardTutorialStepDef[] = [
     selector: '#referral-submission-template',
     title: 'Referral Submission Template',
     description:
-      'Customize the private success reply for /refer submissions. Use placeholders to provide contextual confirmation details.',
+      'Customize the private success reply for /refer submissions. Supported placeholders here are {submitter_mention}, {referrer_email}, and {referred_email}.',
     role: 'all',
   },
   {
@@ -164,7 +164,7 @@ export const DASHBOARD_TUTORIAL_STEP_DEFS: DashboardTutorialStepDef[] = [
     selector: '#referral-thank-you-template',
     title: 'Referral Thank-You Template',
     description:
-      'Customize the referrer DM sent after payout. Include placeholders to explain the awarded amount and source order context.',
+      'Customize the referrer DM sent after payout. Supported placeholders here are {referrer_mention}, {referrer_email}, {referred_email}, {points}, {amount_gbp}, and {order_session_id}.',
     role: 'all',
   },
   {

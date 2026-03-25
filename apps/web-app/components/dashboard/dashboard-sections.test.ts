@@ -21,4 +21,16 @@ describe('dashboard sections effect wiring', () => {
     expect(source).not.toMatch(/\[config\?\.couponsEnabled,\s*loadCoupons\]/);
     expect(source).not.toMatch(/\[activePointsPanel,\s*config\?\.pointsEnabled,\s*deferredSearch,\s*loadCustomers\]/);
   });
+
+  it('surfaces referral placeholder-code guidance for both referral message editors', async () => {
+    const source = await readDashboardSectionsSource();
+
+    expect(source).toContain('Available placeholder codes');
+    expect(source).toContain('REFERRAL_SUBMISSION_TEMPLATE_PLACEHOLDERS');
+    expect(source).toContain('REFERRAL_THANK_YOU_TEMPLATE_PLACEHOLDERS');
+    expect(source).toContain('Use these in the private success reply shown after a member submits /refer.');
+    expect(source).toContain(
+      'Use these in the payout thank-you message sent after the first paid referral order is completed.',
+    );
+  });
 });

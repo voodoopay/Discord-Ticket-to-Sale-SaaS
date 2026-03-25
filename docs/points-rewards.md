@@ -72,8 +72,10 @@ Inside the **Points** page, the **Customer Points** area supports:
   - categories eligible for referral rewards (`referral_reward_category_keys`)
   - `referral reward` fallback amount in GBP (`referral_reward_minor`)
   - `/refer` success reply template (`referral_submission_template`)
+    - supported placeholders: `{submitter_mention}`, `{referrer_email}`, `{referred_email}`
   - `referral log channel` (optional, referral submissions and rewarded referral payouts)
-  - `thank-you DM template` with placeholders
+  - `thank-you DM template`
+    - supported placeholders: `{referrer_mention}`, `{referrer_email}`, `{referred_email}`, `{points}`, `{amount_gbp}`, `{order_session_id}`
 - Product variants set `referral_reward_minor` per variant.
 - Reward conversion uses snapshots from checkout creation:
   - `referral_reward_minor_snapshot`
@@ -100,7 +102,7 @@ Inside the **Points** page, the **Customer Points** area supports:
    - referrer receives points (if snapshot reward converts to >= 1 point)
 5. Claim is marked rewarded and ledger event `referral_reward_first_paid_order` is recorded.
 6. Referrer receives customizable thank-you DM (best effort; failures are logged and do not break payment finalization).
-7. Thank-you DM template supports mention placeholder `{referrer_mention}` and is delivered privately via DM.
+7. Thank-you DM template supports `{referrer_mention}`, `{referrer_email}`, `{referred_email}`, `{points}`, `{amount_gbp}`, and `{order_session_id}` and is delivered privately via DM.
 
 ## Post-Payment Message
 
