@@ -121,4 +121,13 @@ export class TelegramLinkRepository {
       };
     });
   }
+
+  public async deleteByGuild(input: {
+    tenantId: string;
+    guildId: string;
+  }): Promise<void> {
+    await this.db
+      .delete(telegramChatLinks)
+      .where(and(eq(telegramChatLinks.tenantId, input.tenantId), eq(telegramChatLinks.guildId, input.guildId)));
+  }
 }

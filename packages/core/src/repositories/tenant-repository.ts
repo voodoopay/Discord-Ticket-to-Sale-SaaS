@@ -4,9 +4,15 @@ import { ulid } from 'ulid';
 import { getDb } from '../infra/db/client.js';
 import {
   auditLogs,
+  channelNukeAuthorizedUsers,
+  channelNukeRuns,
+  channelNukeSchedules,
+  customerPointsAccounts,
+  customerPointsLedger,
   customerFirstPaidOrders,
   discountCoupons,
   guildConfigs,
+  joinGateAuthorizedUsers,
   orderNotesCache,
   orderSessions,
   ordersPaid,
@@ -23,6 +29,7 @@ import {
   tenantMembers,
   tenants,
   ticketChannelMetadata,
+  users,
   webhookEvents,
 } from '../infra/db/schema/index.js';
 
@@ -31,6 +38,15 @@ export type TenantRecord = {
   name: string;
   status: 'active' | 'disabled';
   ownerUserId: string;
+  createdAt: Date;
+};
+
+export type TenantMemberRecord = {
+  userId: string;
+  discordUserId: string;
+  username: string;
+  avatarUrl: string | null;
+  role: 'owner' | 'admin' | 'member';
   createdAt: Date;
 };
 
@@ -136,6 +152,46 @@ export class TenantRepository {
     }
 
     return items;
+  }
+
+  public async listTenantMembers(tenantId: string): Promise<TenantMemberRecord[]> {
+    const rows = await this.db
+      .select({
+        userId: tenantMembers.userId,
+        discordUserId: users.discordUserId,
+        username: users.username,
+        avatarUrl: users.avatarUrl,
+        role: tenantMembers.role,
+        createdAt: tenantMembers.createdAt,
+      })
+      .from(tenantMembers)
+      .innerJoin(users, eq(users.id, tenantMembers.userId))
+      .where(eq(tenantMembers.tenantId, tenantId))
+      .orderBy(asc(tenantMembers.createdAt), asc(users.username));
+
+    const hierarchy: Record<'owner' | 'admin' | 'member', number> = {
+      owner: 3,
+      admin: 2,
+      member: 1,
+    };
+
+    return rows
+      .map((row) => ({
+        userId: row.userId,
+        discordUserId: row.discordUserId,
+        username: row.username,
+        avatarUrl: row.avatarUrl ?? null,
+        role: row.role,
+        createdAt: row.createdAt,
+      }))
+      .sort((left, right) => {
+        const roleDelta = hierarchy[right.role] - hierarchy[left.role];
+        if (roleDelta !== 0) {
+          return roleDelta;
+        }
+
+        return left.username.localeCompare(right.username);
+      });
   }
 
   public async listAllTenants(): Promise<TenantRecord[]> {
@@ -373,6 +429,15 @@ export class TenantRepository {
     };
   }
 
+  public async deleteTenantMember(input: {
+    tenantId: string;
+    userId: string;
+  }): Promise<void> {
+    await this.db
+      .delete(tenantMembers)
+      .where(and(eq(tenantMembers.tenantId, input.tenantId), eq(tenantMembers.userId, input.userId)));
+  }
+
   public async upsertGuildConfig(input: {
     tenantId: string;
     guildId: string;
@@ -604,6 +669,90 @@ export class TenantRepository {
       await tx.delete(tenantMembers).where(eq(tenantMembers.tenantId, input.tenantId));
       await tx.delete(auditLogs).where(eq(auditLogs.tenantId, input.tenantId));
       await tx.delete(tenants).where(eq(tenants.id, input.tenantId));
+    });
+  }
+
+  public async disconnectGuildCascade(input: { tenantId: string; guildId: string }): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await tx
+        .delete(customerFirstPaidOrders)
+        .where(and(eq(customerFirstPaidOrders.tenantId, input.tenantId), eq(customerFirstPaidOrders.guildId, input.guildId)));
+      await tx
+        .delete(referralClaims)
+        .where(and(eq(referralClaims.tenantId, input.tenantId), eq(referralClaims.guildId, input.guildId)));
+      await tx
+        .delete(orderNotesCache)
+        .where(and(eq(orderNotesCache.tenantId, input.tenantId), eq(orderNotesCache.guildId, input.guildId)));
+      await tx
+        .delete(ordersPaid)
+        .where(and(eq(ordersPaid.tenantId, input.tenantId), eq(ordersPaid.guildId, input.guildId)));
+      await tx
+        .delete(webhookEvents)
+        .where(and(eq(webhookEvents.tenantId, input.tenantId), eq(webhookEvents.guildId, input.guildId)));
+      await tx
+        .delete(customerPointsLedger)
+        .where(and(eq(customerPointsLedger.tenantId, input.tenantId), eq(customerPointsLedger.guildId, input.guildId)));
+      await tx
+        .delete(customerPointsAccounts)
+        .where(and(eq(customerPointsAccounts.tenantId, input.tenantId), eq(customerPointsAccounts.guildId, input.guildId)));
+      await tx
+        .delete(orderSessions)
+        .where(and(eq(orderSessions.tenantId, input.tenantId), eq(orderSessions.guildId, input.guildId)));
+
+      await tx
+        .delete(channelNukeRuns)
+        .where(and(eq(channelNukeRuns.tenantId, input.tenantId), eq(channelNukeRuns.guildId, input.guildId)));
+      await tx
+        .delete(channelNukeSchedules)
+        .where(and(eq(channelNukeSchedules.tenantId, input.tenantId), eq(channelNukeSchedules.guildId, input.guildId)));
+      await tx
+        .delete(channelNukeAuthorizedUsers)
+        .where(
+          and(eq(channelNukeAuthorizedUsers.tenantId, input.tenantId), eq(channelNukeAuthorizedUsers.guildId, input.guildId)),
+        );
+
+      await tx
+        .delete(joinGateEmailIndex)
+        .where(and(eq(joinGateEmailIndex.tenantId, input.tenantId), eq(joinGateEmailIndex.guildId, input.guildId)));
+      await tx
+        .delete(joinGateMembers)
+        .where(and(eq(joinGateMembers.tenantId, input.tenantId), eq(joinGateMembers.guildId, input.guildId)));
+      await tx
+        .delete(joinGateAuthorizedUsers)
+        .where(and(eq(joinGateAuthorizedUsers.tenantId, input.tenantId), eq(joinGateAuthorizedUsers.guildId, input.guildId)));
+      await tx
+        .delete(ticketChannelMetadata)
+        .where(and(eq(ticketChannelMetadata.tenantId, input.tenantId), eq(ticketChannelMetadata.guildId, input.guildId)));
+
+      await tx
+        .delete(productFormFields)
+        .where(and(eq(productFormFields.tenantId, input.tenantId), eq(productFormFields.guildId, input.guildId)));
+      await tx
+        .delete(productVariants)
+        .where(and(eq(productVariants.tenantId, input.tenantId), eq(productVariants.guildId, input.guildId)));
+      await tx.delete(products).where(and(eq(products.tenantId, input.tenantId), eq(products.guildId, input.guildId)));
+      await tx
+        .delete(discountCoupons)
+        .where(and(eq(discountCoupons.tenantId, input.tenantId), eq(discountCoupons.guildId, input.guildId)));
+
+      await tx
+        .delete(tenantIntegrationsVoodooPay)
+        .where(
+          and(eq(tenantIntegrationsVoodooPay.tenantId, input.tenantId), eq(tenantIntegrationsVoodooPay.guildId, input.guildId)),
+        );
+      await tx
+        .delete(tenantIntegrationsWoo)
+        .where(and(eq(tenantIntegrationsWoo.tenantId, input.tenantId), eq(tenantIntegrationsWoo.guildId, input.guildId)));
+
+      await tx
+        .delete(guildConfigs)
+        .where(and(eq(guildConfigs.tenantId, input.tenantId), eq(guildConfigs.guildId, input.guildId)));
+      await tx
+        .delete(telegramChatLinks)
+        .where(and(eq(telegramChatLinks.tenantId, input.tenantId), eq(telegramChatLinks.guildId, input.guildId)));
+      await tx
+        .delete(tenantGuilds)
+        .where(and(eq(tenantGuilds.tenantId, input.tenantId), eq(tenantGuilds.guildId, input.guildId)));
     });
   }
 }

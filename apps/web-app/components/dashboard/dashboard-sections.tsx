@@ -19,6 +19,7 @@ import { useDeferredValue, useEffect, useEffectEvent, useRef, useState } from 'r
 
 import { createEmptyIntegration, useDashboardContext } from '@/components/dashboard/dashboard-provider';
 import {
+  ConfirmationModal,
   FeatureToggle,
   InfoButton,
   InfoTip,
@@ -63,6 +64,8 @@ import type {
   PriceOptionDraft,
   ProductRecord,
   QuestionDraft,
+  WorkspaceAccessState,
+  WorkspaceMemberRecord,
 } from '@/lib/dashboard-types';
 import { cn } from '@/lib/utils';
 
@@ -301,6 +304,286 @@ function OverviewStat({
   );
 }
 
+function WorkspaceOperationsPanel() {
+  const {
+    guildId,
+    guildName,
+    isLinkedToCurrentTenant,
+    refreshBase,
+    refreshTelegram,
+    showFlash,
+    telegramState,
+    tenantId,
+  } = useDashboardContext();
+  const [workspaceAccess, setWorkspaceAccess] = useState<WorkspaceAccessState | null>(null);
+  const [workspaceLoading, setWorkspaceLoading] = useState(false);
+  const [memberToRemove, setMemberToRemove] = useState<WorkspaceMemberRecord | null>(null);
+  const [disconnectGuildOpen, setDisconnectGuildOpen] = useState(false);
+  const [disconnectTelegramOpen, setDisconnectTelegramOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState<'remove-member' | 'disconnect-guild' | 'disconnect-telegram' | null>(
+    null,
+  );
+
+  const loadWorkspaceAccess = useEffectEvent(async (showSpinner: boolean) => {
+    if (!isLinkedToCurrentTenant) {
+      setWorkspaceAccess(null);
+      return;
+    }
+
+    if (showSpinner) {
+      setWorkspaceLoading(true);
+    }
+
+    try {
+      const response = await dashboardApi<WorkspaceAccessState>(
+        `/api/tenants/${encodeURIComponent(tenantId)}/members`,
+      );
+      setWorkspaceAccess(response);
+    } catch (error) {
+      showFlash('error', getMessage(error, 'Failed to load workspace access controls.'));
+    } finally {
+      setWorkspaceLoading(false);
+    }
+  });
+
+  useEffect(() => {
+    void loadWorkspaceAccess(true);
+  }, [isLinkedToCurrentTenant, loadWorkspaceAccess, tenantId]);
+
+  async function removeMember() {
+    if (!memberToRemove) {
+      return;
+    }
+
+    setPendingAction('remove-member');
+    try {
+      await dashboardApi<{ ok: true }>(
+        `/api/tenants/${encodeURIComponent(tenantId)}/members/${encodeURIComponent(memberToRemove.userId)}`,
+        'DELETE',
+      );
+      setMemberToRemove(null);
+      await loadWorkspaceAccess(false);
+      showFlash('success', `${memberToRemove.username} was removed from the workspace.`);
+    } catch (error) {
+      showFlash('error', getMessage(error, 'Failed to remove this workspace member.'));
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  async function disconnectGuild() {
+    setPendingAction('disconnect-guild');
+    try {
+      await dashboardApi<{ ok: true }>(`/api/guilds/${encodeURIComponent(guildId)}/disconnect`, 'DELETE', {
+        tenantId,
+      });
+      window.location.href = '/dashboard';
+    } catch (error) {
+      showFlash('error', getMessage(error, 'Failed to disconnect this Discord server.'));
+      setPendingAction(null);
+    }
+  }
+
+  async function disconnectTelegram() {
+    setPendingAction('disconnect-telegram');
+    try {
+      await dashboardApi<{ ok: true }>(
+        `/api/guilds/${encodeURIComponent(guildId)}/telegram-link-token`,
+        'DELETE',
+        {
+          tenantId,
+        },
+      );
+      setDisconnectTelegramOpen(false);
+      await Promise.all([refreshTelegram(), refreshBase(), loadWorkspaceAccess(false)]);
+      showFlash('success', 'Telegram chat disconnected from this server.');
+    } catch (error) {
+      showFlash('error', getMessage(error, 'Failed to disconnect the Telegram chat.'));
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  if (!isLinkedToCurrentTenant) {
+    return null;
+  }
+
+  const currentRoleLabel = workspaceAccess?.currentRole
+    ? workspaceAccess.currentRole.charAt(0).toUpperCase() + workspaceAccess.currentRole.slice(1)
+    : 'Super Admin';
+
+  return (
+    <>
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
+        <Panel
+          title="Workspace access"
+          description="Review who can operate this merchant workspace and remove non-owner members when access should be revoked."
+          action={
+            workspaceAccess ? (
+              <Badge variant="outline">{currentRoleLabel}</Badge>
+            ) : null
+          }
+        >
+          {workspaceLoading && !workspaceAccess ? (
+            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" />
+              Loading workspace members...
+            </div>
+          ) : workspaceAccess ? (
+            <div className="space-y-3">
+              {workspaceAccess.members.map((member) => (
+                <div
+                  key={member.userId}
+                  className="flex flex-col gap-3 rounded-[1.15rem] border border-border/70 bg-background/70 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-3">
+                      <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-border/70 bg-card/80 text-sm font-semibold text-primary">
+                        {member.username.charAt(0).toUpperCase()}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{member.username}</p>
+                        <p className="truncate text-sm text-muted-foreground">{member.discordUserId}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline">{member.role}</Badge>
+                    {member.removable ? (
+                      <Button type="button" size="sm" variant="outline" onClick={() => setMemberToRemove(member)}>
+                        <Trash2 className="size-4" />
+                        Remove
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+
+              {!workspaceAccess.canManageMembers ? (
+                <InfoTip>
+                  Only the workspace owner or a super admin can remove members. Owners are always protected from removal.
+                </InfoTip>
+              ) : null}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Workspace access controls are unavailable right now.</p>
+          )}
+        </Panel>
+
+        <Panel
+          title="Connection controls"
+          description="Disconnect the live Telegram bridge or retire this Discord server from the selected merchant workspace."
+        >
+          <div className="space-y-4">
+            <div className="rounded-[1.15rem] border border-border/70 bg-background/70 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="space-y-2">
+                  <p className="font-medium">Telegram connection</p>
+                  <div className="flex items-center gap-2">
+                    <StatusPill
+                      active={Boolean(telegramState?.linkedChat)}
+                      activeLabel="Linked"
+                      inactiveLabel="Not Linked"
+                    />
+                    <span className="text-sm text-muted-foreground">
+                      {telegramState?.linkedChat?.chatTitle ?? 'No Telegram chat connected'}
+                    </span>
+                  </div>
+                  <p className="text-sm leading-6 text-muted-foreground">
+                    Disconnecting Telegram removes the linked chat only. The feature can be enabled again later.
+                  </p>
+                </div>
+                {workspaceAccess?.canDisconnectTelegram && telegramState?.linkedChat ? (
+                  <Button type="button" variant="outline" onClick={() => setDisconnectTelegramOpen(true)}>
+                    Disconnect Telegram
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="rounded-[1.15rem] border border-destructive/25 bg-destructive/8 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="space-y-2">
+                  <p className="font-medium">Discord server connection</p>
+                  <div className="flex items-center gap-2">
+                    <StatusPill active={true} activeLabel="Connected" inactiveLabel="Disconnected" />
+                    <span className="text-sm text-muted-foreground">{guildName}</span>
+                  </div>
+                  <p className="text-sm leading-6 text-muted-foreground">
+                    Disconnecting this server removes its workspace-linked products, coupons, integrations, points,
+                    referrals, order data, and Telegram bridge for this merchant environment.
+                  </p>
+                </div>
+                {workspaceAccess?.canDisconnectGuild ? (
+                  <Button type="button" variant="destructive" onClick={() => setDisconnectGuildOpen(true)}>
+                    Disconnect Server
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+
+            {!workspaceAccess?.canDisconnectGuild && !workspaceAccess?.canDisconnectTelegram ? (
+              <InfoTip>
+                Server disconnect requires the workspace owner or a super admin. Telegram disconnect requires admin access or higher.
+              </InfoTip>
+            ) : null}
+          </div>
+        </Panel>
+      </div>
+
+      <ConfirmationModal
+        open={Boolean(memberToRemove)}
+        title="Remove workspace member"
+        description={
+          memberToRemove ? (
+            <>
+              Remove <strong>{memberToRemove.username}</strong> from this workspace. Their dashboard access will stop
+              immediately for this merchant.
+            </>
+          ) : (
+            'Remove this workspace member.'
+          )
+        }
+        confirmLabel={pendingAction === 'remove-member' ? 'Removing...' : 'Remove Member'}
+        confirmPhrase={memberToRemove?.username}
+        confirmPlaceholder={memberToRemove?.username ?? 'Member username'}
+        pending={pendingAction === 'remove-member'}
+        onClose={() => setMemberToRemove(null)}
+        onConfirm={() => void removeMember()}
+      />
+
+      <ConfirmationModal
+        open={disconnectTelegramOpen}
+        title="Disconnect Telegram chat"
+        description="Disconnect the currently linked Telegram chat from this Discord server. You can generate a new connection link again later."
+        confirmLabel={pendingAction === 'disconnect-telegram' ? 'Disconnecting...' : 'Disconnect Telegram'}
+        confirmPhrase={telegramState?.linkedChat?.chatTitle ?? undefined}
+        confirmPlaceholder={telegramState?.linkedChat?.chatTitle ?? 'Telegram chat title'}
+        pending={pendingAction === 'disconnect-telegram'}
+        onClose={() => setDisconnectTelegramOpen(false)}
+        onConfirm={() => void disconnectTelegram()}
+      />
+
+      <ConfirmationModal
+        open={disconnectGuildOpen}
+        title="Disconnect Discord server"
+        description={
+          <>
+            Disconnect <strong>{guildName}</strong> from this workspace and remove all server-scoped merchant data for
+            this store.
+          </>
+        }
+        confirmLabel={pendingAction === 'disconnect-guild' ? 'Disconnecting...' : 'Disconnect Server'}
+        confirmPhrase={guildName}
+        confirmPlaceholder={guildName}
+        pending={pendingAction === 'disconnect-guild'}
+        onClose={() => setDisconnectGuildOpen(false)}
+        onConfirm={() => void disconnectGuild()}
+      />
+    </>
+  );
+}
+
 export function OverviewSection() {
   const { overview, resources, refreshing, refreshBase, isLinkedToCurrentTenant } = useDashboardContext();
 
@@ -411,6 +694,8 @@ export function OverviewSection() {
               </p>
             )}
           </Panel>
+
+          <WorkspaceOperationsPanel />
         </div>
       ) : null}
     </SectionShell>

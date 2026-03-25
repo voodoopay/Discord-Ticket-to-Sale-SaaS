@@ -1,8 +1,11 @@
 'use client';
 
 import { Info } from 'lucide-react';
-import { useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 
 type FeatureToggleProps = {
@@ -235,6 +238,89 @@ export function InfoTip({ children }: { children: ReactNode }) {
         <Info className="size-4 text-primary" />
       </span>
       <p className="leading-6">{children}</p>
+    </div>
+  );
+}
+
+export function ConfirmationModal({
+  open,
+  title,
+  description,
+  confirmLabel,
+  cancelLabel = 'Cancel',
+  pending = false,
+  confirmPhrase,
+  confirmPlaceholder,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean;
+  title: string;
+  description: ReactNode;
+  confirmLabel: string;
+  cancelLabel?: string;
+  pending?: boolean;
+  confirmPhrase?: string;
+  confirmPlaceholder?: string;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const [typedPhrase, setTypedPhrase] = useState('');
+  const needsPhrase = Boolean(confirmPhrase);
+  const confirmEnabled = !pending && (!needsPhrase || typedPhrase.trim() === confirmPhrase);
+
+  useEffect(() => {
+    if (!open) {
+      setTypedPhrase('');
+    }
+  }, [open]);
+
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-[4000] flex items-center justify-center bg-black/70 px-4 backdrop-blur-md">
+      <Card
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="dashboard-confirmation-title"
+        aria-describedby="dashboard-confirmation-description"
+        className="w-full max-w-lg border-border/70 bg-gradient-to-br from-card/97 via-card/95 to-destructive/10 shadow-2xl shadow-black/45"
+      >
+        <CardHeader>
+          <CardTitle id="dashboard-confirmation-title" className="text-xl tracking-tight">
+            {title}
+          </CardTitle>
+          <CardDescription id="dashboard-confirmation-description" className="leading-6">
+            {description}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {needsPhrase ? (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                Type <span className="text-foreground">{confirmPhrase}</span> to confirm
+              </p>
+              <Input
+                autoFocus
+                value={typedPhrase}
+                onChange={(event) => setTypedPhrase(event.target.value)}
+                placeholder={confirmPlaceholder ?? confirmPhrase}
+              />
+            </div>
+          ) : null}
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button type="button" variant="outline" className="sm:min-w-32" disabled={pending} onClick={onClose}>
+              {cancelLabel}
+            </Button>
+            <Button type="button" variant="destructive" className="sm:min-w-36" disabled={!confirmEnabled} onClick={onConfirm}>
+              {confirmLabel}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { getEnv, signTelegramLinkToken, TelegramLinkRepository, TenantRepository } from '@voodoo/core';
+import { getEnv, signTelegramLinkToken, TelegramLinkRepository, TenantRepository, TenantService } from '@voodoo/core';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
@@ -6,6 +6,7 @@ import { jsonError, readJson, requireSession } from '@/lib/http';
 
 const tenantRepository = new TenantRepository();
 const telegramLinkRepository = new TelegramLinkRepository();
+const tenantService = new TenantService();
 const env = getEnv();
 const TELEGRAM_LINK_TOKEN_TTL_SECONDS = 10 * 60;
 
@@ -131,6 +132,38 @@ export async function POST(
       expiresAt: new Date(exp * 1000).toISOString(),
       guildName: linkedGuild.guildName,
     });
+  } catch (error) {
+    return jsonError(error);
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  context: { params: Promise<{ guildId: string }> },
+): Promise<NextResponse> {
+  try {
+    const auth = await requireSession(request);
+    if (!auth.ok) {
+      return auth.response;
+    }
+
+    const { guildId } = await context.params;
+    const body = await readJson<{ tenantId?: string }>(request);
+    const tenantId = body.tenantId?.trim() ?? '';
+
+    if (!tenantId) {
+      return NextResponse.json({ error: 'tenantId is required' }, { status: 400 });
+    }
+
+    const result = await tenantService.disconnectTelegramLink(auth.session, {
+      tenantId,
+      guildId,
+    });
+    if (result.isErr()) {
+      return NextResponse.json({ error: result.error.message }, { status: result.error.statusCode });
+    }
+
+    return NextResponse.json({ ok: true });
   } catch (error) {
     return jsonError(error);
   }

@@ -2,15 +2,38 @@
 
 import { AppError, fromUnknownError } from '../domain/errors.js';
 import { TenantRepository } from '../repositories/tenant-repository.js';
+import { TelegramLinkRepository } from '../repositories/telegram-link-repository.js';
 import { UserRepository } from '../repositories/user-repository.js';
 import { validateJoinGateConfig } from './join-gate-service.js';
 import type { SessionPayload } from '../security/session-token.js';
+import type { TenantMemberRole } from '../domain/types.js';
 
 export type ActorContext = SessionPayload;
 
 export class TenantService {
   private readonly tenantRepository = new TenantRepository();
+  private readonly telegramLinkRepository = new TelegramLinkRepository();
   private readonly userRepository = new UserRepository();
+
+  private async getActorRole(
+    actor: ActorContext,
+    tenantId: string,
+  ): Promise<Result<TenantMemberRole | null, AppError>> {
+    if (actor.isSuperAdmin) {
+      return ok(null);
+    }
+
+    try {
+      const role = await this.userRepository.getMemberRole({ tenantId, userId: actor.userId });
+      if (!role) {
+        return err(new AppError('TENANT_ACCESS_DENIED', 'You do not have access to this tenant', 403));
+      }
+
+      return ok(role);
+    } catch (error) {
+      return err(fromUnknownError(error));
+    }
+  }
 
   private async assertTenantAccess(
     actor: ActorContext,
@@ -80,6 +103,63 @@ export class TenantService {
 
       const guilds = await this.tenantRepository.listGuildsForTenant(input.tenantId);
       return ok(guilds);
+    } catch (error) {
+      return err(fromUnknownError(error));
+    }
+  }
+
+  public async listTenantMembers(
+    actor: ActorContext,
+    input: { tenantId: string },
+  ): Promise<
+    Result<
+      {
+        currentRole: TenantMemberRole | null;
+        members: Array<{
+          userId: string;
+          discordUserId: string;
+          username: string;
+          avatarUrl: string | null;
+          role: TenantMemberRole;
+          removable: boolean;
+        }>;
+        canManageMembers: boolean;
+        canDisconnectGuild: boolean;
+        canDisconnectTelegram: boolean;
+      },
+      AppError
+    >
+  > {
+    try {
+      const access = await this.assertTenantAccess(actor, input.tenantId, 'member');
+      if (access.isErr()) {
+        return err(access.error);
+      }
+
+      const actorRole = await this.getActorRole(actor, input.tenantId);
+      if (actorRole.isErr()) {
+        return err(actorRole.error);
+      }
+
+      const canManageMembers = actor.isSuperAdmin || actorRole.value === 'owner';
+      const canDisconnectGuild = actor.isSuperAdmin || actorRole.value === 'owner';
+      const canDisconnectTelegram = actor.isSuperAdmin || actorRole.value === 'owner' || actorRole.value === 'admin';
+
+      const members = await this.tenantRepository.listTenantMembers(input.tenantId);
+      return ok({
+        currentRole: actorRole.value,
+        members: members.map((member) => ({
+          userId: member.userId,
+          discordUserId: member.discordUserId,
+          username: member.username,
+          avatarUrl: member.avatarUrl,
+          role: member.role,
+          removable: canManageMembers && member.role !== 'owner' && member.userId !== actor.userId,
+        })),
+        canManageMembers,
+        canDisconnectGuild,
+        canDisconnectTelegram,
+      });
     } catch (error) {
       return err(fromUnknownError(error));
     }
@@ -155,6 +235,48 @@ export class TenantService {
     }
   }
 
+  public async removeTenantMember(
+    actor: ActorContext,
+    input: { tenantId: string; userId: string },
+  ): Promise<Result<void, AppError>> {
+    try {
+      if (!actor.isSuperAdmin) {
+        const access = await this.assertTenantAccess(actor, input.tenantId, 'owner');
+        if (access.isErr()) {
+          return err(access.error);
+        }
+      }
+
+      if (!input.userId.trim()) {
+        return err(new AppError('TENANT_MEMBER_REQUIRED', 'Select a workspace member to remove.', 422));
+      }
+
+      const targetRole = await this.userRepository.getMemberRole({
+        tenantId: input.tenantId,
+        userId: input.userId,
+      });
+      if (!targetRole) {
+        return err(new AppError('TENANT_MEMBER_NOT_FOUND', 'Workspace member not found.', 404));
+      }
+
+      if (targetRole === 'owner') {
+        return err(new AppError('TENANT_OWNER_PROTECTED', 'The workspace owner cannot be removed.', 409));
+      }
+
+      if (input.userId === actor.userId) {
+        return err(new AppError('TENANT_SELF_REMOVE_BLOCKED', 'Remove this account from a different admin session.', 409));
+      }
+
+      await this.tenantRepository.deleteTenantMember({
+        tenantId: input.tenantId,
+        userId: input.userId,
+      });
+      return ok(undefined);
+    } catch (error) {
+      return err(fromUnknownError(error));
+    }
+  }
+
   public async setTenantStatus(
     actor: ActorContext,
     input: { tenantId: string; status: 'active' | 'disabled' },
@@ -189,6 +311,74 @@ export class TenantService {
         tenantId: input.tenantId,
         guildId: input.guildId,
         guildName: input.guildName,
+      });
+
+      return ok(undefined);
+    } catch (error) {
+      return err(fromUnknownError(error));
+    }
+  }
+
+  public async disconnectGuild(
+    actor: ActorContext,
+    input: { tenantId: string; guildId: string },
+  ): Promise<Result<void, AppError>> {
+    try {
+      if (!actor.isSuperAdmin) {
+        const access = await this.assertTenantAccess(actor, input.tenantId, 'owner');
+        if (access.isErr()) {
+          return err(access.error);
+        }
+      }
+
+      const linkedGuild = await this.tenantRepository.getTenantGuild({
+        tenantId: input.tenantId,
+        guildId: input.guildId,
+      });
+      if (!linkedGuild) {
+        return err(new AppError('GUILD_NOT_CONNECTED', 'This Discord server is not linked to the selected workspace.', 404));
+      }
+
+      await this.tenantRepository.disconnectGuildCascade({
+        tenantId: input.tenantId,
+        guildId: input.guildId,
+      });
+
+      return ok(undefined);
+    } catch (error) {
+      return err(fromUnknownError(error));
+    }
+  }
+
+  public async disconnectTelegramLink(
+    actor: ActorContext,
+    input: { tenantId: string; guildId: string },
+  ): Promise<Result<void, AppError>> {
+    try {
+      const access = await this.assertTenantAccess(actor, input.tenantId, 'admin');
+      if (access.isErr()) {
+        return err(access.error);
+      }
+
+      const linkedGuild = await this.tenantRepository.getTenantGuild({
+        tenantId: input.tenantId,
+        guildId: input.guildId,
+      });
+      if (!linkedGuild) {
+        return err(new AppError('GUILD_NOT_CONNECTED', 'This Discord server is not linked to the selected workspace.', 404));
+      }
+
+      const existingLink = await this.telegramLinkRepository.getByGuild({
+        tenantId: input.tenantId,
+        guildId: input.guildId,
+      });
+      if (!existingLink) {
+        return err(new AppError('TELEGRAM_LINK_NOT_FOUND', 'No Telegram chat is currently linked to this server.', 404));
+      }
+
+      await this.telegramLinkRepository.deleteByGuild({
+        tenantId: input.tenantId,
+        guildId: input.guildId,
       });
 
       return ok(undefined);

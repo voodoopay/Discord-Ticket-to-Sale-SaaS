@@ -4,6 +4,7 @@ import { ArrowRight, CheckCircle2, Loader2, Server, Sparkles, Store } from 'luci
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
+import { ConfirmationModal } from '@/components/dashboard/dashboard-primitives';
 import { Button } from '@/components/ui/button';
 import { dashboardApi } from '@/lib/dashboard-api';
 import type { DashboardSessionData } from '@/lib/dashboard-session';
@@ -24,27 +25,44 @@ function buildInitialTenantId(data: DashboardSessionData): string {
 
 export function DashboardLaunchpad({ data }: DashboardLaunchpadProps) {
   const router = useRouter();
+  const [tenants, setTenants] = useState(data.tenants);
+  const [tenantGuildsByTenantId, setTenantGuildsByTenantId] = useState(data.tenantGuildsByTenantId);
   const [selectedTenantId, setSelectedTenantId] = useState(() => buildInitialTenantId(data));
   const [selectedGuildId, setSelectedGuildId] = useState(data.discordGuilds[0]?.id ?? '');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [deletingTenantId, setDeletingTenantId] = useState<string | null>(null);
 
-  const selectedTenant = data.tenants.find((tenant) => tenant.id === selectedTenantId) ?? null;
+  const selectedTenant = tenants.find((tenant) => tenant.id === selectedTenantId) ?? null;
   const selectedGuild = data.discordGuilds.find((guild) => guild.id === selectedGuildId) ?? null;
-  const linkedGuilds = data.tenantGuildsByTenantId[selectedTenantId] ?? [];
+  const linkedGuilds = tenantGuildsByTenantId[selectedTenantId] ?? [];
   const linkedGuildIds = new Set(linkedGuilds.map((guild) => guild.guildId));
   const selectedGuildIsLinked = selectedGuildId ? linkedGuildIds.has(selectedGuildId) : false;
+  const deletingTenant = tenants.find((tenant) => tenant.id === deletingTenantId) ?? null;
 
   useEffect(() => {
-    if (!selectedTenantId && data.tenants[0]?.id) {
-      setSelectedTenantId(data.tenants[0].id);
+    if (selectedTenantId && tenants.some((tenant) => tenant.id === selectedTenantId)) {
       return;
     }
 
+    const nextTenantId = buildInitialTenantId({
+      ...data,
+      tenants,
+      tenantGuildsByTenantId,
+    });
+    if (nextTenantId) {
+      setSelectedTenantId(nextTenantId);
+      return;
+    }
+
+    setSelectedTenantId('');
+  }, [data, selectedTenantId, tenantGuildsByTenantId, tenants]);
+
+  useEffect(() => {
     if (!selectedGuildId && data.discordGuilds[0]?.id) {
       setSelectedGuildId(data.discordGuilds[0].id);
     }
-  }, [data.discordGuilds, data.tenants, selectedGuildId, selectedTenantId]);
+  }, [data.discordGuilds, selectedGuildId]);
 
   async function continueToDashboard() {
     if (!selectedTenant || !selectedGuild) {
@@ -75,9 +93,43 @@ export function DashboardLaunchpad({ data }: DashboardLaunchpadProps) {
     }
   }
 
+  async function deleteWorkspace() {
+    if (!deletingTenant) {
+      return;
+    }
+
+    setSubmitting(true);
+    setError('');
+    try {
+      await dashboardApi<{ ok: true }>(`/api/tenants/${encodeURIComponent(deletingTenant.id)}`, 'DELETE');
+
+      const nextTenants = tenants.filter((tenant) => tenant.id !== deletingTenant.id);
+      setTenants(nextTenants);
+      setTenantGuildsByTenantId((current) => {
+        const next = { ...current };
+        delete next[deletingTenant.id];
+        return next;
+      });
+      setDeletingTenantId(null);
+
+      if (selectedTenantId === deletingTenant.id) {
+        const replacement =
+          nextTenants.find((tenant) => (tenantGuildsByTenantId[tenant.id] ?? []).length > 0)?.id ??
+          nextTenants[0]?.id ??
+          '';
+        setSelectedTenantId(replacement);
+      }
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Failed to delete workspace.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
-    <section className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_22rem]">
-      <div className="space-y-5">
+    <>
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_22rem]">
+        <div className="space-y-5">
         <div className="rounded-[1.9rem] border border-border/70 bg-card/85 p-6 shadow-[0_28px_80px_-36px_rgba(0,0,0,0.6)] backdrop-blur sm:p-7">
           <div className="flex items-start gap-4">
             <span className="inline-flex size-12 items-center justify-center rounded-[1.25rem] border border-primary/30 bg-primary/12 text-primary">
@@ -111,14 +163,14 @@ export function DashboardLaunchpad({ data }: DashboardLaunchpadProps) {
             </div>
 
             <div className="mt-4 space-y-3">
-              {data.tenants.length === 0 ? (
+              {tenants.length === 0 ? (
                 <p className="rounded-[1.2rem] border border-border/70 bg-background/70 px-4 py-3 text-sm text-muted-foreground">
                   No workspaces are available on this account yet.
                 </p>
               ) : (
-                data.tenants.map((tenant) => {
+                tenants.map((tenant) => {
                   const active = tenant.id === selectedTenantId;
-                  const linkedCount = data.tenantGuildsByTenantId[tenant.id]?.length ?? 0;
+                  const linkedCount = tenantGuildsByTenantId[tenant.id]?.length ?? 0;
 
                   return (
                     <button
@@ -214,7 +266,7 @@ export function DashboardLaunchpad({ data }: DashboardLaunchpadProps) {
         </div>
       </div>
 
-      <aside className="space-y-4 rounded-[1.9rem] border border-border/70 bg-card/85 p-5 shadow-[0_28px_80px_-36px_rgba(0,0,0,0.6)] backdrop-blur">
+        <aside className="space-y-4 rounded-[1.9rem] border border-border/70 bg-card/85 p-5 shadow-[0_28px_80px_-36px_rgba(0,0,0,0.6)] backdrop-blur">
         <div className="space-y-1">
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
             Ready To Open
@@ -244,6 +296,27 @@ export function DashboardLaunchpad({ data }: DashboardLaunchpadProps) {
           sidebar layout with dark and light mode support.
         </div>
 
+        {data.me.isSuperAdmin && selectedTenant ? (
+          <div
+            data-tutorial="workspace-delete"
+            className="rounded-[1.35rem] border border-destructive/30 bg-destructive/8 p-4"
+          >
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-destructive/90">Super Admin</p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              Remove the selected merchant workspace and all linked store data when the environment should be retired.
+            </p>
+            <Button
+              type="button"
+              variant="destructive"
+              className="mt-4 min-h-11 w-full"
+              disabled={submitting}
+              onClick={() => setDeletingTenantId(selectedTenant.id)}
+            >
+              Delete Workspace
+            </Button>
+          </div>
+        ) : null}
+
         {error ? (
           <div className="rounded-[1.25rem] border border-destructive/35 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {error}
@@ -260,7 +333,29 @@ export function DashboardLaunchpad({ data }: DashboardLaunchpadProps) {
           {submitting ? <Loader2 className="size-4 animate-spin" /> : <ArrowRight className="size-4" />}
           {selectedGuildIsLinked ? 'Open Dashboard' : 'Link Server And Open'}
         </Button>
-      </aside>
-    </section>
+        </aside>
+      </section>
+
+      <ConfirmationModal
+        open={Boolean(deletingTenant)}
+        title="Delete workspace"
+        description={
+          deletingTenant ? (
+            <>
+              This will permanently remove <strong>{deletingTenant.name}</strong>, its linked servers, products,
+              coupons, integrations, Telegram links, paid-order data, and customer points.
+            </>
+          ) : (
+            'This action permanently removes the selected workspace.'
+          )
+        }
+        confirmLabel={submitting ? 'Deleting...' : 'Delete Workspace'}
+        confirmPhrase={deletingTenant?.name}
+        confirmPlaceholder={deletingTenant?.name ?? 'Workspace name'}
+        pending={submitting}
+        onClose={() => setDeletingTenantId(null)}
+        onConfirm={() => void deleteWorkspace()}
+      />
+    </>
   );
 }

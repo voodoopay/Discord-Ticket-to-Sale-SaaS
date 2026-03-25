@@ -6,6 +6,8 @@ export type TenantSummary = {
   status: string;
 };
 
+export type TenantMemberRole = 'owner' | 'admin' | 'member';
+
 export type DiscordGuildSummary = {
   id: string;
   name: string;
@@ -197,4 +199,21 @@ export type DashboardOverview = {
     productId: string | null;
     variantId: string | null;
   }>;
+};
+
+export type WorkspaceMemberRecord = {
+  userId: string;
+  discordUserId: string;
+  username: string;
+  avatarUrl: string | null;
+  role: TenantMemberRole;
+  removable: boolean;
+};
+
+export type WorkspaceAccessState = {
+  currentRole: TenantMemberRole | null;
+  members: WorkspaceMemberRecord[];
+  canManageMembers: boolean;
+  canDisconnectGuild: boolean;
+  canDisconnectTelegram: boolean;
 };
