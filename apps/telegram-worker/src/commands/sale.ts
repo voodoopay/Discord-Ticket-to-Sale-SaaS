@@ -259,6 +259,7 @@ async function finalizeDraft(input: { api: Api; draft: SaleDraft }): Promise<voi
     ticketChannelId: input.draft.ticketChannelId,
     staffDiscordUserId: input.draft.staffDiscordUserId,
     customerDiscordUserId: input.draft.customerDiscordUserId,
+    defaultCurrency: input.draft.defaultCurrency,
     productId: primaryItem.productId,
     variantId: primaryItem.variantId,
     items: input.draft.basketItems.map((item) => ({ productId: item.productId, variantId: item.variantId })),
@@ -615,7 +616,7 @@ async function handleProductSelection(api: Api, draft: SaleDraft, selectedProduc
     variantId: variant.variantId,
     label: variant.label,
     priceMinor: variant.priceMinor,
-    currency: variant.currency,
+    currency: draft.defaultCurrency,
   }));
   updateSaleDraft(draft);
   await renderVariantSelectionStep(api, draft);
@@ -658,7 +659,7 @@ async function handleVariantSelection(api: Api, draft: SaleDraft, selectedVarian
     variantId: variant.variantId,
     variantLabel: variant.label,
     priceMinor: variant.priceMinor,
-    currency: variant.currency,
+    currency: draft.defaultCurrency,
   });
   draft.pendingInput = null;
   resetPointsSelection(draft);

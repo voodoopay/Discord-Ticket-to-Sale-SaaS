@@ -34,6 +34,7 @@ type SaleSessionInput = {
   ticketChannelId: string;
   staffDiscordUserId: string;
   customerDiscordUserId: string;
+  defaultCurrency?: string;
   productId: string;
   variantId: string;
   items?: Array<{
@@ -467,12 +468,23 @@ export class SaleService {
     if (!primaryItem) {
       return err(new AppError('BASKET_EMPTY', 'Basket must include at least one item', 400));
     }
+    const configuredCurrency = input.defaultCurrency?.trim().toUpperCase() ?? '';
+    const effectiveCheckoutCurrency =
+      /^[A-Z]{3}$/.test(configuredCurrency) ? configuredCurrency : primaryItem.currency;
+    const effectiveResolvedItems = resolvedItems.map((item) => ({
+      ...item,
+      currency: effectiveCheckoutCurrency,
+    }));
+    const effectivePrimaryItem = effectiveResolvedItems[0];
+    if (!effectivePrimaryItem) {
+      return err(new AppError('BASKET_EMPTY', 'Basket must include at least one item', 400));
+    }
 
     const couponDiscountMinorResult = await this.resolveCouponDiscountMinor({
       tenantId: input.tenantId,
       guildId: input.guildId,
       couponCode: input.couponCode,
-      basketItems: resolvedItems.map((item) => ({
+      basketItems: effectiveResolvedItems.map((item) => ({
         productId: item.productId,
         variantId: item.variantId,
         priceMinor: item.priceMinor,
@@ -498,7 +510,7 @@ export class SaleService {
     }
     const pointsConfig = pointsConfigResult.value;
     const referralRewardMinorSnapshot = calculateReferralRewardMinorSnapshot({
-      items: resolvedItems.map((item) => ({
+      items: effectiveResolvedItems.map((item) => ({
         category: item.category,
         variantReferralRewardMinor: item.referralRewardMinor,
       })),
@@ -551,7 +563,7 @@ export class SaleService {
     }
 
     const calc = calculatePointsOrderTotals({
-      lines: resolvedItems.map((item) => ({ category: item.category, priceMinor: item.priceMinor })),
+      lines: effectiveResolvedItems.map((item) => ({ category: item.category, priceMinor: item.priceMinor })),
       couponDiscountMinor,
       tipMinor: tipMinorRaw,
       pointValueMinor: pointsConfig.pointValueMinor,
@@ -599,9 +611,9 @@ export class SaleService {
       ticketChannelId: input.ticketChannelId,
       staffUserId: input.staffDiscordUserId,
       customerDiscordId: input.customerDiscordUserId,
-      productId: primaryItem.productId,
-      variantId: primaryItem.variantId,
-      basketItems: resolvedItems.map((item) => ({
+      productId: effectivePrimaryItem.productId,
+      variantId: effectivePrimaryItem.variantId,
+      basketItems: effectiveResolvedItems.map((item) => ({
         productId: item.productId,
         productName: item.productName,
         category: item.category,
@@ -664,7 +676,7 @@ export class SaleService {
         orderSessionId: orderSession.id,
         customerDiscordUserId: input.customerDiscordUserId,
         totalMinor: calc.totalMinor,
-        currency: primaryItem.currency,
+        currency: effectivePrimaryItem.currency,
         answers: parsedAnswers.data,
         integration: voodooIntegration.value,
         token,
@@ -685,7 +697,7 @@ export class SaleService {
           guildId: input.guildId,
           orderSessionId: orderSession.id,
           totalMinor: calc.totalMinor,
-          currency: primaryItem.currency,
+          currency: effectivePrimaryItem.currency,
           integration: voodooIntegration.value,
         });
 
@@ -736,10 +748,10 @@ export class SaleService {
     const productForCheckout = await this.productRepository.getById({
       tenantId: input.tenantId,
       guildId: input.guildId,
-      productId: primaryItem.productId,
+      productId: effectivePrimaryItem.productId,
     });
     const primaryVariantCheckoutPath =
-      productForCheckout?.variants.find((item) => item.id === primaryItem.variantId)?.wooCheckoutPath ?? null;
+      productForCheckout?.variants.find((item) => item.id === effectivePrimaryItem.variantId)?.wooCheckoutPath ?? null;
 
     const checkoutTarget =
       primaryVariantCheckoutPath && primaryVariantCheckoutPath.length > 0

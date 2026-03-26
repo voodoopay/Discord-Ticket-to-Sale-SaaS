@@ -382,6 +382,7 @@ async function finalizeDraft(input: {
       ticketChannelId: input.draft.ticketChannelId,
       staffDiscordUserId: input.draft.staffDiscordUserId,
       customerDiscordUserId: input.draft.customerDiscordUserId,
+      defaultCurrency: input.draft.defaultCurrency,
       productId: primaryItem.productId,
       variantId: primaryItem.variantId,
       items: input.draft.basketItems.map((item) => ({
@@ -962,7 +963,7 @@ async function handleProductSelection(
       variantId: variant.variantId,
       label: variant.label,
       priceMinor: variant.priceMinor,
-      currency: variant.currency,
+      currency: draft.defaultCurrency,
     }));
   updateSaleDraft(draft);
 
@@ -1042,7 +1043,7 @@ async function handleVariantSelection(
     variantId: variant.variantId,
     variantLabel: variant.label,
     priceMinor: variant.priceMinor,
-    currency: variant.currency,
+    currency: draft.defaultCurrency,
   });
   resetPointsSelection(draft);
   updateSaleDraft(draft);
