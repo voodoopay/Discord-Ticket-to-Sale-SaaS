@@ -1,11 +1,12 @@
 'use client';
 
-import { ArrowRight, CheckCircle2, Loader2, Server, Sparkles, Store } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Loader2, Plus, Server, Sparkles, Store } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import { ConfirmationModal } from '@/components/dashboard/dashboard-primitives';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { dashboardApi } from '@/lib/dashboard-api';
 import type { DashboardSessionData } from '@/lib/dashboard-session';
 import { cn } from '@/lib/utils';
@@ -29,6 +30,8 @@ export function DashboardLaunchpad({ data }: DashboardLaunchpadProps) {
   const [tenantGuildsByTenantId, setTenantGuildsByTenantId] = useState(data.tenantGuildsByTenantId);
   const [selectedTenantId, setSelectedTenantId] = useState(() => buildInitialTenantId(data));
   const [selectedGuildId, setSelectedGuildId] = useState(data.discordGuilds[0]?.id ?? '');
+  const [creatingWorkspace, setCreatingWorkspace] = useState(data.tenants.length === 0);
+  const [workspaceName, setWorkspaceName] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [deletingTenantId, setDeletingTenantId] = useState<string | null>(null);
@@ -63,6 +66,41 @@ export function DashboardLaunchpad({ data }: DashboardLaunchpadProps) {
       setSelectedGuildId(data.discordGuilds[0].id);
     }
   }, [data.discordGuilds, selectedGuildId]);
+
+  useEffect(() => {
+    if (tenants.length === 0) {
+      setCreatingWorkspace(true);
+    }
+  }, [tenants.length]);
+
+  async function createWorkspace() {
+    const trimmedName = workspaceName.trim();
+    if (!trimmedName) {
+      setError('Enter a workspace name before creating the workspace.');
+      return;
+    }
+
+    setError('');
+    setSubmitting(true);
+    try {
+      const response = await dashboardApi<{ tenant: DashboardSessionData['tenants'][number] }>('/api/tenants', 'POST', {
+        name: trimmedName,
+      });
+
+      setTenants((current) => [...current, response.tenant]);
+      setTenantGuildsByTenantId((current) => ({
+        ...current,
+        [response.tenant.id]: [],
+      }));
+      setSelectedTenantId(response.tenant.id);
+      setWorkspaceName('');
+      setCreatingWorkspace(false);
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : 'Failed to create workspace.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   async function continueToDashboard() {
     if (!selectedTenant || !selectedGuild) {
@@ -152,20 +190,102 @@ export function DashboardLaunchpad({ data }: DashboardLaunchpadProps) {
 
         <div className="grid gap-5 lg:grid-cols-2">
           <div className="rounded-[1.75rem] border border-border/70 bg-card/80 p-5 shadow-[0_20px_50px_-28px_rgba(0,0,0,0.5)] backdrop-blur">
-            <div className="flex items-center gap-3">
-              <span className="inline-flex size-10 items-center justify-center rounded-full border border-border/70 bg-background/80 text-sm font-semibold text-primary">
-                01
-              </span>
-              <div>
-                <h2 className="font-semibold">Pick a workspace</h2>
-                <p className="text-sm text-muted-foreground">This decides where the server config is stored.</p>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex items-center gap-3">
+                <span className="inline-flex size-10 items-center justify-center rounded-full border border-border/70 bg-background/80 text-sm font-semibold text-primary">
+                  01
+                </span>
+                <div>
+                  <h2 className="font-semibold">Pick a workspace</h2>
+                  <p className="text-sm text-muted-foreground">This decides where the server config is stored.</p>
+                </div>
+              </div>
+              <div data-tutorial="workspace-create-toggle" className="flex flex-wrap gap-2">
+                {tenants.length > 0 ? (
+                  <Button
+                    type="button"
+                    variant={creatingWorkspace ? 'outline' : 'secondary'}
+                    size="sm"
+                    onClick={() => {
+                      setCreatingWorkspace(false);
+                      setError('');
+                    }}
+                  >
+                    Existing Workspaces
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  variant={creatingWorkspace ? 'secondary' : 'outline'}
+                  size="sm"
+                  onClick={() => {
+                    setCreatingWorkspace(true);
+                    setError('');
+                  }}
+                >
+                  <Plus className="size-4" />
+                  {tenants.length > 0 ? 'Create Workspace' : 'Create First Workspace'}
+                </Button>
               </div>
             </div>
 
             <div className="mt-4 space-y-3">
-              {tenants.length === 0 ? (
+              {creatingWorkspace ? (
+                <div className="space-y-4 rounded-[1.35rem] border border-border/70 bg-background/70 p-4">
+                  <div className="space-y-1">
+                    <p className="font-medium">
+                      {tenants.length > 0 ? 'Create another workspace' : 'Create your first workspace'}
+                    </p>
+                    <p className="text-sm leading-6 text-muted-foreground">
+                      Name the merchant workspace first, then pick the Discord server you want to connect on entry.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label htmlFor="workspace-name" className="text-sm font-medium">
+                      Workspace name
+                    </label>
+                    <Input
+                      id="workspace-name"
+                      value={workspaceName}
+                      onChange={(event) => {
+                        setWorkspaceName(event.target.value);
+                        setError('');
+                      }}
+                      placeholder="Merchant or brand name"
+                      maxLength={120}
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    {tenants.length > 0 ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="min-h-11 sm:flex-1"
+                        disabled={submitting}
+                        onClick={() => {
+                          setCreatingWorkspace(false);
+                          setError('');
+                        }}
+                      >
+                        Back To Workspaces
+                      </Button>
+                    ) : null}
+                    <Button
+                      type="button"
+                      className="min-h-11 sm:flex-1"
+                      disabled={submitting}
+                      onClick={() => void createWorkspace()}
+                    >
+                      {submitting ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+                      {tenants.length > 0 ? 'Create Workspace' : 'Create First Workspace'}
+                    </Button>
+                  </div>
+                </div>
+              ) : tenants.length === 0 ? (
                 <p className="rounded-[1.2rem] border border-border/70 bg-background/70 px-4 py-3 text-sm text-muted-foreground">
-                  No workspaces are available on this account yet.
+                  No workspaces are available on this account yet. Create your first workspace to continue.
                 </p>
               ) : (
                 tenants.map((tenant) => {
@@ -276,7 +396,9 @@ export function DashboardLaunchpad({ data }: DashboardLaunchpadProps) {
 
         <div className="rounded-[1.35rem] border border-border/70 bg-background/70 p-4">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Workspace</p>
-          <p className="mt-2 font-medium">{selectedTenant?.name ?? 'Select a workspace'}</p>
+          <p className="mt-2 font-medium">
+            {creatingWorkspace ? workspaceName.trim() || 'Create a new workspace' : selectedTenant?.name ?? 'Select a workspace'}
+          </p>
         </div>
 
         <div className="rounded-[1.35rem] border border-border/70 bg-background/70 p-4">
@@ -327,7 +449,7 @@ export function DashboardLaunchpad({ data }: DashboardLaunchpadProps) {
           type="button"
           size="lg"
           className="min-h-12 w-full"
-          disabled={!selectedTenant || !selectedGuild || submitting}
+          disabled={!selectedTenant || !selectedGuild || submitting || creatingWorkspace}
           onClick={continueToDashboard}
         >
           {submitting ? <Loader2 className="size-4 animate-spin" /> : <ArrowRight className="size-4" />}

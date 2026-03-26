@@ -98,6 +98,46 @@ describe('tenant service destructive controls', () => {
     });
   });
 
+  it('creates a workspace with a trimmed name for the logged-in actor', async () => {
+    const service = new TenantService();
+
+    const createTenant = vi.spyOn((service as any).tenantRepository, 'createTenant').mockResolvedValue({
+      id: 'tenant-2',
+      name: 'Voodoo Merchant',
+      status: 'active',
+      ownerUserId: 'user-1',
+      createdAt: new Date(),
+    });
+
+    const result = await service.createTenant(makeSession({ tenantIds: [] }), {
+      name: '  Voodoo Merchant  ',
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(createTenant).toHaveBeenCalledWith({
+      name: 'Voodoo Merchant',
+      ownerUserId: 'user-1',
+    });
+  });
+
+  it('blocks blank workspace names', async () => {
+    const service = new TenantService();
+
+    const createTenant = vi.spyOn((service as any).tenantRepository, 'createTenant');
+
+    const result = await service.createTenant(makeSession({ tenantIds: [] }), {
+      name: '   ',
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) {
+      return;
+    }
+
+    expect(result.error.code).toBe('TENANT_NAME_REQUIRED');
+    expect(createTenant).not.toHaveBeenCalled();
+  });
+
   it('blocks non-owner tenant members from adding workers', async () => {
     const service = new TenantService();
 

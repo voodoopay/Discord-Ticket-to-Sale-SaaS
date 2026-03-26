@@ -269,8 +269,17 @@ export class TenantService {
     input: { name: string },
   ): Promise<Result<{ id: string; name: string; status: string }, AppError>> {
     try {
+      const name = input.name.trim();
+      if (!name) {
+        return err(new AppError('TENANT_NAME_REQUIRED', 'Enter a workspace name before creating the workspace.', 422));
+      }
+
+      if (name.length > 120) {
+        return err(new AppError('TENANT_NAME_TOO_LONG', 'Workspace name must be 120 characters or fewer.', 422));
+      }
+
       const tenant = await this.tenantRepository.createTenant({
-        name: input.name,
+        name,
         ownerUserId: actor.userId,
       });
 
