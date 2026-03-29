@@ -9,6 +9,8 @@ import {
   AppError,
   type ChannelNukeAuthorizedUserSummary,
   type ChannelNukeScheduleSummary,
+  formatNukeScheduleCadence,
+  formatWeeklyDayOfWeek,
   getEnv,
   NukeService,
   TenantRepository,
@@ -99,6 +101,28 @@ type NukeExecutionResult = {
   message: string;
 };
 
+type ScheduleCadenceDetails = {
+  cadence: ChannelNukeScheduleSummary['cadence'];
+  weeklyDayOfWeek: number | null;
+  monthlyDayOfMonth: number | null;
+};
+
+const CADENCE_CHOICES = [
+  { name: 'Daily', value: 'daily' },
+  { name: 'Weekly', value: 'weekly' },
+  { name: 'Monthly', value: 'monthly' },
+] as const;
+
+const WEEKDAY_CHOICES = [
+  { name: 'Monday', value: 1 },
+  { name: 'Tuesday', value: 2 },
+  { name: 'Wednesday', value: 3 },
+  { name: 'Thursday', value: 4 },
+  { name: 'Friday', value: 5 },
+  { name: 'Saturday', value: 6 },
+  { name: 'Sunday', value: 7 },
+] as const;
+
 function buildNukeResultMessage(result: NukeExecutionResult): string {
   return [
     result.message,
@@ -107,10 +131,28 @@ function buildNukeResultMessage(result: NukeExecutionResult): string {
   ].join('\n');
 }
 
+function buildScheduleCadenceLines(schedule: ScheduleCadenceDetails): string[] {
+  const lines = [`Cadence: ${formatNukeScheduleCadence(schedule.cadence)}`];
+
+  if (schedule.cadence === 'weekly' && schedule.weeklyDayOfWeek != null) {
+    lines.push(`Weekday: ${formatWeeklyDayOfWeek(schedule.weeklyDayOfWeek)}`);
+  }
+
+  if (schedule.cadence === 'monthly' && schedule.monthlyDayOfMonth != null) {
+    lines.push(`Day of month: ${schedule.monthlyDayOfMonth}`);
+    if (schedule.monthlyDayOfMonth > 28) {
+      lines.push('Short months: Uses the last day of the month when needed.');
+    }
+  }
+
+  return lines;
+}
+
 export function buildScheduleStatusMessage(schedule: ChannelNukeScheduleSummary): string {
   return [
-    'Current daily nuke schedule for this channel:',
+    'Current nuke schedule for this channel:',
     `Status: ${schedule.enabled ? 'Enabled' : 'Disabled'}`,
+    ...buildScheduleCadenceLines(schedule),
     `Time: ${schedule.localTimeHhMm}`,
     `Timezone: ${schedule.timezone}`,
     `Next run (UTC): ${schedule.nextRunAtUtc}`,
@@ -187,17 +229,17 @@ async function sendManualNukeCompletionNotice(
 export const nukeCommand = {
   data: new SlashCommandBuilder()
     .setName('nuke')
-    .setDescription('Nuke this channel now or configure daily channel nuke schedule')
+    .setDescription('Nuke this channel now or configure a recurring channel nuke schedule')
     .setDMPermission(false)
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
     .addSubcommand((subcommand) =>
       subcommand
         .setName('schedule')
-        .setDescription('Set daily nuke time for this channel')
+        .setDescription('Set a daily, weekly, or monthly nuke schedule for this channel')
         .addStringOption((option) =>
           option
             .setName('time')
-            .setDescription('Daily time in HH:mm (24-hour) format')
+            .setDescription('Run time in HH:mm (24-hour) format')
             .setRequired(true),
         )
         .addStringOption((option) =>
@@ -206,10 +248,32 @@ export const nukeCommand = {
             .setDescription('IANA timezone (e.g., Europe/Berlin)')
             .setRequired(true)
             .setAutocomplete(true),
+        )
+        .addStringOption((option) =>
+          option
+            .setName('cadence')
+            .setDescription('Schedule frequency. Defaults to daily.')
+            .setRequired(false)
+            .addChoices(...CADENCE_CHOICES),
+        )
+        .addIntegerOption((option) =>
+          option
+            .setName('weekday')
+            .setDescription('Weekly only. Defaults to the current local weekday.')
+            .setRequired(false)
+            .addChoices(...WEEKDAY_CHOICES),
+        )
+        .addIntegerOption((option) =>
+          option
+            .setName('day_of_month')
+            .setDescription('Monthly only. Defaults to the current local day of month.')
+            .setRequired(false)
+            .setMinValue(1)
+            .setMaxValue(31),
         ),
     )
     .addSubcommand((subcommand) =>
-      subcommand.setName('status').setDescription('Show daily nuke schedule for this channel'),
+      subcommand.setName('status').setDescription('Show the current nuke schedule for this channel'),
     )
     .addSubcommand((subcommand) =>
       subcommand.setName('authorized').setDescription('List Discord users allowed to use /nuke here'),
@@ -231,7 +295,7 @@ export const nukeCommand = {
         ),
     )
     .addSubcommand((subcommand) =>
-      subcommand.setName('disable').setDescription('Disable daily nuke schedule for this channel'),
+      subcommand.setName('disable').setDescription('Disable the current nuke schedule for this channel'),
     )
     .addSubcommand((subcommand) =>
       subcommand
@@ -386,7 +450,7 @@ export const nukeCommand = {
 
         await sendEphemeralReply(
           interaction,
-          result.value ? buildScheduleStatusMessage(result.value) : 'No daily nuke schedule exists for this channel.',
+          result.value ? buildScheduleStatusMessage(result.value) : 'No nuke schedule exists for this channel.',
         );
         return;
       }
@@ -394,13 +458,19 @@ export const nukeCommand = {
       if (subcommand === 'schedule') {
         const timeHhMm = interaction.options.getString('time', true);
         const timezone = interaction.options.getString('timezone', true);
+        const cadence = interaction.options.getString('cadence');
+        const weeklyDayOfWeek = interaction.options.getInteger('weekday');
+        const monthlyDayOfMonth = interaction.options.getInteger('day_of_month');
 
-        const result = await nukeService.setDailySchedule({
+        const result = await nukeService.setSchedule({
           tenantId: tenant.tenantId,
           guildId,
           channelId,
           timeHhMm,
           timezone,
+          cadence,
+          weeklyDayOfWeek,
+          monthlyDayOfMonth,
           actorDiscordUserId: interaction.user.id,
         });
 
@@ -412,7 +482,8 @@ export const nukeCommand = {
         await sendEphemeralReply(
           interaction,
           [
-            'Daily nuke schedule saved for this channel.',
+            `${formatNukeScheduleCadence(result.value.cadence)} nuke schedule saved for this channel.`,
+            ...buildScheduleCadenceLines(result.value),
             `Time: ${result.value.localTimeHhMm}`,
             `Timezone: ${result.value.timezone}`,
             `Next run (UTC): ${result.value.nextRunAtUtc}`,
@@ -438,7 +509,7 @@ export const nukeCommand = {
         await sendEphemeralReply(
           interaction,
           result.value.disabled
-            ? 'Daily nuke schedule disabled for this channel.'
+            ? 'Nuke schedule disabled for this channel.'
             : 'No nuke schedule exists for this channel.',
         );
         return;

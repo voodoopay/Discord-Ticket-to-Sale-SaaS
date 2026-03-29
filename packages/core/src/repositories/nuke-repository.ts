@@ -10,6 +10,7 @@ import {
   orderSessions,
   ticketChannelMetadata,
 } from '../infra/db/schema/index.js';
+import type { NukeScheduleCadence } from '../services/nuke-schedule.js';
 
 export type ChannelNukeScheduleRecord = {
   id: string;
@@ -19,6 +20,9 @@ export type ChannelNukeScheduleRecord = {
   enabled: boolean;
   localTimeHhmm: string;
   timezone: string;
+  cadence: NukeScheduleCadence;
+  weeklyDayOfWeek: number | null;
+  monthlyDayOfMonth: number | null;
   nextRunAtUtc: Date;
   lastRunAtUtc: Date | null;
   lastLocalRunDate: string | null;
@@ -49,6 +53,9 @@ function mapScheduleRow(row: typeof channelNukeSchedules.$inferSelect): ChannelN
     enabled: row.enabled,
     localTimeHhmm: row.localTimeHhmm,
     timezone: row.timezone,
+    cadence: row.cadence,
+    weeklyDayOfWeek: row.weeklyDayOfWeek ?? null,
+    monthlyDayOfMonth: row.monthlyDayOfMonth ?? null,
     nextRunAtUtc: row.nextRunAtUtc,
     lastRunAtUtc: row.lastRunAtUtc ?? null,
     lastLocalRunDate: row.lastLocalRunDate ?? null,
@@ -139,6 +146,9 @@ export class NukeRepository {
     channelId: string;
     localTimeHhmm: string;
     timezone: string;
+    cadence: NukeScheduleCadence;
+    weeklyDayOfWeek: number | null;
+    monthlyDayOfMonth: number | null;
     nextRunAtUtc: Date;
     updatedByDiscordUserId: string;
   }): Promise<ChannelNukeScheduleRecord> {
@@ -153,6 +163,9 @@ export class NukeRepository {
         enabled: true,
         localTimeHhmm: input.localTimeHhmm,
         timezone: input.timezone,
+        cadence: input.cadence,
+        weeklyDayOfWeek: input.weeklyDayOfWeek,
+        monthlyDayOfMonth: input.monthlyDayOfMonth,
         nextRunAtUtc: input.nextRunAtUtc,
         consecutiveFailures: 0,
         updatedByDiscordUserId: input.updatedByDiscordUserId,
@@ -164,6 +177,9 @@ export class NukeRepository {
           enabled: true,
           localTimeHhmm: input.localTimeHhmm,
           timezone: input.timezone,
+          cadence: input.cadence,
+          weeklyDayOfWeek: input.weeklyDayOfWeek,
+          monthlyDayOfMonth: input.monthlyDayOfMonth,
           nextRunAtUtc: input.nextRunAtUtc,
           consecutiveFailures: 0,
           updatedByDiscordUserId: input.updatedByDiscordUserId,

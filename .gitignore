@@ -7,3 +7,7 @@ coverage
 .env.*
 !.env.example
 AGENTS.md
+.codex-tools/plink.exe
+*.sh
+*.log
+*.tsbuildinfo

@@ -1,0 +1,37 @@
+- generic [active] [ref=e1]:
+  - main [ref=e2]:
+    - generic [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]: Voodoo Pay SaaS Dashboard
+        - button "Toggle theme" [ref=e6]:
+          - img
+      - generic [ref=e7]:
+        - generic [ref=e8]:
+          - generic [ref=e9]: Discord Commerce Stack
+          - generic [ref=e10]: Build clean ticket sales with a modern payment dashboard.
+          - generic [ref=e11]: Login with Discord, configure your workspace, connect your server, set Voodoo Pay details, and run sales from tickets with coupons, points, referrals, and structured paid logs.
+        - generic [ref=e12]:
+          - link "Login to Dashboard" [ref=e13] [cursor=pointer]:
+            - /url: /api/auth/discord/login
+            - text: Login to Dashboard
+            - img
+          - link "Open Dashboard" [ref=e14] [cursor=pointer]:
+            - /url: /dashboard
+      - generic [ref=e15]:
+        - generic [ref=e17]:
+          - img [ref=e19]
+          - generic [ref=e21]: Ticket-To-Sale Flow
+          - generic [ref=e22]: Collect order questions in Discord tickets and send users straight to provider checkout.
+        - generic [ref=e24]:
+          - img [ref=e26]
+          - generic [ref=e29]: Multi-Tenant Control
+          - generic [ref=e30]: Each merchant keeps separate workspace config, products, pricing, and callback security.
+        - generic [ref=e32]:
+          - img [ref=e34]
+          - generic [ref=e38]: Points + Referrals
+          - generic [ref=e39]: Category-based rewards, first-paid referral payouts, custom private /refer replies, and thank-you DM templates.
+        - generic [ref=e41]:
+          - img [ref=e43]
+          - generic [ref=e46]: Secure Callback Validation
+          - generic [ref=e47]: Each payment callback is verified with signed tokens to block forged confirmations.
+  - alert [ref=e48]

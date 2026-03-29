@@ -33,4 +33,13 @@ describe('dashboard sections effect wiring', () => {
       'Use these in the payout thank-you message sent after the first paid referral order is completed.',
     );
   });
+
+  it('locks the Voodoo Pay checkout domain to the fixed hosted value', async () => {
+    const source = await readDashboardSectionsSource();
+
+    expect(source).toContain('FIXED_VOODOO_PAY_CHECKOUT_DOMAIN');
+    expect(source).toContain('id="checkout-domain"');
+    expect(source).toContain('readOnly');
+    expect(source).toContain('Hosted checkout links always use the fixed Voodoo Pay domain.');
+  });
 });

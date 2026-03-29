@@ -1,0 +1,29 @@
+- generic [active] [ref=e1]:
+  - main [ref=e2]:
+    - generic [ref=e3]:
+      - generic [ref=e4]:
+        - link "Voodoo Pay Dashboard launchpad" [ref=e5] [cursor=pointer]:
+          - /url: /
+          - img [ref=e7]
+          - generic [ref=e10]:
+            - paragraph [ref=e11]: Voodoo Pay
+            - paragraph [ref=e12]: Dashboard launchpad
+        - generic [ref=e13]:
+          - link "Main Website" [ref=e14] [cursor=pointer]:
+            - /url: https://voodoopay.online/
+          - button "Toggle theme" [ref=e15]:
+            - img
+      - generic [ref=e17]:
+        - img [ref=e19]
+        - generic [ref=e23]:
+          - paragraph [ref=e24]: Authentication
+          - heading "Login with Discord to open the merchant panel." [level=1] [ref=e25]
+          - paragraph [ref=e26]: After login you will choose the workspace and Discord server, then continue into the main dashboard with sidebar navigation for settings, payments, coupons, points, referrals, and products.
+        - generic [ref=e27]:
+          - link "Login with Discord" [ref=e28] [cursor=pointer]:
+            - /url: /api/auth/discord/login
+            - text: Login with Discord
+            - img
+          - link "Back to Home" [ref=e29] [cursor=pointer]:
+            - /url: /
+  - alert [ref=e30]

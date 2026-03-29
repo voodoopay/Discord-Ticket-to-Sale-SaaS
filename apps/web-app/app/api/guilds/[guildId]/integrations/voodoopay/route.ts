@@ -1,4 +1,4 @@
-import { IntegrationService, getEnv } from '@voodoo/core';
+import { DEFAULT_VOODOO_PAY_CHECKOUT_DOMAIN, IntegrationService, getEnv } from '@voodoo/core';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
@@ -66,7 +66,7 @@ export async function PUT(
     const body = await readJson<{
       tenantId: string;
       merchantWalletAddress: string;
-      checkoutDomain: string;
+      checkoutDomain?: string;
       callbackSecret?: string;
       cryptoGatewayEnabled?: boolean;
       cryptoAddFees?: boolean;
@@ -106,7 +106,7 @@ export async function PUT(
       guildId,
       payload: {
         merchantWalletAddress: body.merchantWalletAddress,
-        checkoutDomain: body.checkoutDomain,
+        checkoutDomain: DEFAULT_VOODOO_PAY_CHECKOUT_DOMAIN,
         callbackSecret: body.callbackSecret,
         cryptoGatewayEnabled: body.cryptoGatewayEnabled ?? (existing.isOk() ? existing.value.cryptoGatewayEnabled : false),
         cryptoAddFees: body.cryptoAddFees ?? (existing.isOk() ? existing.value.cryptoAddFees : false),

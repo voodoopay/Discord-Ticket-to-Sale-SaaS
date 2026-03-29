@@ -10,6 +10,8 @@ import type { SessionPayload } from '../security/session-token.js';
 import { IntegrationRepository } from '../repositories/integration-repository.js';
 import { AuthorizationService } from './authorization-service.js';
 
+export const DEFAULT_VOODOO_PAY_CHECKOUT_DOMAIN = 'checkout.voodoo-pay.uk';
+
 const integrationInputSchema = z.object({
   wpBaseUrl: z.string().url(),
   webhookSecret: z.string().min(8).max(255),
@@ -21,7 +23,7 @@ const voodooIntegrationInputSchema = z.object({
   merchantWalletAddress: z
     .string()
     .regex(/^0x[a-fA-F0-9]{40}$/, 'merchantWalletAddress must be a valid Polygon wallet address'),
-  checkoutDomain: z.string().min(1).max(255).default('checkout.voodoo-pay.uk'),
+  checkoutDomain: z.string().max(255).optional().default(DEFAULT_VOODOO_PAY_CHECKOUT_DOMAIN),
   callbackSecret: z.string().min(16).max(255).optional(),
   cryptoGatewayEnabled: z.boolean().default(false),
   cryptoAddFees: z.boolean().default(false),
@@ -217,16 +219,7 @@ export class IntegrationService {
       }
 
       const config = parsed.data;
-      const checkoutDomain = normalizeCheckoutDomain(config.checkoutDomain);
-      if (checkoutDomain.length === 0 || checkoutDomain.length > 120) {
-        return err(
-          new AppError(
-            'VOODOO_PAY_CHECKOUT_DOMAIN_INVALID',
-            'Checkout domain must be a valid host like checkout.voodoo-pay.uk.',
-            422,
-          ),
-        );
-      }
+      const checkoutDomain = DEFAULT_VOODOO_PAY_CHECKOUT_DOMAIN;
       const cryptoWallets = normalizeCryptoWallets(config.cryptoWallets);
       if (config.cryptoGatewayEnabled && !hasAnyCryptoWallet(cryptoWallets)) {
         return err(
@@ -320,7 +313,7 @@ export class IntegrationService {
         cryptoGatewayEnabled: row.cryptoGatewayEnabled,
         cryptoAddFees: row.cryptoAddFees,
         cryptoWallets: row.cryptoWallets,
-        checkoutDomain: normalizeCheckoutDomain(row.checkoutDomain),
+        checkoutDomain: DEFAULT_VOODOO_PAY_CHECKOUT_DOMAIN,
         tenantWebhookKey: row.tenantWebhookKey,
         callbackSecret: decryptSecret(row.callbackSecretEncrypted, this.env.ENCRYPTION_KEY),
       });
@@ -368,7 +361,7 @@ export class IntegrationService {
         cryptoGatewayEnabled: row.cryptoGatewayEnabled,
         cryptoAddFees: row.cryptoAddFees,
         cryptoWallets: row.cryptoWallets,
-        checkoutDomain: normalizeCheckoutDomain(row.checkoutDomain),
+        checkoutDomain: DEFAULT_VOODOO_PAY_CHECKOUT_DOMAIN,
         tenantWebhookKey: row.tenantWebhookKey,
         callbackSecret: decryptSecret(row.callbackSecretEncrypted, this.env.ENCRYPTION_KEY),
       });

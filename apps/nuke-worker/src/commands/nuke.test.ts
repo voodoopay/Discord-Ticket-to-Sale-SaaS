@@ -39,20 +39,16 @@ vi.mock('@voodoo/core', () => {
       throw new Error('Mock revokeUserAccess not implemented');
     }
 
-    public async createChannelSchedule(): Promise<never> {
-      throw new Error('Mock createChannelSchedule not implemented');
+    public async setSchedule(): Promise<never> {
+      throw new Error('Mock setSchedule not implemented');
     }
 
-    public async disableChannelSchedule(): Promise<never> {
-      throw new Error('Mock disableChannelSchedule not implemented');
+    public async disableSchedule(): Promise<never> {
+      throw new Error('Mock disableSchedule not implemented');
     }
 
     public async runNukeNow(): Promise<never> {
       throw new Error('Mock runNukeNow not implemented');
-    }
-
-    public async deleteChannelSchedule(): Promise<never> {
-      throw new Error('Mock deleteChannelSchedule not implemented');
     }
   }
 
@@ -78,6 +74,10 @@ vi.mock('@voodoo/core', () => {
       info: vi.fn(),
       warn: vi.fn(),
     },
+    formatNukeScheduleCadence: (cadence: string) => cadence.charAt(0).toUpperCase() + cadence.slice(1),
+    formatWeeklyDayOfWeek: (dayOfWeek: number) =>
+      ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][dayOfWeek - 1] ??
+      'Unknown',
     resetEnvForTests: () => undefined,
   };
 });
@@ -122,6 +122,11 @@ function createInteractionMock(input?: {
     | 'delete';
   targetUserId?: string;
   confirmText?: string;
+  cadence?: string | null;
+  timeHhMm?: string;
+  timezone?: string;
+  weekday?: number | null;
+  dayOfMonth?: number | null;
 }): InteractionMocks {
   const deferReply = vi.fn(async () => {
     interaction.deferred = true;
@@ -148,6 +153,29 @@ function createInteractionMock(input?: {
       getString: vi.fn((name: string) => {
         if (name === 'confirm') {
           return input?.confirmText ?? 'NUKE';
+        }
+
+        if (name === 'time') {
+          return input?.timeHhMm ?? '18:30';
+        }
+
+        if (name === 'timezone') {
+          return input?.timezone ?? 'Europe/Berlin';
+        }
+
+        if (name === 'cadence') {
+          return input?.cadence ?? null;
+        }
+
+        return null;
+      }),
+      getInteger: vi.fn((name: string) => {
+        if (name === 'weekday') {
+          return input?.weekday ?? null;
+        }
+
+        if (name === 'day_of_month') {
+          return input?.dayOfMonth ?? null;
         }
 
         return null;
@@ -207,12 +235,15 @@ describe('nuke command helpers', () => {
         enabled: true,
         localTimeHhMm: '18:30',
         timezone: 'Europe/Berlin',
+        cadence: 'daily',
+        weeklyDayOfWeek: null,
+        monthlyDayOfMonth: null,
         nextRunAtUtc: '2026-03-18T17:30:00.000Z',
         lastRunAtUtc: '2026-03-17T17:30:00.000Z',
         lastLocalRunDate: '2026-03-17',
         consecutiveFailures: 0,
       }),
-    ).toContain('Current daily nuke schedule for this channel:');
+    ).toContain('Current nuke schedule for this channel:');
   });
 
   it('formats the authorized user list for super admins', () => {
@@ -334,6 +365,9 @@ describe('nuke command helpers', () => {
         enabled: true,
         localTimeHhMm: '18:30',
         timezone: 'Europe/Berlin',
+        cadence: 'daily',
+        weeklyDayOfWeek: null,
+        monthlyDayOfMonth: null,
         nextRunAtUtc: '2026-03-18T17:30:00.000Z',
         lastRunAtUtc: '2026-03-17T17:30:00.000Z',
         lastLocalRunDate: '2026-03-17',
@@ -386,6 +420,65 @@ describe('nuke command helpers', () => {
     expect(editReply).toHaveBeenCalledWith(
       expect.objectContaining({
         content: 'Granted `/nuke` access for <@user-3> in this server.',
+      }),
+    );
+  });
+
+  it('passes weekly cadence details to the schedule service and reports them back to the caller', async () => {
+    process.env.SUPER_ADMIN_DISCORD_IDS = 'owner-1';
+    resetEnvForTests();
+
+    vi.spyOn(TenantRepository.prototype, 'getTenantByGuildId').mockResolvedValue({
+      tenantId: 'tenant-1',
+    } as Awaited<ReturnType<TenantRepository['getTenantByGuildId']>>);
+    const accessSpy = vi.spyOn(NukeService.prototype, 'getCommandAccessState').mockResolvedValue(
+      createOkResult({
+        locked: true,
+        allowed: true,
+        authorizedUserCount: 1,
+      }) as Awaited<ReturnType<NukeService['getCommandAccessState']>>,
+    );
+    const setScheduleSpy = vi.spyOn(NukeService.prototype, 'setSchedule').mockResolvedValue(
+      createOkResult({
+        scheduleId: 'schedule-2',
+        channelId: 'channel-1',
+        localTimeHhMm: '18:30',
+        timezone: 'Europe/Berlin',
+        cadence: 'weekly',
+        weeklyDayOfWeek: 5,
+        monthlyDayOfMonth: null,
+        nextRunAtUtc: '2026-03-20T17:30:00.000Z',
+        enabled: true,
+      }) as Awaited<ReturnType<NukeService['setSchedule']>>,
+    );
+
+    const { interaction, editReply } = createInteractionMock({
+      userId: 'user-2',
+      subcommand: 'schedule',
+      cadence: 'weekly',
+      timeHhMm: '18:30',
+      timezone: 'Europe/Berlin',
+      weekday: 5,
+    });
+
+    await nukeCommand.execute(interaction);
+
+    expect(accessSpy).toHaveBeenCalled();
+    expect(setScheduleSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cadence: 'weekly',
+        weeklyDayOfWeek: 5,
+        monthlyDayOfMonth: null,
+      }),
+    );
+    expect(editReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining('Weekly nuke schedule saved for this channel.'),
+      }),
+    );
+    expect(editReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining('Weekday: Friday'),
       }),
     );
   });

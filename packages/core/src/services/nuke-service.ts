@@ -11,11 +11,16 @@ import {
   type ChannelNukeScheduleRecord,
 } from '../repositories/nuke-repository.js';
 import {
+  assertValidMonthlyDayOfMonth,
+  assertValidScheduleCadence,
   assertValidTimezone,
+  assertValidWeeklyDayOfWeek,
   buildScheduledNukeIdempotencyKey,
   computeNextRunAtUtc,
+  type NukeScheduleCadence,
   parseDailyTimeHhMm,
   resolveLocalDate,
+  resolveLocalScheduleAnchor,
 } from './nuke-schedule.js';
 import { toNukeAppError } from './nuke-discord-errors.js';
 
@@ -48,6 +53,9 @@ export type ChannelNukeScheduleSummary = {
   enabled: boolean;
   localTimeHhMm: string;
   timezone: string;
+  cadence: NukeScheduleCadence;
+  weeklyDayOfWeek: number | null;
+  monthlyDayOfMonth: number | null;
   nextRunAtUtc: string;
   lastRunAtUtc: string | null;
   lastLocalRunDate: string | null;
@@ -67,6 +75,82 @@ export type NukeCommandAccessState = {
   allowed: boolean;
   authorizedUserCount: number;
 };
+
+type NukeScheduleConfig = {
+  timezone: string;
+  localTimeHhmm: string;
+  cadence: NukeScheduleCadence;
+  weeklyDayOfWeek: number | null;
+  monthlyDayOfMonth: number | null;
+};
+
+function resolveScheduleRecurrence(input: {
+  cadence: NukeScheduleCadence;
+  timezone: string;
+  now: Date;
+  weeklyDayOfWeek?: number | null;
+  monthlyDayOfMonth?: number | null;
+}): {
+  weeklyDayOfWeek: number | null;
+  monthlyDayOfMonth: number | null;
+} {
+  if (input.cadence !== 'weekly' && input.weeklyDayOfWeek != null) {
+    throw new AppError(
+      'NUKE_SCHEDULE_WEEKDAY_NOT_ALLOWED',
+      'Weekday can only be set for weekly nuke schedules.',
+      422,
+    );
+  }
+
+  if (input.cadence !== 'monthly' && input.monthlyDayOfMonth != null) {
+    throw new AppError(
+      'NUKE_SCHEDULE_DAY_OF_MONTH_NOT_ALLOWED',
+      'Day of month can only be set for monthly nuke schedules.',
+      422,
+    );
+  }
+
+  const anchor = resolveLocalScheduleAnchor({
+    timezone: input.timezone,
+    at: input.now,
+  });
+
+  if (input.cadence === 'weekly') {
+    return {
+      weeklyDayOfWeek: assertValidWeeklyDayOfWeek(input.weeklyDayOfWeek ?? anchor.dayOfWeek),
+      monthlyDayOfMonth: null,
+    };
+  }
+
+  if (input.cadence === 'monthly') {
+    return {
+      weeklyDayOfWeek: null,
+      monthlyDayOfMonth: assertValidMonthlyDayOfMonth(input.monthlyDayOfMonth ?? anchor.dayOfMonth),
+    };
+  }
+
+  return {
+    weeklyDayOfWeek: null,
+    monthlyDayOfMonth: null,
+  };
+}
+
+function computeNextRunForSchedule(
+  input: NukeScheduleConfig & {
+    now: Date;
+    lastLocalRunDate?: string | null;
+  },
+): Date {
+  return computeNextRunAtUtc({
+    timezone: input.timezone,
+    timeHhMm: input.localTimeHhmm,
+    cadence: input.cadence,
+    dayOfWeek: input.weeklyDayOfWeek,
+    dayOfMonth: input.monthlyDayOfMonth,
+    now: input.now,
+    lastLocalRunDate: input.lastLocalRunDate,
+  });
+}
 
 function mapAuthorizedUserSummary(
   authorizedUser: ChannelNukeAuthorizedUserRecord,
@@ -109,6 +193,9 @@ export class NukeService {
         enabled: schedule.enabled,
         localTimeHhMm: schedule.localTimeHhmm,
         timezone: schedule.timezone,
+        cadence: schedule.cadence,
+        weeklyDayOfWeek: schedule.weeklyDayOfWeek,
+        monthlyDayOfMonth: schedule.monthlyDayOfMonth,
         nextRunAtUtc: schedule.nextRunAtUtc.toISOString(),
         lastRunAtUtc: schedule.lastRunAtUtc?.toISOString() ?? null,
         lastLocalRunDate: schedule.lastLocalRunDate,
@@ -207,12 +294,15 @@ export class NukeService {
     }
   }
 
-  public async setDailySchedule(input: {
+  public async setSchedule(input: {
     tenantId: string;
     guildId: string;
     channelId: string;
     timeHhMm: string;
     timezone: string;
+    cadence?: string | null;
+    weeklyDayOfWeek?: number | null;
+    monthlyDayOfMonth?: number | null;
     actorDiscordUserId: string;
   }): Promise<
     Result<
@@ -221,6 +311,9 @@ export class NukeService {
         channelId: string;
         localTimeHhMm: string;
         timezone: string;
+        cadence: NukeScheduleCadence;
+        weeklyDayOfWeek: number | null;
+        monthlyDayOfMonth: number | null;
         nextRunAtUtc: string;
         enabled: boolean;
       },
@@ -228,13 +321,25 @@ export class NukeService {
     >
   > {
     try {
+      const now = new Date();
       const timezone = assertValidTimezone(input.timezone);
+      const cadence = assertValidScheduleCadence(input.cadence);
       const parsed = parseDailyTimeHhMm(input.timeHhMm);
       const normalizedTime = `${String(parsed.hour).padStart(2, '0')}:${String(parsed.minute).padStart(2, '0')}`;
-      const nextRunAtUtc = computeNextRunAtUtc({
+      const recurrence = resolveScheduleRecurrence({
+        cadence,
         timezone,
-        timeHhMm: normalizedTime,
-        now: new Date(),
+        now,
+        weeklyDayOfWeek: input.weeklyDayOfWeek,
+        monthlyDayOfMonth: input.monthlyDayOfMonth,
+      });
+      const nextRunAtUtc = computeNextRunForSchedule({
+        timezone,
+        localTimeHhmm: normalizedTime,
+        cadence,
+        weeklyDayOfWeek: recurrence.weeklyDayOfWeek,
+        monthlyDayOfMonth: recurrence.monthlyDayOfMonth,
+        now,
       });
 
       const schedule = await this.nukeRepository.upsertSchedule({
@@ -243,6 +348,9 @@ export class NukeService {
         channelId: input.channelId,
         localTimeHhmm: normalizedTime,
         timezone,
+        cadence,
+        weeklyDayOfWeek: recurrence.weeklyDayOfWeek,
+        monthlyDayOfMonth: recurrence.monthlyDayOfMonth,
         nextRunAtUtc,
         updatedByDiscordUserId: input.actorDiscordUserId,
       });
@@ -252,6 +360,9 @@ export class NukeService {
         channelId: schedule.channelId,
         localTimeHhMm: schedule.localTimeHhmm,
         timezone: schedule.timezone,
+        cadence: schedule.cadence,
+        weeklyDayOfWeek: schedule.weeklyDayOfWeek,
+        monthlyDayOfMonth: schedule.monthlyDayOfMonth,
         nextRunAtUtc: schedule.nextRunAtUtc.toISOString(),
         enabled: schedule.enabled,
       });
@@ -524,9 +635,12 @@ export class NukeService {
             timezone: input.schedule.timezone,
             at: now,
           });
-          const nextRunAtUtc = computeNextRunAtUtc({
+          const nextRunAtUtc = computeNextRunForSchedule({
             timezone: input.schedule.timezone,
-            timeHhMm: input.schedule.localTimeHhmm,
+            localTimeHhmm: input.schedule.localTimeHhmm,
+            cadence: input.schedule.cadence,
+            weeklyDayOfWeek: input.schedule.weeklyDayOfWeek,
+            monthlyDayOfMonth: input.schedule.monthlyDayOfMonth,
             now,
             lastLocalRunDate: localDate,
           });
@@ -671,9 +785,12 @@ export class NukeService {
         });
       const nextRunAtUtc =
         input.schedule && localDate
-          ? computeNextRunAtUtc({
+          ? computeNextRunForSchedule({
               timezone: input.schedule.timezone,
-              timeHhMm: input.schedule.localTimeHhmm,
+              localTimeHhmm: input.schedule.localTimeHhmm,
+              cadence: input.schedule.cadence,
+              weeklyDayOfWeek: input.schedule.weeklyDayOfWeek,
+              monthlyDayOfMonth: input.schedule.monthlyDayOfMonth,
               now: new Date(),
               lastLocalRunDate: localDate,
             })
@@ -789,9 +906,12 @@ export class NukeService {
       timezone: input.schedule.timezone,
       at: now,
     });
-    const nextRunAtUtc = computeNextRunAtUtc({
+    const nextRunAtUtc = computeNextRunForSchedule({
       timezone: input.schedule.timezone,
-      timeHhMm: input.schedule.localTimeHhmm,
+      localTimeHhmm: input.schedule.localTimeHhmm,
+      cadence: input.schedule.cadence,
+      weeklyDayOfWeek: input.schedule.weeklyDayOfWeek,
+      monthlyDayOfMonth: input.schedule.monthlyDayOfMonth,
       now,
       lastLocalRunDate: localDate,
     });

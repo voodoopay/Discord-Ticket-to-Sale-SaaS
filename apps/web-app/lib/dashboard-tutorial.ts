@@ -228,7 +228,7 @@ export const DASHBOARD_TUTORIAL_STEP_DEFS: DashboardTutorialStepDef[] = [
     selector: '#checkout-domain',
     title: 'Checkout Domain',
     description:
-      'Set the correct hosted checkout domain for your environment. Keep it accurate so generated links point to the expected provider.',
+      'Hosted checkout stays pinned to checkout.voodoo-pay.uk so new merchants can save immediately without configuring a separate host.',
     role: 'all',
   },
   {
