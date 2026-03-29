@@ -16,6 +16,7 @@ export * from './repositories/order-repository.js';
 export * from './repositories/points-repository.js';
 export * from './repositories/product-repository.js';
 export * from './repositories/referral-repository.js';
+export * from './repositories/sales-history-repository.js';
 export * from './repositories/sports-access-repository.js';
 export * from './repositories/sports-repository.js';
 export * from './repositories/tenant-repository.js';
@@ -47,9 +48,16 @@ export * from './services/points-service.js';
 export * from './services/product-service.js';
 export * from './services/referral-service.js';
 export * from './services/sale-service.js';
+export * from './services/sales-history-service.js';
 export * from './services/sports-access-service.js';
 export * from './services/sports-data-service.js';
 export * from './services/sports-service.js';
+export {
+  assertValidTimezone as assertSalesHistoryValidTimezone,
+  computeNextRunAtUtc as computeSalesHistoryNextRunAtUtc,
+  parseDailyTimeHhMm as parseSalesHistoryDailyTimeHhMm,
+  resolveLocalDate as resolveSalesHistoryLocalDate,
+} from './services/sales-history-schedule.js';
 export {
   assertValidTimezone as assertSportsValidTimezone,
   computeNextRunAtUtc as computeSportsNextRunAtUtc,

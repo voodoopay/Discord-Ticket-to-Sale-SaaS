@@ -150,12 +150,44 @@ export const guildConfigs = mysqlTable(
     joinGateNewLookupChannelId: varchar('join_gate_new_lookup_channel_id', { length: 32 }),
     joinGatePanelTitle: varchar('join_gate_panel_title', { length: 120 }),
     joinGatePanelMessage: text('join_gate_panel_message'),
+    salesHistoryClearedAt: timestamp('sales_history_cleared_at', { mode: 'date' }),
+    salesHistoryAutoClearEnabled: boolean('sales_history_auto_clear_enabled').notNull().default(false),
+    salesHistoryAutoClearFrequency: mysqlEnum('sales_history_auto_clear_frequency', [
+      'daily',
+      'weekly',
+      'monthly',
+    ])
+      .notNull()
+      .default('daily'),
+    salesHistoryAutoClearLocalTimeHhMm: varchar('sales_history_auto_clear_local_time_hhmm', {
+      length: 5,
+    })
+      .notNull()
+      .default('00:00'),
+    salesHistoryAutoClearTimezone: varchar('sales_history_auto_clear_timezone', { length: 64 })
+      .notNull()
+      .default('UTC'),
+    salesHistoryAutoClearDayOfWeek: int('sales_history_auto_clear_day_of_week'),
+    salesHistoryAutoClearDayOfMonth: int('sales_history_auto_clear_day_of_month'),
+    salesHistoryAutoClearNextRunAtUtc: timestamp('sales_history_auto_clear_next_run_at_utc', {
+      mode: 'date',
+    }),
+    salesHistoryAutoClearLastRunAtUtc: timestamp('sales_history_auto_clear_last_run_at_utc', {
+      mode: 'date',
+    }),
+    salesHistoryAutoClearLastLocalRunDate: varchar('sales_history_auto_clear_last_local_run_date', {
+      length: 10,
+    }),
     createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
   },
   (table) => ({
     tenantGuildUnique: uniqueIndex('guild_configs_tenant_guild_uq').on(table.tenantId, table.guildId),
     tenantGuildIdx: index('guild_configs_tenant_guild_idx').on(table.tenantId, table.guildId),
+    salesHistoryAutoClearNextRunIdx: index('guild_configs_sales_history_auto_clear_next_run_idx').on(
+      table.salesHistoryAutoClearEnabled,
+      table.salesHistoryAutoClearNextRunAtUtc,
+    ),
     tenantCreatedIdx: index('guild_configs_tenant_created_idx').on(table.tenantId, table.createdAt),
   }),
 );
@@ -680,6 +712,9 @@ export const channelNukeSchedules = mysqlTable(
     enabled: boolean('enabled').notNull().default(true),
     localTimeHhmm: varchar('local_time_hhmm', { length: 5 }).notNull(),
     timezone: varchar('timezone', { length: 64 }).notNull(),
+    cadence: mysqlEnum('cadence', ['daily', 'weekly', 'monthly']).notNull().default('daily'),
+    weeklyDayOfWeek: int('weekly_day_of_week'),
+    monthlyDayOfMonth: int('monthly_day_of_month'),
     nextRunAtUtc: timestamp('next_run_at_utc', { mode: 'date' }).notNull(),
     lastRunAtUtc: timestamp('last_run_at_utc', { mode: 'date' }),
     lastLocalRunDate: varchar('last_local_run_date', { length: 10 }),

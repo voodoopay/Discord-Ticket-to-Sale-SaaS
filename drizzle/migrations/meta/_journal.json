@@ -148,6 +148,13 @@
       "when": 1774463810355,
       "tag": "0020_coupon_category_scope",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "5",
+      "when": 1774825449449,
+      "tag": "0021_nuke_schedule_cadence",
+      "breakpoints": true
     }
   ]
 }

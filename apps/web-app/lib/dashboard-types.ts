@@ -76,7 +76,19 @@ export type GuildConfigRecord = {
   joinGateTicketCategoryId: string | null;
   joinGateCurrentLookupChannelId: string | null;
   joinGateNewLookupChannelId: string | null;
+  salesHistoryClearedAt: string | null;
+  salesHistoryAutoClearEnabled: boolean;
+  salesHistoryAutoClearFrequency: SalesHistoryAutoClearFrequency;
+  salesHistoryAutoClearLocalTimeHhMm: string;
+  salesHistoryAutoClearTimezone: string;
+  salesHistoryAutoClearDayOfWeek: number | null;
+  salesHistoryAutoClearDayOfMonth: number | null;
+  salesHistoryAutoClearNextRunAtUtc: string | null;
+  salesHistoryAutoClearLastRunAtUtc: string | null;
+  salesHistoryAutoClearLastLocalRunDate: string | null;
 };
+
+export type SalesHistoryAutoClearFrequency = 'daily' | 'weekly' | 'monthly';
 
 export type ProductVariantRecord = {
   id: string;

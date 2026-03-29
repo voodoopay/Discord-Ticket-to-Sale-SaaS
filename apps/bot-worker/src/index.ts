@@ -1,5 +1,5 @@
 ﻿import { Client, Collection, Events, GatewayIntentBits, MessageFlags, type Interaction } from 'discord.js';
-import { getEnv, logger } from '@voodoo/core';
+import { getEnv, logger, SalesHistoryService } from '@voodoo/core';
 
 import { saleCommand } from './commands/sale.js';
 import { pointsCommand } from './commands/points.js';
@@ -20,6 +20,7 @@ type Command = {
 };
 
 const env = getEnv();
+const salesHistoryService = new SalesHistoryService();
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages],
@@ -32,6 +33,8 @@ commands.set(referCommand.data.name, referCommand as unknown as Command);
 
 client.once(Events.ClientReady, () => {
   logger.info({ botUser: client.user?.tag }, 'bot-worker ready');
+  salesHistoryService.startSchedulerLoop({ pollIntervalMs: env.SALES_HISTORY_POLL_INTERVAL_MS });
+  logger.info({ pollIntervalMs: env.SALES_HISTORY_POLL_INTERVAL_MS }, 'sales-history scheduler loop started');
 });
 
 async function handleInteraction(interaction: Interaction): Promise<void> {

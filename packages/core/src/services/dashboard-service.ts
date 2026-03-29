@@ -95,6 +95,18 @@ function shiftDateByDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
 }
 
+function resolveLaterDate(left: Date | null, right: Date | null): Date | null {
+  if (!left) {
+    return right;
+  }
+
+  if (!right) {
+    return left;
+  }
+
+  return left.getTime() >= right.getTime() ? left : right;
+}
+
 function buildRelativeDateKeys(input: {
   now: Date;
   timeZone: string;
@@ -210,6 +222,10 @@ export class DashboardService {
 
       const timeZone = resolveTimeZone(input.timeZone);
       const todayKey = toDateKey(new Date(), timeZone);
+      const recentSummarySince = resolveLaterDate(
+        config.salesHistoryClearedAt,
+        new Date(Date.now() - 72 * 60 * 60 * 1000),
+      );
 
       const [integration, telegramLink, recentOrders, summaryOrders] = await Promise.all([
         this.integrationRepository.getVoodooPayIntegrationByGuild({
@@ -224,12 +240,13 @@ export class DashboardService {
           tenantId: input.tenantId,
           guildId: input.guildId,
           limit: 8,
+          since: config.salesHistoryClearedAt ?? undefined,
         }),
         this.orderRepository.listPaidOrdersByGuild({
           tenantId: input.tenantId,
           guildId: input.guildId,
           limit: 500,
-          since: new Date(Date.now() - 72 * 60 * 60 * 1000),
+          since: recentSummarySince ?? undefined,
         }),
       ]);
 
@@ -342,6 +359,7 @@ export class DashboardService {
         this.orderRepository.listPaidOrdersWithSessionsByGuild({
           tenantId: input.tenantId,
           guildId: input.guildId,
+          since: config.salesHistoryClearedAt ?? undefined,
         }),
         Promise.resolve(new Date()),
       ]);

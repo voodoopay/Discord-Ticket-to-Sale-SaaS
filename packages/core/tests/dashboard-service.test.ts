@@ -47,6 +47,16 @@ function makeGuildConfig(overrides: Partial<GuildConfigRecord> = {}): GuildConfi
     joinGateNewLookupChannelId: null,
     joinGatePanelTitle: null,
     joinGatePanelMessage: null,
+    salesHistoryClearedAt: null,
+    salesHistoryAutoClearEnabled: false,
+    salesHistoryAutoClearFrequency: 'daily',
+    salesHistoryAutoClearLocalTimeHhMm: '00:00',
+    salesHistoryAutoClearTimezone: 'UTC',
+    salesHistoryAutoClearDayOfWeek: null,
+    salesHistoryAutoClearDayOfMonth: null,
+    salesHistoryAutoClearNextRunAtUtc: null,
+    salesHistoryAutoClearLastRunAtUtc: null,
+    salesHistoryAutoClearLastLocalRunDate: null,
     ...overrides,
   };
 }
@@ -398,5 +408,40 @@ describe('dashboard service', () => {
 
     expect(result.error.code).toBe('INVALID_SALES_FILTER');
     expect(result.error.statusCode).toBe(400);
+  });
+
+  it('filters dashboard sales using the saved sales-history cutoff', async () => {
+    const service = new DashboardService();
+    const cutoff = new Date('2026-03-20T12:00:00.000Z');
+    const listPaidOrdersWithSessionsByGuild = vi
+      .spyOn((service as any).orderRepository, 'listPaidOrdersWithSessionsByGuild')
+      .mockResolvedValue([
+        makePaidOrderWithSession({
+          id: 'paid-order-1',
+          orderSessionId: 'session-1',
+          paidAt: new Date('2026-03-22T09:15:00.000Z'),
+        }),
+      ]);
+
+    vi.spyOn((service as any).authorizationService, 'ensureTenantRole').mockResolvedValue(ok(undefined));
+    vi.spyOn((service as any).authorizationService, 'ensureGuildBoundToTenant').mockResolvedValue(ok(undefined));
+    vi.spyOn((service as any).tenantRepository, 'getGuildConfig').mockResolvedValue(
+      makeGuildConfig({
+        salesHistoryClearedAt: cutoff,
+      }),
+    );
+
+    const result = await service.listGuildSales(makeSession(), {
+      tenantId: 'tenant-1',
+      guildId: 'guild-1',
+      range: 'all',
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(listPaidOrdersWithSessionsByGuild).toHaveBeenCalledWith({
+      tenantId: 'tenant-1',
+      guildId: 'guild-1',
+      since: cutoff,
+    });
   });
 });

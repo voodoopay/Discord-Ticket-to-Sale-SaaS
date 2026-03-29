@@ -5,15 +5,129 @@ import { TenantRepository } from '../repositories/tenant-repository.js';
 import { TelegramLinkRepository } from '../repositories/telegram-link-repository.js';
 import { UserRepository } from '../repositories/user-repository.js';
 import { validateJoinGateConfig } from './join-gate-service.js';
+import {
+  computeNextRunAtUtc,
+  hasSameSalesHistoryAutoClearPattern,
+  parseSalesHistoryAutoClearConfig,
+  type SalesHistoryAutoClearFrequency,
+} from './sales-history-schedule.js';
 import type { SessionPayload } from '../security/session-token.js';
 import type { TenantMemberRole } from '../domain/types.js';
 
 export type ActorContext = SessionPayload;
 
+export type GuildConfigSummary = {
+  paidLogChannelId: string | null;
+  staffRoleIds: string[];
+  defaultCurrency: string;
+  couponsEnabled: boolean;
+  pointsEnabled: boolean;
+  referralsEnabled: boolean;
+  telegramEnabled: boolean;
+  tipEnabled: boolean;
+  pointsEarnCategoryKeys: string[];
+  pointsRedeemCategoryKeys: string[];
+  pointValueMinor: number;
+  referralRewardMinor: number;
+  referralRewardCategoryKeys: string[];
+  referralLogChannelId: string | null;
+  referralThankYouTemplate: string;
+  referralSubmissionTemplate: string;
+  ticketMetadataKey: string;
+  joinGateEnabled: boolean;
+  joinGateFallbackChannelId: string | null;
+  joinGateVerifiedRoleId: string | null;
+  joinGateTicketCategoryId: string | null;
+  joinGateCurrentLookupChannelId: string | null;
+  joinGateNewLookupChannelId: string | null;
+  salesHistoryClearedAt: Date | null;
+  salesHistoryAutoClearEnabled: boolean;
+  salesHistoryAutoClearFrequency: SalesHistoryAutoClearFrequency;
+  salesHistoryAutoClearLocalTimeHhMm: string;
+  salesHistoryAutoClearTimezone: string;
+  salesHistoryAutoClearDayOfWeek: number | null;
+  salesHistoryAutoClearDayOfMonth: number | null;
+  salesHistoryAutoClearNextRunAtUtc: Date | null;
+  salesHistoryAutoClearLastRunAtUtc: Date | null;
+  salesHistoryAutoClearLastLocalRunDate: string | null;
+};
+
 export class TenantService {
   private readonly tenantRepository = new TenantRepository();
   private readonly telegramLinkRepository = new TelegramLinkRepository();
   private readonly userRepository = new UserRepository();
+
+  private mapGuildConfigSummary(config: {
+    paidLogChannelId: string | null;
+    staffRoleIds: string[];
+    defaultCurrency: string;
+    couponsEnabled: boolean;
+    pointsEnabled: boolean;
+    referralsEnabled: boolean;
+    telegramEnabled: boolean;
+    tipEnabled: boolean;
+    pointsEarnCategoryKeys: string[];
+    pointsRedeemCategoryKeys: string[];
+    pointValueMinor: number;
+    referralRewardMinor: number;
+    referralRewardCategoryKeys: string[];
+    referralLogChannelId: string | null;
+    referralThankYouTemplate: string;
+    referralSubmissionTemplate: string;
+    ticketMetadataKey: string;
+    joinGateEnabled?: boolean;
+    joinGateFallbackChannelId?: string | null;
+    joinGateVerifiedRoleId?: string | null;
+    joinGateTicketCategoryId?: string | null;
+    joinGateCurrentLookupChannelId?: string | null;
+    joinGateNewLookupChannelId?: string | null;
+    salesHistoryClearedAt: Date | null;
+    salesHistoryAutoClearEnabled: boolean;
+    salesHistoryAutoClearFrequency: SalesHistoryAutoClearFrequency;
+    salesHistoryAutoClearLocalTimeHhMm: string;
+    salesHistoryAutoClearTimezone: string;
+    salesHistoryAutoClearDayOfWeek: number | null;
+    salesHistoryAutoClearDayOfMonth: number | null;
+    salesHistoryAutoClearNextRunAtUtc: Date | null;
+    salesHistoryAutoClearLastRunAtUtc: Date | null;
+    salesHistoryAutoClearLastLocalRunDate: string | null;
+  }): GuildConfigSummary {
+    return {
+      paidLogChannelId: config.paidLogChannelId,
+      staffRoleIds: config.staffRoleIds,
+      defaultCurrency: config.defaultCurrency,
+      couponsEnabled: config.couponsEnabled,
+      pointsEnabled: config.pointsEnabled,
+      referralsEnabled: config.referralsEnabled,
+      telegramEnabled: config.telegramEnabled,
+      tipEnabled: config.tipEnabled,
+      pointsEarnCategoryKeys: config.pointsEarnCategoryKeys,
+      pointsRedeemCategoryKeys: config.pointsRedeemCategoryKeys,
+      pointValueMinor: config.pointValueMinor,
+      referralRewardMinor: config.referralRewardMinor,
+      referralRewardCategoryKeys: config.referralRewardCategoryKeys,
+      referralLogChannelId: config.referralLogChannelId,
+      referralThankYouTemplate: config.referralThankYouTemplate,
+      referralSubmissionTemplate: config.referralSubmissionTemplate,
+      ticketMetadataKey: config.ticketMetadataKey,
+      joinGateEnabled: config.joinGateEnabled ?? false,
+      joinGateFallbackChannelId: config.joinGateFallbackChannelId ?? null,
+      joinGateVerifiedRoleId: config.joinGateVerifiedRoleId ?? null,
+      joinGateTicketCategoryId: config.joinGateTicketCategoryId ?? null,
+      joinGateCurrentLookupChannelId: config.joinGateCurrentLookupChannelId ?? null,
+      joinGateNewLookupChannelId: config.joinGateNewLookupChannelId ?? null,
+      salesHistoryClearedAt: config.salesHistoryClearedAt,
+      salesHistoryAutoClearEnabled: config.salesHistoryAutoClearEnabled,
+      salesHistoryAutoClearFrequency: config.salesHistoryAutoClearFrequency,
+      salesHistoryAutoClearLocalTimeHhMm: config.salesHistoryAutoClearLocalTimeHhMm,
+      salesHistoryAutoClearTimezone: config.salesHistoryAutoClearTimezone,
+      salesHistoryAutoClearDayOfWeek: config.salesHistoryAutoClearDayOfWeek,
+      salesHistoryAutoClearDayOfMonth: config.salesHistoryAutoClearDayOfMonth,
+      salesHistoryAutoClearNextRunAtUtc: config.salesHistoryAutoClearNextRunAtUtc,
+      salesHistoryAutoClearLastRunAtUtc: config.salesHistoryAutoClearLastRunAtUtc,
+      salesHistoryAutoClearLastLocalRunDate: config.salesHistoryAutoClearLastLocalRunDate,
+    };
+  }
 
   private async getActorRole(
     actor: ActorContext,
@@ -509,32 +623,14 @@ export class TenantService {
       joinGateTicketCategoryId?: string | null;
       joinGateCurrentLookupChannelId?: string | null;
       joinGateNewLookupChannelId?: string | null;
+      salesHistoryAutoClearEnabled?: boolean;
+      salesHistoryAutoClearFrequency?: SalesHistoryAutoClearFrequency;
+      salesHistoryAutoClearLocalTimeHhMm?: string;
+      salesHistoryAutoClearTimezone?: string;
+      salesHistoryAutoClearDayOfWeek?: number | null;
+      salesHistoryAutoClearDayOfMonth?: number | null;
     },
-  ): Promise<Result<{
-    paidLogChannelId: string | null;
-    staffRoleIds: string[];
-    defaultCurrency: string;
-    couponsEnabled: boolean;
-    pointsEnabled: boolean;
-    referralsEnabled: boolean;
-    telegramEnabled: boolean;
-    tipEnabled: boolean;
-    pointsEarnCategoryKeys: string[];
-    pointsRedeemCategoryKeys: string[];
-    pointValueMinor: number;
-    referralRewardMinor: number;
-    referralRewardCategoryKeys: string[];
-    referralLogChannelId: string | null;
-    referralThankYouTemplate: string;
-    referralSubmissionTemplate: string;
-    ticketMetadataKey: string;
-    joinGateEnabled: boolean;
-    joinGateFallbackChannelId: string | null;
-    joinGateVerifiedRoleId: string | null;
-    joinGateTicketCategoryId: string | null;
-    joinGateCurrentLookupChannelId: string | null;
-    joinGateNewLookupChannelId: string | null;
-  }, AppError>> {
+  ): Promise<Result<GuildConfigSummary, AppError>> {
     try {
       const access = await this.assertTenantAccess(actor, input.tenantId, 'admin');
       if (access.isErr()) {
@@ -570,41 +666,84 @@ export class TenantService {
             ? input.joinGateNewLookupChannelId
             : existingConfig?.joinGateNewLookupChannelId ?? null,
       };
+      const resolvedSalesHistoryConfig = {
+        salesHistoryClearedAt: existingConfig?.salesHistoryClearedAt ?? null,
+        salesHistoryAutoClearEnabled: existingConfig?.salesHistoryAutoClearEnabled ?? false,
+        salesHistoryAutoClearFrequency: existingConfig?.salesHistoryAutoClearFrequency ?? 'daily',
+        salesHistoryAutoClearLocalTimeHhMm: existingConfig?.salesHistoryAutoClearLocalTimeHhMm ?? '00:00',
+        salesHistoryAutoClearTimezone: existingConfig?.salesHistoryAutoClearTimezone ?? 'UTC',
+        salesHistoryAutoClearDayOfWeek: existingConfig?.salesHistoryAutoClearDayOfWeek ?? null,
+        salesHistoryAutoClearDayOfMonth: existingConfig?.salesHistoryAutoClearDayOfMonth ?? null,
+        salesHistoryAutoClearNextRunAtUtc: existingConfig?.salesHistoryAutoClearNextRunAtUtc ?? null,
+        salesHistoryAutoClearLastRunAtUtc: existingConfig?.salesHistoryAutoClearLastRunAtUtc ?? null,
+        salesHistoryAutoClearLastLocalRunDate: existingConfig?.salesHistoryAutoClearLastLocalRunDate ?? null,
+      };
 
       const joinGateValidation = validateJoinGateConfig(resolvedJoinGateConfig);
       if (joinGateValidation.isErr()) {
         return err(joinGateValidation.error);
       }
 
+      const nextSalesHistoryConfig = parseSalesHistoryAutoClearConfig({
+        enabled:
+          input.salesHistoryAutoClearEnabled !== undefined
+            ? input.salesHistoryAutoClearEnabled
+            : resolvedSalesHistoryConfig.salesHistoryAutoClearEnabled,
+        frequency:
+          input.salesHistoryAutoClearFrequency ?? resolvedSalesHistoryConfig.salesHistoryAutoClearFrequency,
+        localTimeHhMm:
+          input.salesHistoryAutoClearLocalTimeHhMm ??
+          resolvedSalesHistoryConfig.salesHistoryAutoClearLocalTimeHhMm,
+        timezone:
+          input.salesHistoryAutoClearTimezone ?? resolvedSalesHistoryConfig.salesHistoryAutoClearTimezone,
+        dayOfWeek:
+          input.salesHistoryAutoClearDayOfWeek !== undefined
+            ? input.salesHistoryAutoClearDayOfWeek
+            : resolvedSalesHistoryConfig.salesHistoryAutoClearDayOfWeek,
+        dayOfMonth:
+          input.salesHistoryAutoClearDayOfMonth !== undefined
+            ? input.salesHistoryAutoClearDayOfMonth
+            : resolvedSalesHistoryConfig.salesHistoryAutoClearDayOfMonth,
+      });
+      const currentSalesHistoryConfig = parseSalesHistoryAutoClearConfig({
+        enabled: resolvedSalesHistoryConfig.salesHistoryAutoClearEnabled,
+        frequency: resolvedSalesHistoryConfig.salesHistoryAutoClearFrequency,
+        localTimeHhMm: resolvedSalesHistoryConfig.salesHistoryAutoClearLocalTimeHhMm,
+        timezone: resolvedSalesHistoryConfig.salesHistoryAutoClearTimezone,
+        dayOfWeek: resolvedSalesHistoryConfig.salesHistoryAutoClearDayOfWeek,
+        dayOfMonth: resolvedSalesHistoryConfig.salesHistoryAutoClearDayOfMonth,
+      });
+      const salesHistoryPatternChanged = existingConfig
+        ? !hasSameSalesHistoryAutoClearPattern(currentSalesHistoryConfig, nextSalesHistoryConfig)
+        : true;
+      const salesHistoryLastLocalRunDate = salesHistoryPatternChanged
+        ? null
+        : resolvedSalesHistoryConfig.salesHistoryAutoClearLastLocalRunDate;
+
       const config = await this.tenantRepository.upsertGuildConfig({
         ...input,
         ...resolvedJoinGateConfig,
+        ...resolvedSalesHistoryConfig,
+        salesHistoryAutoClearEnabled: nextSalesHistoryConfig.enabled,
+        salesHistoryAutoClearFrequency: nextSalesHistoryConfig.frequency,
+        salesHistoryAutoClearLocalTimeHhMm: nextSalesHistoryConfig.localTimeHhMm,
+        salesHistoryAutoClearTimezone: nextSalesHistoryConfig.timezone,
+        salesHistoryAutoClearDayOfWeek: nextSalesHistoryConfig.dayOfWeek,
+        salesHistoryAutoClearDayOfMonth: nextSalesHistoryConfig.dayOfMonth,
+        salesHistoryAutoClearNextRunAtUtc: nextSalesHistoryConfig.enabled
+          ? computeNextRunAtUtc({
+              frequency: nextSalesHistoryConfig.frequency,
+              localTimeHhMm: nextSalesHistoryConfig.localTimeHhMm,
+              timezone: nextSalesHistoryConfig.timezone,
+              dayOfWeek: nextSalesHistoryConfig.dayOfWeek,
+              dayOfMonth: nextSalesHistoryConfig.dayOfMonth,
+              now: new Date(),
+              lastLocalRunDate: salesHistoryLastLocalRunDate,
+            })
+          : null,
+        salesHistoryAutoClearLastLocalRunDate: salesHistoryLastLocalRunDate,
       });
-      return ok({
-        paidLogChannelId: config.paidLogChannelId,
-        staffRoleIds: config.staffRoleIds,
-        defaultCurrency: config.defaultCurrency,
-        couponsEnabled: config.couponsEnabled,
-        pointsEnabled: config.pointsEnabled,
-        referralsEnabled: config.referralsEnabled,
-        telegramEnabled: config.telegramEnabled,
-        tipEnabled: config.tipEnabled,
-        pointsEarnCategoryKeys: config.pointsEarnCategoryKeys,
-        pointsRedeemCategoryKeys: config.pointsRedeemCategoryKeys,
-        pointValueMinor: config.pointValueMinor,
-        referralRewardMinor: config.referralRewardMinor,
-        referralRewardCategoryKeys: config.referralRewardCategoryKeys,
-        referralLogChannelId: config.referralLogChannelId,
-        referralThankYouTemplate: config.referralThankYouTemplate,
-        referralSubmissionTemplate: config.referralSubmissionTemplate,
-        ticketMetadataKey: config.ticketMetadataKey,
-        joinGateEnabled: config.joinGateEnabled ?? false,
-        joinGateFallbackChannelId: config.joinGateFallbackChannelId ?? null,
-        joinGateVerifiedRoleId: config.joinGateVerifiedRoleId ?? null,
-        joinGateTicketCategoryId: config.joinGateTicketCategoryId ?? null,
-        joinGateCurrentLookupChannelId: config.joinGateCurrentLookupChannelId ?? null,
-        joinGateNewLookupChannelId: config.joinGateNewLookupChannelId ?? null,
-      });
+      return ok(this.mapGuildConfigSummary(config));
     } catch (error) {
       return err(fromUnknownError(error));
     }
@@ -613,36 +752,7 @@ export class TenantService {
   public async getGuildConfig(
     actor: ActorContext,
     input: { tenantId: string; guildId: string },
-  ): Promise<
-    Result<
-      {
-        paidLogChannelId: string | null;
-        staffRoleIds: string[];
-        defaultCurrency: string;
-        couponsEnabled: boolean;
-        pointsEnabled: boolean;
-        referralsEnabled: boolean;
-        telegramEnabled: boolean;
-        tipEnabled: boolean;
-        pointsEarnCategoryKeys: string[];
-        pointsRedeemCategoryKeys: string[];
-        pointValueMinor: number;
-        referralRewardMinor: number;
-        referralRewardCategoryKeys: string[];
-        referralLogChannelId: string | null;
-        referralThankYouTemplate: string;
-        referralSubmissionTemplate: string;
-        ticketMetadataKey: string;
-        joinGateEnabled: boolean;
-        joinGateFallbackChannelId: string | null;
-        joinGateVerifiedRoleId: string | null;
-        joinGateTicketCategoryId: string | null;
-        joinGateCurrentLookupChannelId: string | null;
-        joinGateNewLookupChannelId: string | null;
-      },
-      AppError
-    >
-  > {
+  ): Promise<Result<GuildConfigSummary, AppError>> {
     try {
       const access = await this.assertTenantAccess(actor, input.tenantId, 'member');
       if (access.isErr()) {
@@ -654,31 +764,7 @@ export class TenantService {
         return err(new AppError('GUILD_CONFIG_NOT_FOUND', 'Guild configuration not found', 404));
       }
 
-      return ok({
-        paidLogChannelId: config.paidLogChannelId,
-        staffRoleIds: config.staffRoleIds,
-        defaultCurrency: config.defaultCurrency,
-        couponsEnabled: config.couponsEnabled,
-        pointsEnabled: config.pointsEnabled,
-        referralsEnabled: config.referralsEnabled,
-        telegramEnabled: config.telegramEnabled,
-        tipEnabled: config.tipEnabled,
-        pointsEarnCategoryKeys: config.pointsEarnCategoryKeys,
-        pointsRedeemCategoryKeys: config.pointsRedeemCategoryKeys,
-        pointValueMinor: config.pointValueMinor,
-        referralRewardMinor: config.referralRewardMinor,
-        referralRewardCategoryKeys: config.referralRewardCategoryKeys,
-        referralLogChannelId: config.referralLogChannelId,
-        referralThankYouTemplate: config.referralThankYouTemplate,
-        referralSubmissionTemplate: config.referralSubmissionTemplate,
-        ticketMetadataKey: config.ticketMetadataKey,
-        joinGateEnabled: config.joinGateEnabled ?? false,
-        joinGateFallbackChannelId: config.joinGateFallbackChannelId ?? null,
-        joinGateVerifiedRoleId: config.joinGateVerifiedRoleId ?? null,
-        joinGateTicketCategoryId: config.joinGateTicketCategoryId ?? null,
-        joinGateCurrentLookupChannelId: config.joinGateCurrentLookupChannelId ?? null,
-        joinGateNewLookupChannelId: config.joinGateNewLookupChannelId ?? null,
-      });
+      return ok(this.mapGuildConfigSummary(config));
     } catch (error) {
       return err(fromUnknownError(error));
     }

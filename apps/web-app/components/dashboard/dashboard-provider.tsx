@@ -86,6 +86,8 @@ type DashboardContextValue = {
 
 const DashboardContext = createContext<DashboardContextValue | null>(null);
 
+export const FIXED_VOODOO_PAY_CHECKOUT_DOMAIN = 'checkout.voodoo-pay.uk';
+
 const EMPTY_WALLETS: VoodooCryptoWallets = {
   evm: '',
   btc: '',
@@ -309,7 +311,7 @@ export function DashboardProvider({
     setFlash(null);
     setError('');
     try {
-      const payload: GuildConfigRecord & { tenantId: string } = {
+      const payload = {
         tenantId,
         paidLogChannelId: updates.paidLogChannelId ?? config.paidLogChannelId,
         staffRoleIds: updates.staffRoleIds ?? config.staffRoleIds,
@@ -341,6 +343,18 @@ export function DashboardProvider({
           updates.joinGateCurrentLookupChannelId ?? config.joinGateCurrentLookupChannelId,
         joinGateNewLookupChannelId:
           updates.joinGateNewLookupChannelId ?? config.joinGateNewLookupChannelId,
+        salesHistoryAutoClearEnabled:
+          updates.salesHistoryAutoClearEnabled ?? config.salesHistoryAutoClearEnabled,
+        salesHistoryAutoClearFrequency:
+          updates.salesHistoryAutoClearFrequency ?? config.salesHistoryAutoClearFrequency,
+        salesHistoryAutoClearLocalTimeHhMm:
+          updates.salesHistoryAutoClearLocalTimeHhMm ?? config.salesHistoryAutoClearLocalTimeHhMm,
+        salesHistoryAutoClearTimezone:
+          updates.salesHistoryAutoClearTimezone ?? config.salesHistoryAutoClearTimezone,
+        salesHistoryAutoClearDayOfWeek:
+          updates.salesHistoryAutoClearDayOfWeek ?? config.salesHistoryAutoClearDayOfWeek,
+        salesHistoryAutoClearDayOfMonth:
+          updates.salesHistoryAutoClearDayOfMonth ?? config.salesHistoryAutoClearDayOfMonth,
       };
 
       const response = await dashboardApi<{ config: GuildConfigRecord }>(
@@ -482,7 +496,7 @@ export function useDashboardContext(): DashboardContextValue {
 export function createEmptyIntegration(): SaveIntegrationInput {
   return {
     merchantWalletAddress: '',
-    checkoutDomain: '',
+    checkoutDomain: FIXED_VOODOO_PAY_CHECKOUT_DOMAIN,
     callbackSecret: '',
     cryptoGatewayEnabled: false,
     cryptoAddFees: false,

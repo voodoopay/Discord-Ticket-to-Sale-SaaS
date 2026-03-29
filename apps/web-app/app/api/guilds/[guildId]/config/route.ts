@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
 import { jsonError, readJson, requireSession } from '@/lib/http';
+import type { SalesHistoryAutoClearFrequency } from '@/lib/dashboard-types';
 
 const tenantService = new TenantService();
 const DEFAULT_REFERRAL_THANK_YOU_TEMPLATE =
@@ -77,6 +78,12 @@ export async function PATCH(
       joinGateTicketCategoryId?: string | null;
       joinGateCurrentLookupChannelId?: string | null;
       joinGateNewLookupChannelId?: string | null;
+      salesHistoryAutoClearEnabled?: boolean;
+      salesHistoryAutoClearFrequency?: SalesHistoryAutoClearFrequency;
+      salesHistoryAutoClearLocalTimeHhMm?: string;
+      salesHistoryAutoClearTimezone?: string;
+      salesHistoryAutoClearDayOfWeek?: number | null;
+      salesHistoryAutoClearDayOfMonth?: number | null;
     }>(request);
 
     const result = await tenantService.updateGuildConfig(auth.session, {
@@ -111,6 +118,12 @@ export async function PATCH(
       joinGateTicketCategoryId: body.joinGateTicketCategoryId ?? null,
       joinGateCurrentLookupChannelId: body.joinGateCurrentLookupChannelId ?? null,
       joinGateNewLookupChannelId: body.joinGateNewLookupChannelId ?? null,
+      salesHistoryAutoClearEnabled: body.salesHistoryAutoClearEnabled,
+      salesHistoryAutoClearFrequency: body.salesHistoryAutoClearFrequency,
+      salesHistoryAutoClearLocalTimeHhMm: body.salesHistoryAutoClearLocalTimeHhMm,
+      salesHistoryAutoClearTimezone: body.salesHistoryAutoClearTimezone,
+      salesHistoryAutoClearDayOfWeek: body.salesHistoryAutoClearDayOfWeek,
+      salesHistoryAutoClearDayOfMonth: body.salesHistoryAutoClearDayOfMonth,
     });
 
     if (result.isErr()) {

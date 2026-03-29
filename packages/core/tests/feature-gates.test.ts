@@ -50,6 +50,16 @@ function makeGuildConfig(overrides: Partial<GuildConfigRecord> = {}): GuildConfi
     joinGateNewLookupChannelId: null,
     joinGatePanelTitle: null,
     joinGatePanelMessage: null,
+    salesHistoryClearedAt: null,
+    salesHistoryAutoClearEnabled: false,
+    salesHistoryAutoClearFrequency: 'daily',
+    salesHistoryAutoClearLocalTimeHhMm: '00:00',
+    salesHistoryAutoClearTimezone: 'UTC',
+    salesHistoryAutoClearDayOfWeek: null,
+    salesHistoryAutoClearDayOfMonth: null,
+    salesHistoryAutoClearNextRunAtUtc: null,
+    salesHistoryAutoClearLastRunAtUtc: null,
+    salesHistoryAutoClearLastLocalRunDate: null,
     ...overrides,
   };
 }

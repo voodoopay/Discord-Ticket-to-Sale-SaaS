@@ -17,7 +17,11 @@ import {
 } from 'lucide-react';
 import { useDeferredValue, useEffect, useEffectEvent, useRef, useState } from 'react';
 
-import { createEmptyIntegration, useDashboardContext } from '@/components/dashboard/dashboard-provider';
+import {
+  createEmptyIntegration,
+  FIXED_VOODOO_PAY_CHECKOUT_DOMAIN,
+  useDashboardContext,
+} from '@/components/dashboard/dashboard-provider';
 import {
   ConfirmationModal,
   FeatureToggle,
@@ -49,7 +53,6 @@ import {
   formatMinorToMajor,
   formatPointValueMinorToMajor,
   normalizeCategoryKey,
-  normalizeCheckoutDomainInput,
   parsePointValueMajorToMinor,
   parsePriceToMinor,
   parseWholePoints,
@@ -67,6 +70,7 @@ import type {
   PointsCustomerRecord,
   PriceOptionDraft,
   ProductRecord,
+  SalesHistoryAutoClearFrequency,
   QuestionDraft,
   TenantMemberRole,
   WorkspaceAccessState,
@@ -157,6 +161,28 @@ const salesRangeOptions: Array<{
   { id: 'custom', label: 'Custom', description: 'Choose an exact date window.' },
 ];
 
+const salesHistoryAutoClearFrequencyOptions: Array<{
+  id: SalesHistoryAutoClearFrequency;
+  label: string;
+  description: string;
+}> = [
+  { id: 'daily', label: 'Daily', description: 'Clear older dashboard history every day.' },
+  { id: 'weekly', label: 'Weekly', description: 'Clear older dashboard history once per week.' },
+  { id: 'monthly', label: 'Monthly', description: 'Clear older dashboard history once per month.' },
+];
+
+const weekdayOptions = [
+  { value: 0, label: 'Sunday' },
+  { value: 1, label: 'Monday' },
+  { value: 2, label: 'Tuesday' },
+  { value: 3, label: 'Wednesday' },
+  { value: 4, label: 'Thursday' },
+  { value: 5, label: 'Friday' },
+  { value: 6, label: 'Saturday' },
+] as const;
+
+const monthlyDayOptions = Array.from({ length: 31 }, (_, index) => index + 1);
+
 const productsMenuItems = [
   {
     id: 'categories',
@@ -182,6 +208,17 @@ function getMessage(error: unknown, fallback: string): string {
 
 function formatTenantRole(role: TenantMemberRole): string {
   return role.charAt(0).toUpperCase() + role.slice(1);
+}
+
+function formatDashboardDateTime(value: string | null): string {
+  if (!value) {
+    return 'Not scheduled';
+  }
+
+  return new Date(value).toLocaleString([], {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
 }
 
 async function copyToClipboard(text: string) {
@@ -1014,7 +1051,15 @@ export function OverviewSection() {
 }
 
 export function SalesSection() {
-  const { config, guildId, isLinkedToCurrentTenant, tenantId } = useDashboardContext();
+  const {
+    config,
+    guildId,
+    isLinkedToCurrentTenant,
+    refreshBase,
+    saveConfig,
+    showFlash,
+    tenantId,
+  } = useDashboardContext();
   const displayCurrency = config?.defaultCurrency || DEFAULT_CURRENCY;
   const [range, setRange] = useState<DashboardSaleFilterRange>('all');
   const [fromDate, setFromDate] = useState('');
@@ -1025,6 +1070,43 @@ export function SalesSection() {
   const [salesLoading, setSalesLoading] = useState(false);
   const [salesError, setSalesError] = useState('');
   const [refreshTick, setRefreshTick] = useState(0);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [clearModalOpen, setClearModalOpen] = useState(false);
+  const [clearPending, setClearPending] = useState(false);
+  const [settingsPending, setSettingsPending] = useState(false);
+  const [autoClearEnabled, setAutoClearEnabled] = useState(false);
+  const [autoClearFrequency, setAutoClearFrequency] = useState<SalesHistoryAutoClearFrequency>('daily');
+  const [autoClearLocalTimeHhMm, setAutoClearLocalTimeHhMm] = useState('00:00');
+  const [autoClearTimezone, setAutoClearTimezone] = useState('UTC');
+  const [autoClearDayOfWeek, setAutoClearDayOfWeek] = useState(1);
+  const [autoClearDayOfMonth, setAutoClearDayOfMonth] = useState(1);
+
+  useEffect(() => {
+    if (!config) {
+      return;
+    }
+
+    const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    const hasSavedSchedule =
+      config.salesHistoryAutoClearEnabled ||
+      Boolean(config.salesHistoryAutoClearNextRunAtUtc || config.salesHistoryAutoClearLastRunAtUtc);
+
+    setAutoClearEnabled(config.salesHistoryAutoClearEnabled);
+    setAutoClearFrequency(config.salesHistoryAutoClearFrequency);
+    setAutoClearLocalTimeHhMm(config.salesHistoryAutoClearLocalTimeHhMm);
+    setAutoClearTimezone(hasSavedSchedule ? config.salesHistoryAutoClearTimezone : browserTimeZone);
+    setAutoClearDayOfWeek(config.salesHistoryAutoClearDayOfWeek ?? new Date().getDay());
+    setAutoClearDayOfMonth(config.salesHistoryAutoClearDayOfMonth ?? 1);
+  }, [
+    config?.salesHistoryAutoClearDayOfMonth,
+    config?.salesHistoryAutoClearDayOfWeek,
+    config?.salesHistoryAutoClearEnabled,
+    config?.salesHistoryAutoClearFrequency,
+    config?.salesHistoryAutoClearLastRunAtUtc,
+    config?.salesHistoryAutoClearLocalTimeHhMm,
+    config?.salesHistoryAutoClearNextRunAtUtc,
+    config?.salesHistoryAutoClearTimezone,
+  ]);
 
   const loadSales = useEffectEvent(async () => {
     if (!isLinkedToCurrentTenant) {
@@ -1072,9 +1154,59 @@ export function SalesSection() {
     }
   });
 
+  const saveAutoClearSettings = useEffectEvent(async () => {
+    setSettingsPending(true);
+
+    try {
+      await saveConfig({
+        salesHistoryAutoClearEnabled: autoClearEnabled,
+        salesHistoryAutoClearFrequency: autoClearFrequency,
+        salesHistoryAutoClearLocalTimeHhMm: autoClearLocalTimeHhMm,
+        salesHistoryAutoClearTimezone: autoClearTimezone.trim(),
+        salesHistoryAutoClearDayOfWeek: autoClearFrequency === 'weekly' ? autoClearDayOfWeek : null,
+        salesHistoryAutoClearDayOfMonth: autoClearFrequency === 'monthly' ? autoClearDayOfMonth : null,
+      });
+      setSettingsOpen(false);
+    } finally {
+      setSettingsPending(false);
+    }
+  });
+
+  const clearSalesHistory = useEffectEvent(async () => {
+    setClearPending(true);
+
+    try {
+      const response = await dashboardApi<{ clearedAt: string }>(
+        `/api/guilds/${encodeURIComponent(guildId)}/sales/clear`,
+        'POST',
+        { tenantId },
+      );
+      setClearModalOpen(false);
+      await Promise.all([refreshBase(), loadSales()]);
+      showFlash(
+        'success',
+        `Sales history now hides orders paid before ${formatDashboardDateTime(response.clearedAt)}.`,
+      );
+    } catch (error) {
+      showFlash('error', getMessage(error, 'Failed to clear sales history.'));
+    } finally {
+      setClearPending(false);
+    }
+  });
+
   useEffect(() => {
     void loadSales();
   }, [deferredSearch, fromDate, guildId, isLinkedToCurrentTenant, range, refreshTick, tenantId, toDate]);
+
+  const activeCutoffLabel = config?.salesHistoryClearedAt
+    ? formatDashboardDateTime(config.salesHistoryClearedAt)
+    : 'Nothing cleared yet';
+  const nextAutoClearLabel = config?.salesHistoryAutoClearEnabled
+    ? formatDashboardDateTime(config.salesHistoryAutoClearNextRunAtUtc)
+    : 'Auto-clear is off';
+  const lastAutoClearLabel = config?.salesHistoryAutoClearLastRunAtUtc
+    ? formatDashboardDateTime(config.salesHistoryAutoClearLastRunAtUtc)
+    : 'No scheduled clears yet';
 
   return (
     <SectionShell
@@ -1082,10 +1214,32 @@ export function SalesSection() {
       title="Sales history"
       description="Review every paid order with date filters, custom ranges, and direct search across customer email, date, or TXID."
       action={
-        <Button type="button" variant="outline" className="min-h-11" onClick={() => setRefreshTick((current) => current + 1)}>
-          {salesLoading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCcw className="size-4" />}
-          Refresh
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant={settingsOpen ? 'default' : 'outline'}
+            className="min-h-11"
+            onClick={() => setSettingsOpen((current) => !current)}
+          >
+            Auto-clear settings
+          </Button>
+          <Button type="button" variant="outline" className="min-h-11" onClick={() => setClearModalOpen(true)}>
+            <Trash2 className="size-4" />
+            Clear sales history
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11"
+            onClick={() => {
+              setRefreshTick((current) => current + 1);
+              void refreshBase();
+            }}
+          >
+            {salesLoading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCcw className="size-4" />}
+            Refresh
+          </Button>
+        </div>
       }
     >
       <FlashBanner />
@@ -1093,6 +1247,172 @@ export function SalesSection() {
 
       {isLinkedToCurrentTenant ? (
         <div className="space-y-5">
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="rounded-[1.2rem] border border-border/70 bg-background/70 px-4 py-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                Visible Since
+              </p>
+              <p className="mt-2 font-medium">{activeCutoffLabel}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Older orders stay in the database, but the dashboard hides them after a clear.
+              </p>
+            </div>
+            <div className="rounded-[1.2rem] border border-border/70 bg-background/70 px-4 py-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                Next Auto-clear
+              </p>
+              <p className="mt-2 font-medium">{nextAutoClearLabel}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Runs in the saved timezone: {config?.salesHistoryAutoClearTimezone ?? autoClearTimezone}.
+              </p>
+            </div>
+            <div className="rounded-[1.2rem] border border-border/70 bg-background/70 px-4 py-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                Last Scheduled Clear
+              </p>
+              <p className="mt-2 font-medium">{lastAutoClearLabel}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Manual clears update the visible cutoff too, without deleting paid-order records.
+              </p>
+            </div>
+          </div>
+
+          <InfoTip>
+            Clearing sales history only resets what the dashboard shows. Paid orders, logs, points, referral
+            tracking, and audit data stay intact.
+          </InfoTip>
+
+          {settingsOpen ? (
+            <Panel
+              title="Sales auto-clear settings"
+              description="Choose whether the dashboard should automatically hide older sales every day, week, or month at a specific local time."
+              action={
+                <Button
+                  type="button"
+                  className="min-h-11"
+                  disabled={settingsPending}
+                  onClick={() => void saveAutoClearSettings()}
+                >
+                  {settingsPending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+                  Save schedule
+                </Button>
+              }
+            >
+              <div className="space-y-5">
+                <div className="flex flex-col gap-4 rounded-[1.2rem] border border-border/70 bg-background/70 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <p className="font-medium">Enable automatic sales-history clears</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      When enabled, the dashboard will keep showing only orders paid after the scheduled clear.
+                    </p>
+                  </div>
+                  <FeatureToggle
+                    checked={autoClearEnabled}
+                    disabled={settingsPending}
+                    label="Enable sales-history auto-clear"
+                    onChange={setAutoClearEnabled}
+                  />
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="sales-auto-clear-frequency">Frequency</Label>
+                    <select
+                      id="sales-auto-clear-frequency"
+                      className={nativeSelectClass}
+                      value={autoClearFrequency}
+                      disabled={settingsPending}
+                      onChange={(event) =>
+                        setAutoClearFrequency(event.target.value as SalesHistoryAutoClearFrequency)
+                      }
+                    >
+                      {salesHistoryAutoClearFrequencyOptions.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="sales-auto-clear-time">Time</Label>
+                    <Input
+                      id="sales-auto-clear-time"
+                      type="time"
+                      value={autoClearLocalTimeHhMm}
+                      disabled={settingsPending}
+                      onChange={(event) => setAutoClearLocalTimeHhMm(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor="sales-auto-clear-timezone">Timezone</Label>
+                    <Input
+                      id="sales-auto-clear-timezone"
+                      value={autoClearTimezone}
+                      disabled={settingsPending}
+                      onChange={(event) => setAutoClearTimezone(event.target.value)}
+                      placeholder="Europe/Berlin"
+                    />
+                  </div>
+                </div>
+
+                {autoClearFrequency === 'weekly' ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="sales-auto-clear-weekday">Weekday</Label>
+                    <select
+                      id="sales-auto-clear-weekday"
+                      className={nativeSelectClass}
+                      value={String(autoClearDayOfWeek)}
+                      disabled={settingsPending}
+                      onChange={(event) => setAutoClearDayOfWeek(Number(event.target.value))}
+                    >
+                      {weekdayOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+
+                {autoClearFrequency === 'monthly' ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="sales-auto-clear-monthday">Day of month</Label>
+                    <select
+                      id="sales-auto-clear-monthday"
+                      className={nativeSelectClass}
+                      value={String(autoClearDayOfMonth)}
+                      disabled={settingsPending}
+                      onChange={(event) => setAutoClearDayOfMonth(Number(event.target.value))}
+                    >
+                      {monthlyDayOptions.map((day) => (
+                        <option key={day} value={day}>
+                          Day {day}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+
+                <div className="grid gap-4 md:grid-cols-3">
+                  {salesHistoryAutoClearFrequencyOptions.map((option) => (
+                    <div
+                      key={option.id}
+                      className={cn(
+                        'rounded-[1.15rem] border px-4 py-4',
+                        autoClearFrequency === option.id
+                          ? 'border-primary/35 bg-primary/10'
+                          : 'border-border/70 bg-background/70',
+                      )}
+                    >
+                      <p className="font-medium">{option.label}</p>
+                      <p className="mt-1 text-sm leading-6 text-muted-foreground">{option.description}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Panel>
+          ) : null}
+
           <Panel
             title="Browse paid sales"
             description="Switch between quick time windows, choose an exact date range, or search directly for a customer email, date, or transaction reference."
@@ -1256,6 +1576,23 @@ export function SalesSection() {
               </p>
             )}
           </Panel>
+
+          <ConfirmationModal
+            open={clearModalOpen}
+            onClose={() => {
+              if (!clearPending) {
+                setClearModalOpen(false);
+              }
+            }}
+            onConfirm={() => void clearSalesHistory()}
+            pending={clearPending}
+            title="Clear dashboard sales history"
+            description="This will hide all current sales from the dashboard until new paid orders arrive. Underlying paid-order records, logs, referrals, and points history will remain untouched."
+            confirmLabel="Clear history"
+            cancelLabel="Cancel"
+            confirmPhrase="CLEAR"
+            confirmPlaceholder="CLEAR"
+          />
         </div>
       ) : null}
     </SectionShell>
@@ -1581,7 +1918,6 @@ export function PaymentsSection() {
   const { actionPending, integration, isLinkedToCurrentTenant, overview, saveIntegration } =
     useDashboardContext();
   const [walletAddress, setWalletAddress] = useState('');
-  const [checkoutDomain, setCheckoutDomain] = useState('');
   const [callbackSecret, setCallbackSecret] = useState('');
   const [cryptoEnabled, setCryptoEnabled] = useState(false);
   const [cryptoAddFees, setCryptoAddFees] = useState(false);
@@ -1590,7 +1926,6 @@ export function PaymentsSection() {
   useEffect(() => {
     const defaults = createEmptyIntegration();
     setWalletAddress(integration?.merchantWalletAddress ?? defaults.merchantWalletAddress);
-    setCheckoutDomain(integration?.checkoutDomain ?? defaults.checkoutDomain);
     setCallbackSecret('');
     setCryptoEnabled(integration?.cryptoGatewayEnabled ?? defaults.cryptoGatewayEnabled);
     setCryptoAddFees(integration?.cryptoAddFees ?? defaults.cryptoAddFees);
@@ -1601,7 +1936,7 @@ export function PaymentsSection() {
     try {
       await saveIntegration({
         merchantWalletAddress: walletAddress.trim(),
-        checkoutDomain: normalizeCheckoutDomainInput(checkoutDomain),
+        checkoutDomain: FIXED_VOODOO_PAY_CHECKOUT_DOMAIN,
         callbackSecret: callbackSecret.trim() || undefined,
         cryptoGatewayEnabled: cryptoEnabled,
         cryptoAddFees,
@@ -1615,7 +1950,7 @@ export function PaymentsSection() {
     <SectionShell
       eyebrow="Payments"
       title="Payment controls"
-      description="Configure the Voodoo Pay wallet, checkout domain, webhook secret rotation, and optional crypto wallet set."
+      description="Configure the Voodoo Pay wallet, fixed hosted checkout domain, webhook secret rotation, and optional crypto wallet set."
       action={
         <Button type="button" className="min-h-11" disabled={actionPending || !isLinkedToCurrentTenant} onClick={() => void handleSave()}>
           {actionPending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
@@ -1650,7 +1985,10 @@ export function PaymentsSection() {
             </OverviewStat>
           </div>
 
-          <Panel title="Wallet and checkout" description="These fields control the core Voodoo Pay destination and branded checkout host.">
+          <Panel
+            title="Wallet and checkout"
+            description="These fields control the core Voodoo Pay destination, while hosted checkout always stays on the fixed Voodoo Pay domain."
+          >
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="merchant-wallet">USDC Polygon wallet address</Label>
@@ -1665,10 +2003,12 @@ export function PaymentsSection() {
                 <Label htmlFor="checkout-domain">Checkout domain</Label>
                 <Input
                   id="checkout-domain"
-                  value={checkoutDomain}
-                  onChange={(event) => setCheckoutDomain(event.target.value)}
-                  placeholder="checkout.voodoo-pay.uk"
+                  value={FIXED_VOODOO_PAY_CHECKOUT_DOMAIN}
+                  readOnly
                 />
+                <p className="text-xs text-muted-foreground">
+                  Hosted checkout links always use the fixed Voodoo Pay domain.
+                </p>
               </div>
               <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="callback-secret">Optional callback secret rotation</Label>

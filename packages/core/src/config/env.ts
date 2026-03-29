@@ -10,6 +10,7 @@ const envSchema = z.object({
   SPORTS_DISCORD_TOKEN: z.string().default(''),
   SPORTS_DISCORD_CLIENT_ID: z.string().default(''),
   SPORTS_POLL_INTERVAL_MS: z.coerce.number().int().min(5_000).default(30_000),
+  SALES_HISTORY_POLL_INTERVAL_MS: z.coerce.number().int().min(5_000).default(30_000),
   SPORTS_API_KEY: z.string().default(''),
   SPORTS_API_V1_BASE_URL: z.string().url().default('https://www.thesportsdb.com/api/v1/json'),
   SPORTS_API_BASE_URL: z.string().url().default('https://www.thesportsdb.com/api/v2/json'),

@@ -6,13 +6,14 @@
 - Hosts dashboard pages and API/webhook routes.
 - Handles Discord OAuth and session cookie auth.
 - Manages workspace member invites/removals plus Discord/Telegram connection controls from the dashboard.
-- Exposes filtered sales-history views and bot invite actions inside the dashboard shell.
+- Exposes filtered sales-history views, manual clear controls, scheduled auto-clear settings, and bot invite actions inside the dashboard shell.
 - Runs Woo webhook receiver and enqueue/retry logic.
 
 2. `bot-worker`
 - Handles Discord interactions.
 - Enforces sale permissions and ticket metadata checks.
 - Executes `/sale` component+modal workflow.
+- Also polls due sales-history auto-clear schedules and advances the next run for each configured guild.
 
 3. `join-gate-worker`
 - Runs as a separate Discord application/token for first-join verification.
@@ -39,6 +40,8 @@
   - `guild_configs` join-gate columns for per-server configuration
   - `join_gate_members` for each joining member's verification progress
   - `join_gate_email_index` for normalized email matches extracted from lookup channels
+- Sales-history visibility state is persisted in:
+  - `guild_configs` cutoff + auto-clear schedule columns for per-server dashboard history retention
 - Sports worker state is persisted in:
   - `sports_guild_configs` for per-server schedule, timezone, broadcaster country, and managed category
   - `sports_channel_bindings` for the one-channel-per-sport mapping inside each server
