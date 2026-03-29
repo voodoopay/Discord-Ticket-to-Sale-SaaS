@@ -563,6 +563,16 @@ export class ProductService {
       referralThankYouTemplate: config.referralThankYouTemplate,
       referralSubmissionTemplate: config.referralSubmissionTemplate,
       ticketMetadataKey: config.ticketMetadataKey,
+      salesHistoryClearedAt: config.salesHistoryClearedAt,
+      salesHistoryAutoClearEnabled: config.salesHistoryAutoClearEnabled,
+      salesHistoryAutoClearFrequency: config.salesHistoryAutoClearFrequency,
+      salesHistoryAutoClearLocalTimeHhMm: config.salesHistoryAutoClearLocalTimeHhMm,
+      salesHistoryAutoClearTimezone: config.salesHistoryAutoClearTimezone,
+      salesHistoryAutoClearDayOfWeek: config.salesHistoryAutoClearDayOfWeek,
+      salesHistoryAutoClearDayOfMonth: config.salesHistoryAutoClearDayOfMonth,
+      salesHistoryAutoClearNextRunAtUtc: config.salesHistoryAutoClearNextRunAtUtc,
+      salesHistoryAutoClearLastRunAtUtc: config.salesHistoryAutoClearLastRunAtUtc,
+      salesHistoryAutoClearLastLocalRunDate: config.salesHistoryAutoClearLastLocalRunDate,
     });
   }
 
@@ -605,6 +615,16 @@ export class ProductService {
       referralThankYouTemplate: config.referralThankYouTemplate,
       referralSubmissionTemplate: config.referralSubmissionTemplate,
       ticketMetadataKey: config.ticketMetadataKey,
+      salesHistoryClearedAt: config.salesHistoryClearedAt,
+      salesHistoryAutoClearEnabled: config.salesHistoryAutoClearEnabled,
+      salesHistoryAutoClearFrequency: config.salesHistoryAutoClearFrequency,
+      salesHistoryAutoClearLocalTimeHhMm: config.salesHistoryAutoClearLocalTimeHhMm,
+      salesHistoryAutoClearTimezone: config.salesHistoryAutoClearTimezone,
+      salesHistoryAutoClearDayOfWeek: config.salesHistoryAutoClearDayOfWeek,
+      salesHistoryAutoClearDayOfMonth: config.salesHistoryAutoClearDayOfMonth,
+      salesHistoryAutoClearNextRunAtUtc: config.salesHistoryAutoClearNextRunAtUtc,
+      salesHistoryAutoClearLastRunAtUtc: config.salesHistoryAutoClearLastRunAtUtc,
+      salesHistoryAutoClearLastLocalRunDate: config.salesHistoryAutoClearLastLocalRunDate,
     });
   }
 }
