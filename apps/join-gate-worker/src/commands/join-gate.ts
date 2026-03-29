@@ -93,6 +93,16 @@ function buildBaseGuildConfigRecord(input: {
     joinGateNewLookupChannelId: input.existingConfig?.joinGateNewLookupChannelId ?? null,
     joinGatePanelTitle: input.existingConfig?.joinGatePanelTitle ?? null,
     joinGatePanelMessage: input.existingConfig?.joinGatePanelMessage ?? null,
+    salesHistoryClearedAt: input.existingConfig?.salesHistoryClearedAt ?? null,
+    salesHistoryAutoClearEnabled: input.existingConfig?.salesHistoryAutoClearEnabled ?? false,
+    salesHistoryAutoClearFrequency: input.existingConfig?.salesHistoryAutoClearFrequency ?? 'daily',
+    salesHistoryAutoClearLocalTimeHhMm: input.existingConfig?.salesHistoryAutoClearLocalTimeHhMm ?? '00:00',
+    salesHistoryAutoClearTimezone: input.existingConfig?.salesHistoryAutoClearTimezone ?? 'UTC',
+    salesHistoryAutoClearDayOfWeek: input.existingConfig?.salesHistoryAutoClearDayOfWeek ?? null,
+    salesHistoryAutoClearDayOfMonth: input.existingConfig?.salesHistoryAutoClearDayOfMonth ?? null,
+    salesHistoryAutoClearNextRunAtUtc: input.existingConfig?.salesHistoryAutoClearNextRunAtUtc ?? null,
+    salesHistoryAutoClearLastRunAtUtc: input.existingConfig?.salesHistoryAutoClearLastRunAtUtc ?? null,
+    salesHistoryAutoClearLastLocalRunDate: input.existingConfig?.salesHistoryAutoClearLastLocalRunDate ?? null,
   };
 }
 

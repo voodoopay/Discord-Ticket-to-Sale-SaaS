@@ -91,11 +91,60 @@ type InteractionMocks = {
   reply: ReturnType<typeof vi.fn>;
 };
 
+type MockGuildConfig = NonNullable<Awaited<ReturnType<TenantRepository['getGuildConfig']>>>;
+
 function createOkResult<T>(value: T): { isErr: () => false; isOk: () => true; value: T } {
   return {
     isErr: () => false,
     isOk: () => true,
     value,
+  };
+}
+
+function createGuildConfigRecordMock(overrides: Partial<MockGuildConfig> = {}): MockGuildConfig {
+  return {
+    id: 'cfg-1',
+    tenantId: 'tenant-1',
+    guildId: 'guild-1',
+    paidLogChannelId: null,
+    staffRoleIds: [],
+    defaultCurrency: 'GBP',
+    couponsEnabled: true,
+    pointsEnabled: true,
+    referralsEnabled: true,
+    telegramEnabled: false,
+    tipEnabled: false,
+    pointsEarnCategoryKeys: [],
+    pointsRedeemCategoryKeys: [],
+    pointValueMinor: 1,
+    referralRewardMinor: 0,
+    referralRewardCategoryKeys: [],
+    referralLogChannelId: null,
+    referralThankYouTemplate:
+      'Thanks for your referral. You earned {points} point(s) ({amount_gbp} GBP) after {referred_email} paid.',
+    referralSubmissionTemplate:
+      'Referral submitted successfully. We will reward points automatically after the first paid order.',
+    ticketMetadataKey: 'isTicket',
+    joinGateEnabled: false,
+    joinGateStaffRoleIds: [],
+    joinGateFallbackChannelId: null,
+    joinGateVerifiedRoleId: null,
+    joinGateTicketCategoryId: null,
+    joinGateCurrentLookupChannelId: null,
+    joinGateNewLookupChannelId: null,
+    joinGatePanelTitle: null,
+    joinGatePanelMessage: null,
+    salesHistoryClearedAt: null,
+    salesHistoryAutoClearEnabled: false,
+    salesHistoryAutoClearFrequency: 'daily',
+    salesHistoryAutoClearLocalTimeHhMm: '00:00',
+    salesHistoryAutoClearTimezone: 'UTC',
+    salesHistoryAutoClearDayOfWeek: null,
+    salesHistoryAutoClearDayOfMonth: null,
+    salesHistoryAutoClearNextRunAtUtc: null,
+    salesHistoryAutoClearLastRunAtUtc: null,
+    salesHistoryAutoClearLastLocalRunDate: null,
+    ...overrides,
   };
 }
 
@@ -327,36 +376,16 @@ describe('join-gate command', () => {
     vi.spyOn(TenantRepository.prototype, 'getGuildConfig').mockResolvedValue(null);
     const upsertSpy = vi
       .spyOn(TenantRepository.prototype, 'upsertGuildConfig')
-      .mockResolvedValue({
-        id: 'cfg-1',
-        tenantId: 'tenant-1',
-        guildId: 'guild-1',
-        paidLogChannelId: null,
-        staffRoleIds: [],
-        defaultCurrency: 'GBP',
-        couponsEnabled: true,
-        pointsEnabled: true,
-        referralsEnabled: true,
-        telegramEnabled: false,
-        tipEnabled: false,
-        pointsEarnCategoryKeys: [],
-        pointsRedeemCategoryKeys: [],
-        pointValueMinor: 1,
-        referralRewardMinor: 0,
-        referralRewardCategoryKeys: [],
-        referralLogChannelId: null,
-        referralThankYouTemplate:
-          'Thanks for your referral. You earned {points} point(s) ({amount_gbp} GBP) after {referred_email} paid.',
-        referralSubmissionTemplate:
-          'Referral submitted successfully. We will reward points automatically after the first paid order.',
-        ticketMetadataKey: 'isTicket',
-        joinGateEnabled: true,
-        joinGateFallbackChannelId: 'channel-fallback',
-        joinGateVerifiedRoleId: 'role-verified',
-        joinGateTicketCategoryId: 'channel-category',
-        joinGateCurrentLookupChannelId: 'channel-current',
-        joinGateNewLookupChannelId: 'channel-new',
-      } as Awaited<ReturnType<TenantRepository['upsertGuildConfig']>>);
+      .mockResolvedValue(
+        createGuildConfigRecordMock({
+          joinGateEnabled: true,
+          joinGateFallbackChannelId: 'channel-fallback',
+          joinGateVerifiedRoleId: 'role-verified',
+          joinGateTicketCategoryId: 'channel-category',
+          joinGateCurrentLookupChannelId: 'channel-current',
+          joinGateNewLookupChannelId: 'channel-new',
+        }),
+      );
 
     const { interaction, editReply } = createInteractionMock({
       userId: 'owner-1',
@@ -397,68 +426,28 @@ describe('join-gate command', () => {
     vi.spyOn(TenantRepository.prototype, 'getTenantByGuildId').mockResolvedValue({
       tenantId: 'tenant-1',
     } as Awaited<ReturnType<TenantRepository['getTenantByGuildId']>>);
-    vi.spyOn(TenantRepository.prototype, 'getGuildConfig').mockResolvedValue({
-      id: 'cfg-1',
-      tenantId: 'tenant-1',
-      guildId: 'guild-1',
-      paidLogChannelId: null,
-      staffRoleIds: [],
-      defaultCurrency: 'GBP',
-      couponsEnabled: true,
-      pointsEnabled: true,
-      referralsEnabled: true,
-      telegramEnabled: false,
-      tipEnabled: false,
-      pointsEarnCategoryKeys: [],
-      pointsRedeemCategoryKeys: [],
-      pointValueMinor: 1,
-      referralRewardMinor: 0,
-      referralRewardCategoryKeys: [],
-      referralLogChannelId: null,
-      referralThankYouTemplate:
-        'Thanks for your referral. You earned {points} point(s) ({amount_gbp} GBP) after {referred_email} paid.',
-      referralSubmissionTemplate:
-        'Referral submitted successfully. We will reward points automatically after the first paid order.',
-      ticketMetadataKey: 'isTicket',
-      joinGateEnabled: true,
-      joinGateFallbackChannelId: 'channel-fallback',
-      joinGateVerifiedRoleId: 'role-verified',
-      joinGateTicketCategoryId: 'channel-category',
-      joinGateCurrentLookupChannelId: 'channel-current',
-      joinGateNewLookupChannelId: 'channel-new',
-    } as Awaited<ReturnType<TenantRepository['getGuildConfig']>>);
+    vi.spyOn(TenantRepository.prototype, 'getGuildConfig').mockResolvedValue(
+      createGuildConfigRecordMock({
+        joinGateEnabled: true,
+        joinGateFallbackChannelId: 'channel-fallback',
+        joinGateVerifiedRoleId: 'role-verified',
+        joinGateTicketCategoryId: 'channel-category',
+        joinGateCurrentLookupChannelId: 'channel-current',
+        joinGateNewLookupChannelId: 'channel-new',
+      }),
+    );
     const upsertSpy = vi
       .spyOn(TenantRepository.prototype, 'upsertGuildConfig')
-      .mockResolvedValue({
-        id: 'cfg-1',
-        tenantId: 'tenant-1',
-        guildId: 'guild-1',
-        paidLogChannelId: null,
-        staffRoleIds: [],
-        defaultCurrency: 'GBP',
-        couponsEnabled: true,
-        pointsEnabled: true,
-        referralsEnabled: true,
-        telegramEnabled: false,
-        tipEnabled: false,
-        pointsEarnCategoryKeys: [],
-        pointsRedeemCategoryKeys: [],
-        pointValueMinor: 1,
-        referralRewardMinor: 0,
-        referralRewardCategoryKeys: [],
-        referralLogChannelId: null,
-        referralThankYouTemplate:
-          'Thanks for your referral. You earned {points} point(s) ({amount_gbp} GBP) after {referred_email} paid.',
-        referralSubmissionTemplate:
-          'Referral submitted successfully. We will reward points automatically after the first paid order.',
-        ticketMetadataKey: 'isTicket',
-        joinGateEnabled: false,
-        joinGateFallbackChannelId: null,
-        joinGateVerifiedRoleId: null,
-        joinGateTicketCategoryId: null,
-        joinGateCurrentLookupChannelId: null,
-        joinGateNewLookupChannelId: null,
-      } as Awaited<ReturnType<TenantRepository['upsertGuildConfig']>>);
+      .mockResolvedValue(
+        createGuildConfigRecordMock({
+          joinGateEnabled: false,
+          joinGateFallbackChannelId: null,
+          joinGateVerifiedRoleId: null,
+          joinGateTicketCategoryId: null,
+          joinGateCurrentLookupChannelId: null,
+          joinGateNewLookupChannelId: null,
+        }),
+      );
 
     const { interaction, editReply } = createInteractionMock({
       userId: 'owner-1',
@@ -489,72 +478,34 @@ describe('join-gate command', () => {
     vi.spyOn(TenantRepository.prototype, 'getTenantByGuildId').mockResolvedValue({
       tenantId: 'tenant-1',
     } as Awaited<ReturnType<TenantRepository['getTenantByGuildId']>>);
-    vi.spyOn(TenantRepository.prototype, 'getGuildConfig').mockResolvedValue({
-      id: 'cfg-1',
-      tenantId: 'tenant-1',
-      guildId: 'guild-1',
-      paidLogChannelId: null,
-      staffRoleIds: ['shared-staff'],
-      defaultCurrency: 'GBP',
-      couponsEnabled: true,
-      pointsEnabled: true,
-      referralsEnabled: true,
-      telegramEnabled: false,
-      tipEnabled: false,
-      pointsEarnCategoryKeys: [],
-      pointsRedeemCategoryKeys: [],
-      pointValueMinor: 1,
-      referralRewardMinor: 0,
-      referralRewardCategoryKeys: [],
-      referralLogChannelId: null,
-      referralThankYouTemplate:
-        'Thanks for your referral. You earned {points} point(s) ({amount_gbp} GBP) after {referred_email} paid.',
-      referralSubmissionTemplate:
-        'Referral submitted successfully. We will reward points automatically after the first paid order.',
-      ticketMetadataKey: 'isTicket',
-      joinGateEnabled: true,
-      joinGateStaffRoleIds: ['role-staff'],
-      joinGateFallbackChannelId: 'channel-fallback',
-      joinGateVerifiedRoleId: 'role-verified',
-      joinGateTicketCategoryId: 'channel-category',
-      joinGateCurrentLookupChannelId: 'channel-current',
-      joinGateNewLookupChannelId: 'channel-new',
-      joinGatePanelTitle: null,
-      joinGatePanelMessage: null,
-    } as Awaited<ReturnType<TenantRepository['getGuildConfig']>>);
-    const upsertSpy = vi.spyOn(TenantRepository.prototype, 'upsertGuildConfig').mockResolvedValue({
-      id: 'cfg-1',
-      tenantId: 'tenant-1',
-      guildId: 'guild-1',
-      paidLogChannelId: null,
-      staffRoleIds: ['shared-staff'],
-      defaultCurrency: 'GBP',
-      couponsEnabled: true,
-      pointsEnabled: true,
-      referralsEnabled: true,
-      telegramEnabled: false,
-      tipEnabled: false,
-      pointsEarnCategoryKeys: [],
-      pointsRedeemCategoryKeys: [],
-      pointValueMinor: 1,
-      referralRewardMinor: 0,
-      referralRewardCategoryKeys: [],
-      referralLogChannelId: null,
-      referralThankYouTemplate:
-        'Thanks for your referral. You earned {points} point(s) ({amount_gbp} GBP) after {referred_email} paid.',
-      referralSubmissionTemplate:
-        'Referral submitted successfully. We will reward points automatically after the first paid order.',
-      ticketMetadataKey: 'isTicket',
-      joinGateEnabled: true,
-      joinGateStaffRoleIds: ['role-staff'],
-      joinGateFallbackChannelId: 'channel-fallback',
-      joinGateVerifiedRoleId: 'role-verified',
-      joinGateTicketCategoryId: 'channel-category',
-      joinGateCurrentLookupChannelId: 'channel-current',
-      joinGateNewLookupChannelId: 'channel-new',
-      joinGatePanelTitle: 'Welcome to Voodoo',
-      joinGatePanelMessage: 'Please verify before chatting with the team.',
-    } as Awaited<ReturnType<TenantRepository['upsertGuildConfig']>>);
+    vi.spyOn(TenantRepository.prototype, 'getGuildConfig').mockResolvedValue(
+      createGuildConfigRecordMock({
+        staffRoleIds: ['shared-staff'],
+        joinGateEnabled: true,
+        joinGateStaffRoleIds: ['role-staff'],
+        joinGateFallbackChannelId: 'channel-fallback',
+        joinGateVerifiedRoleId: 'role-verified',
+        joinGateTicketCategoryId: 'channel-category',
+        joinGateCurrentLookupChannelId: 'channel-current',
+        joinGateNewLookupChannelId: 'channel-new',
+        joinGatePanelTitle: null,
+        joinGatePanelMessage: null,
+      }),
+    );
+    const upsertSpy = vi.spyOn(TenantRepository.prototype, 'upsertGuildConfig').mockResolvedValue(
+      createGuildConfigRecordMock({
+        staffRoleIds: ['shared-staff'],
+        joinGateEnabled: true,
+        joinGateStaffRoleIds: ['role-staff'],
+        joinGateFallbackChannelId: 'channel-fallback',
+        joinGateVerifiedRoleId: 'role-verified',
+        joinGateTicketCategoryId: 'channel-category',
+        joinGateCurrentLookupChannelId: 'channel-current',
+        joinGateNewLookupChannelId: 'channel-new',
+        joinGatePanelTitle: 'Welcome to Voodoo',
+        joinGatePanelMessage: 'Please verify before chatting with the team.',
+      }),
+    );
 
     const { interaction, editReply } = createInteractionMock({
       userId: 'owner-1',
@@ -589,72 +540,30 @@ describe('join-gate command', () => {
     vi.spyOn(TenantRepository.prototype, 'getTenantByGuildId').mockResolvedValue({
       tenantId: 'tenant-1',
     } as Awaited<ReturnType<TenantRepository['getTenantByGuildId']>>);
-    vi.spyOn(TenantRepository.prototype, 'getGuildConfig').mockResolvedValue({
-      id: 'cfg-1',
-      tenantId: 'tenant-1',
-      guildId: 'guild-1',
-      paidLogChannelId: null,
-      staffRoleIds: ['shared-staff'],
-      defaultCurrency: 'GBP',
-      couponsEnabled: true,
-      pointsEnabled: true,
-      referralsEnabled: true,
-      telegramEnabled: false,
-      tipEnabled: false,
-      pointsEarnCategoryKeys: [],
-      pointsRedeemCategoryKeys: [],
-      pointValueMinor: 1,
-      referralRewardMinor: 0,
-      referralRewardCategoryKeys: [],
-      referralLogChannelId: null,
-      referralThankYouTemplate:
-        'Thanks for your referral. You earned {points} point(s) ({amount_gbp} GBP) after {referred_email} paid.',
-      referralSubmissionTemplate:
-        'Referral submitted successfully. We will reward points automatically after the first paid order.',
-      ticketMetadataKey: 'isTicket',
-      joinGateEnabled: true,
-      joinGateStaffRoleIds: ['role-staff-old'],
-      joinGateFallbackChannelId: 'channel-fallback',
-      joinGateVerifiedRoleId: 'role-verified',
-      joinGateTicketCategoryId: 'channel-category',
-      joinGateCurrentLookupChannelId: 'channel-current',
-      joinGateNewLookupChannelId: 'channel-new',
-      joinGatePanelTitle: null,
-      joinGatePanelMessage: null,
-    } as Awaited<ReturnType<TenantRepository['getGuildConfig']>>);
-    const upsertSpy = vi.spyOn(TenantRepository.prototype, 'upsertGuildConfig').mockResolvedValue({
-      id: 'cfg-1',
-      tenantId: 'tenant-1',
-      guildId: 'guild-1',
-      paidLogChannelId: null,
-      staffRoleIds: ['shared-staff'],
-      defaultCurrency: 'GBP',
-      couponsEnabled: true,
-      pointsEnabled: true,
-      referralsEnabled: true,
-      telegramEnabled: false,
-      tipEnabled: false,
-      pointsEarnCategoryKeys: [],
-      pointsRedeemCategoryKeys: [],
-      pointValueMinor: 1,
-      referralRewardMinor: 0,
-      referralRewardCategoryKeys: [],
-      referralLogChannelId: null,
-      referralThankYouTemplate:
-        'Thanks for your referral. You earned {points} point(s) ({amount_gbp} GBP) after {referred_email} paid.',
-      referralSubmissionTemplate:
-        'Referral submitted successfully. We will reward points automatically after the first paid order.',
-      ticketMetadataKey: 'isTicket',
-      joinGateEnabled: true,
-      joinGateStaffRoleIds: ['role-staff-old', 'role-staff-new'],
-      joinGateFallbackChannelId: 'channel-fallback',
-      joinGateVerifiedRoleId: 'role-verified',
-      joinGateTicketCategoryId: 'channel-category',
-      joinGateCurrentLookupChannelId: 'channel-current',
-      joinGateNewLookupChannelId: 'channel-new',
-      joinGatePanelTitle: null,
-      joinGatePanelMessage: null,
-    } as Awaited<ReturnType<TenantRepository['upsertGuildConfig']>>);
+    vi.spyOn(TenantRepository.prototype, 'getGuildConfig').mockResolvedValue(
+      createGuildConfigRecordMock({
+        staffRoleIds: ['shared-staff'],
+        joinGateEnabled: true,
+        joinGateStaffRoleIds: ['role-staff-old'],
+        joinGateFallbackChannelId: 'channel-fallback',
+        joinGateVerifiedRoleId: 'role-verified',
+        joinGateTicketCategoryId: 'channel-category',
+        joinGateCurrentLookupChannelId: 'channel-current',
+        joinGateNewLookupChannelId: 'channel-new',
+      }),
+    );
+    const upsertSpy = vi.spyOn(TenantRepository.prototype, 'upsertGuildConfig').mockResolvedValue(
+      createGuildConfigRecordMock({
+        staffRoleIds: ['shared-staff'],
+        joinGateEnabled: true,
+        joinGateStaffRoleIds: ['role-staff-old', 'role-staff-new'],
+        joinGateFallbackChannelId: 'channel-fallback',
+        joinGateVerifiedRoleId: 'role-verified',
+        joinGateTicketCategoryId: 'channel-category',
+        joinGateCurrentLookupChannelId: 'channel-current',
+        joinGateNewLookupChannelId: 'channel-new',
+      }),
+    );
 
     const { interaction, editReply } = createInteractionMock({
       userId: 'owner-1',
