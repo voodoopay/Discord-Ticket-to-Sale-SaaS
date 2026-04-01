@@ -156,7 +156,6 @@ function buildSetupMessage(input: {
     `Channels updated: ${input.setup.updatedChannelCount}`,
     `Channels published today: ${input.publish.publishedChannelCount}`,
     `Events posted today: ${input.publish.listingCount}`,
-    `Empty sport channels today: ${input.publish.emptyChannelCount}`,
     `Next scheduled run (UTC): ${input.setup.config.nextRunAtUtc}`,
   ];
 
@@ -302,7 +301,6 @@ export const sportsCommand = {
             'Sports listings were refreshed for today.',
             `Channels published: ${publishResult.publishedChannelCount}`,
             `Events posted: ${publishResult.listingCount}`,
-            `Empty sport channels: ${publishResult.emptyChannelCount}`,
             `New channels created during refresh: ${publishResult.createdChannelCount}`,
           ].join('\n'),
         );

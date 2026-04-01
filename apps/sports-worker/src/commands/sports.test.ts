@@ -36,7 +36,6 @@ vi.mock('../sports-runtime.js', () => ({
   publishSportsForGuild: vi.fn(async () => ({
     publishedChannelCount: 2,
     listingCount: 4,
-    emptyChannelCount: 1,
     createdChannelCount: 0,
   })),
   syncSportsGuildChannels: vi.fn(async () => ({
@@ -200,6 +199,9 @@ describe('sports command', () => {
     });
     expect(editReply).toHaveBeenCalledWith({
       content: expect.stringContaining('Channels published today: 2'),
+    });
+    expect(editReply).toHaveBeenCalledWith({
+      content: expect.not.stringContaining('Empty sport channels today'),
     });
   });
 });

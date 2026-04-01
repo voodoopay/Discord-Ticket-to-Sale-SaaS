@@ -1,5 +1,10 @@
 import { EmbedBuilder } from 'discord.js';
-import type { SportsEventDetails, SportsListing, SportsSearchResult } from '@voodoo/core';
+import type {
+  SportsEventDetails,
+  SportsListing,
+  SportsLiveEvent,
+  SportsSearchResult,
+} from '@voodoo/core';
 
 const SPORTS_COLOR = 0x0f766e;
 
@@ -24,7 +29,7 @@ export function buildSportHeaderMessage(input: {
 }): string {
   return [
     `**${input.sportName}**`,
-    `UK TV listings for ${input.dateLabel}.`,
+    `${input.broadcastCountry} TV listings for ${input.dateLabel}.`,
     `Tracked broadcaster country: ${input.broadcastCountry}.`,
     `Events today: ${input.listingsCount}.`,
   ].join('\n');
@@ -64,6 +69,59 @@ export function buildSportEventEmbed(listing: SportsListing): EmbedBuilder {
   }
 
   return embed;
+}
+
+export function buildLiveEventHeaderMessage(event: SportsLiveEvent): string {
+  return [
+    `**${event.eventName}**`,
+    `${event.sportName ?? 'Live sport'} is currently televised live.`,
+    event.statusLabel ? `Status: ${event.statusLabel}` : null,
+    event.scoreLabel ? `Live score: ${event.scoreLabel}` : null,
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+export function buildLiveEventEmbed(event: SportsLiveEvent): EmbedBuilder {
+  const embed = new EmbedBuilder()
+    .setColor(SPORTS_COLOR)
+    .setTitle(event.eventName)
+    .setDescription(
+      [
+        event.leagueName ? `League: **${event.leagueName}**` : null,
+        event.sportName ? `Sport: **${event.sportName}**` : null,
+        event.statusLabel ? `Status: **${event.statusLabel}**` : null,
+        event.scoreLabel ? `Score: **${event.scoreLabel}**` : null,
+        event.startTimeUkLabel ? `Kickoff (UK): **${event.startTimeUkLabel}**` : null,
+        `Channels: ${formatBroadcasters(event.broadcasters)}`,
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    )
+    .setFooter({ text: 'Temporary live-event channel managed by the sports worker.' });
+
+  if (event.imageUrl) {
+    embed.setThumbnail(event.imageUrl);
+  }
+
+  return embed;
+}
+
+export function buildFinishedLiveEventEmbed(input: {
+  eventName: string;
+  sportName: string;
+  deleteAfterUtc: string;
+}): EmbedBuilder {
+  return new EmbedBuilder()
+    .setColor(SPORTS_COLOR)
+    .setTitle(`${input.eventName} finished`)
+    .setDescription(
+      [
+        `Sport: **${input.sportName}**`,
+        'This temporary live-event channel is waiting for the cleanup window to expire.',
+        `Scheduled cleanup after (UTC): **${input.deleteAfterUtc}**`,
+      ].join('\n'),
+    );
 }
 
 export function buildSearchResultEmbed(details: SportsEventDetails): EmbedBuilder {

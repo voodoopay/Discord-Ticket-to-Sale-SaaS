@@ -12,6 +12,7 @@ import { getEnv, logger } from '@voodoo/core';
 import { activationCommand } from './commands/activation.js';
 import { searchCommand } from './commands/search.js';
 import { sportsCommand } from './commands/sports.js';
+import { startLiveEventScheduler } from './live-event-runtime.js';
 import { mapSportsError, startSportsScheduler } from './sports-runtime.js';
 
 type Command = {
@@ -42,7 +43,9 @@ commands.set(sportsCommand.data.name, sportsCommand as unknown as Command);
 client.once(Events.ClientReady, () => {
   logger.info({ botUser: client.user?.tag }, 'sports-worker ready');
   startSportsScheduler(client, env.SPORTS_POLL_INTERVAL_MS);
+  startLiveEventScheduler(client, env.SPORTS_POLL_INTERVAL_MS);
   logger.info({ pollIntervalMs: env.SPORTS_POLL_INTERVAL_MS }, 'sports scheduler loop started');
+  logger.info({ pollIntervalMs: env.SPORTS_POLL_INTERVAL_MS }, 'live event scheduler loop started');
 });
 
 async function sendInteractionFailure(interaction: Interaction, message: string): Promise<void> {

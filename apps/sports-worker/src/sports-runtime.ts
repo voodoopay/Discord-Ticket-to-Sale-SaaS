@@ -9,11 +9,11 @@ import {
   type SportDefinition,
   type SportsChannelBindingSummary,
   type SportsGuildConfigSummary,
+  type SportsListing,
 } from '@voodoo/core';
 import { ChannelType, type CategoryChannel, type Client, type Guild, type TextChannel } from 'discord.js';
 
 import {
-  buildEmptySportEmbed,
   buildSportEventEmbed,
   buildSportHeaderMessage,
 } from './ui/sports-embeds.js';
@@ -211,6 +211,45 @@ async function getRequiredGuildContext(guildId: string): Promise<{
   };
 }
 
+async function getTodayListingsBySport(config: SportsGuildConfigSummary): Promise<{
+  localDate: string;
+  dateLabel: string;
+  listingsBySport: Map<string, SportsListing[]>;
+}> {
+  const localDate = resolveSportsLocalDate({
+    timezone: config.timezone,
+    at: new Date(),
+  });
+  const dateLabel = new Intl.DateTimeFormat('en-GB', {
+    timeZone: config.timezone,
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date(`${localDate}T12:00:00Z`));
+
+  const listingsResult = await sportsDataService.listDailyListingsForLocalDate({
+    localDate,
+    timezone: config.timezone,
+    broadcastCountry: config.broadcastCountry,
+  });
+  if (listingsResult.isErr()) {
+    throw listingsResult.error;
+  }
+
+  const listingsBySport = new Map(
+    listingsResult.value
+      .filter((entry) => entry.listings.length > 0)
+      .map((entry) => [entry.sportName, entry.listings]),
+  );
+
+  return {
+    localDate,
+    dateLabel,
+    listingsBySport,
+  };
+}
+
 export async function syncSportsGuildChannels(input: {
   guild: Guild;
   actorDiscordUserId: string;
@@ -244,19 +283,13 @@ export async function syncSportsGuildChannels(input: {
     throw configResult.error;
   }
 
-  const sportsResult = await sportsDataService.listSupportedSports();
-  if (sportsResult.isErr()) {
-    throw sportsResult.error;
-  }
-
   const bindingsResult = await sportsService.listChannelBindings({ guildId: input.guild.id });
   if (bindingsResult.isErr()) {
     throw bindingsResult.error;
   }
 
-  const bindingsBySport = new Map(
-    bindingsResult.value.map((binding) => [binding.sportName, binding]),
-  );
+  const { listingsBySport } = await getTodayListingsBySport(configResult.value);
+  const bindingsBySport = new Map(bindingsResult.value.map((binding) => [binding.sportName, binding]));
   const fetchedChannels = await input.guild.channels.fetch();
   const usedNames = new Set(
     [...fetchedChannels.values()]
@@ -267,21 +300,25 @@ export async function syncSportsGuildChannels(input: {
   let createdChannelCount = 0;
   let updatedChannelCount = 0;
 
-  for (const sport of sportsResult.value) {
-    const binding = bindingsBySport.get(sport.sportName) ?? null;
+  for (const [sportName] of listingsBySport) {
+    const binding = bindingsBySport.get(sportName) ?? null;
     const ensured = await ensureManagedTextChannel({
       guild: input.guild,
       category,
       binding,
-      sport,
+      sport: {
+        sportId: binding?.sportId ?? null,
+        sportName,
+        channelSlug: binding?.sportSlug ?? normalizeChannelName(sportName),
+      },
       config: configResult.value,
       usedNames,
     });
 
     const bindingResult = await sportsService.upsertChannelBinding({
       guildId: input.guild.id,
-      sportId: sport.sportId,
-      sportName: sport.sportName,
+      sportId: binding?.sportId ?? null,
+      sportName,
       sportSlug: ensured.channel.name,
       channelId: ensured.channel.id,
     });
@@ -296,14 +333,9 @@ export async function syncSportsGuildChannels(input: {
     }
   }
 
-  const nextBindings = await sportsService.listChannelBindings({ guildId: input.guild.id });
-  if (nextBindings.isErr()) {
-    throw nextBindings.error;
-  }
-
   return {
     config: configResult.value,
-    channelCount: nextBindings.value.length,
+    channelCount: listingsBySport.size,
     createdChannelCount,
     updatedChannelCount,
   };
@@ -315,34 +347,10 @@ export async function publishSportsForGuild(input: {
 }): Promise<{
   publishedChannelCount: number;
   listingCount: number;
-  emptyChannelCount: number;
   createdChannelCount: number;
 }> {
   const { config, bindings } = await getRequiredGuildContext(input.guild.id);
-  const localDate = resolveSportsLocalDate({
-    timezone: config.timezone,
-    at: new Date(),
-  });
-  const dateLabel = new Intl.DateTimeFormat('en-GB', {
-    timeZone: config.timezone,
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  }).format(new Date(`${localDate}T12:00:00Z`));
-
-  const listingsResult = await sportsDataService.listDailyListingsForLocalDate({
-    localDate,
-    timezone: config.timezone,
-    broadcastCountry: config.broadcastCountry,
-  });
-  if (listingsResult.isErr()) {
-    throw listingsResult.error;
-  }
-
-  const listingsBySport = new Map(
-    listingsResult.value.map((entry) => [entry.sportName, entry.listings]),
-  );
+  const { dateLabel, listingsBySport } = await getTodayListingsBySport(config);
   const category =
     config.managedCategoryChannelId &&
     (await input.guild.channels.fetch(config.managedCategoryChannelId).catch(() => null));
@@ -391,15 +399,18 @@ export async function publishSportsForGuild(input: {
 
   let publishedChannelCount = 0;
   let listingCount = 0;
-  let emptyChannelCount = 0;
 
-  for (const binding of bindingMap.values()) {
+  for (const [sportName, listings] of listingsBySport) {
+    const binding = bindingMap.get(sportName);
+    if (!binding) {
+      continue;
+    }
+
     const channel = await input.guild.channels.fetch(binding.channelId).catch(() => null);
     if (!isManagedTextChannel(channel)) {
       continue;
     }
 
-    const listings = listingsBySport.get(binding.sportName) ?? [];
     await clearManagedChannel(channel);
     await channel.send({
       content: buildSportHeaderMessage({
@@ -409,21 +420,6 @@ export async function publishSportsForGuild(input: {
         listingsCount: listings.length,
       }),
     });
-
-    if (listings.length === 0) {
-      await channel.send({
-        embeds: [
-          buildEmptySportEmbed({
-            sportName: binding.sportName,
-            dateLabel,
-            broadcastCountry: config.broadcastCountry,
-          }),
-        ],
-      });
-      emptyChannelCount += 1;
-      publishedChannelCount += 1;
-      continue;
-    }
 
     const embeds = listings.map((listing) => buildSportEventEmbed(listing));
     for (const embedChunk of chunkArray(embeds, 10)) {
@@ -437,7 +433,6 @@ export async function publishSportsForGuild(input: {
   return {
     publishedChannelCount,
     listingCount,
-    emptyChannelCount,
     createdChannelCount,
   };
 }
