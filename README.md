@@ -17,7 +17,7 @@ Multi-tenant Discord + Telegram bot stack with a web dashboard for ticket-based 
 - `apps/telegram-worker`: Telegram group worker with `/connect`, `/sale`, `/points`, `/refer`, and paid-order fulfillment callbacks.
 - `apps/join-gate-worker`: separate-token Discord worker for new-member verification, email matching, and private verification ticket creation.
 - `apps/nuke-worker`: separate-token Discord worker for `/nuke` scheduling and channel nukes.
-- `apps/sports-worker`: separate-token Discord worker for daily UK sports TV listings, managed sport channels, and `/search`.
+- `apps/sports-worker`: separate-token Discord worker for daily UK sports TV listings, managed sport + live event channels, `/sports live-status`, and public sports lookup commands.
 - `packages/core`: shared domain/config/security/services/repositories.
 - `drizzle/migrations`: SQL migrations.
 
@@ -99,19 +99,30 @@ Copy `.env.example` to `.env` and fill values.
 ## Sports Listings Worker
 
 - Runs from separate worker/token (`apps/sports-worker`).
-- Creates and manages one text channel per sport under a managed category, then republishes that day’s UK TV listings on the daily schedule.
+- Creates and manages persistent sport channels under a managed category, but only posts daily listings for sports that actually have televised events that day.
 - Default schedule is `00:01` in `Europe/London`, and the worker clears the previous day’s managed posts before sending the new listings.
+- Televised live events now get temporary event channels with live status updates, optional highlight auto-posting, and automatic deletion 3 hours after the event finishes.
+- Highlights can post automatically inside managed live event channels when available, and the same highlight data can also be requested on demand.
 - Uses TheSportsDB for sport, event, broadcaster, and image data. A paid API key is required for full daily coverage because the public `123` key is heavily truncated.
 - `/sports setup` creates or refreshes the managed sports category and publishes the current day’s listings immediately.
 - `/sports sync` creates missing sport channels and refreshes the saved channel bindings without republishing.
 - `/sports refresh` clears the managed sport channels and republishes today’s listings on demand.
 - `/sports status` shows activation state, managed category, channel count, and the next scheduled run.
+- `/sports live-status` shows tracked live events, pending cleanup counts, and current live-sync health.
 - `/search query:"Rangers v Celtic"` or `/search query:"New York Rangers"` returns upcoming televised matches from today through the next 7 days, including UK kickoff time, channels, and artwork.
+- `/live [sport] [league]` returns current live televised events, with optional sport/league filters.
+- `/highlights query:"Rangers v Celtic"` returns on-demand highlights for a finished or matching event when a video is available.
+- `/match query:"Rangers v Celtic"` returns a richer match-centre view for a team or event, including highlights when available.
+- `/standings league:"Scottish Premiership"` returns current league standings.
+- `/fixtures query:"Rangers"` returns upcoming fixtures for a team or league.
+- `/results query:"Rangers"` returns recent results for a team or league.
+- `/team query:"Rangers"` returns a team profile summary.
+- `/player query:"James Tavernier"` returns a player profile summary.
 - `/activation grant guild_id:<server-id> user_id:<user-id>` activates the sports worker for another server without needing to run the command inside that server. Only `SUPER_ADMIN_DISCORD_IDS` can use it.
 - `/activation revoke guild_id:<server-id> user_id:<user-id>` remotely removes a sports worker activation entry. Only `SUPER_ADMIN_DISCORD_IDS` can use it.
 - `/activation list guild_id:<server-id>` lists the current sports worker activation entries for a server. Only `SUPER_ADMIN_DISCORD_IDS` can use it.
 - `/sports` is default-deny for every server until a super admin grants at least one Discord user for that server.
-- `/search` stays locked for regular members until the sports worker is activated for that server.
+- Public lookup commands (`/search`, `/live`, `/highlights`, `/match`, `/standings`, `/fixtures`, `/results`, `/team`, `/player`) stay locked for regular members until the sports worker is activated for that server.
 
 ## OAuth + Dashboard
 

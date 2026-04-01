@@ -27,8 +27,8 @@
 - Uses only guild-scoped nuke activation/schedule state and does not depend on workspace/panel tenant mapping.
 
 5. `sports-worker`
-- Runs as a separate Discord application/token for daily sports listings and `/search`.
-- Creates and maintains one managed text channel per sport, republishes the UK TV schedule daily, and resolves event lookups from TheSportsDB.
+- Runs as a separate Discord application/token for daily sports listings, live event channels, `/sports live-status`, and public sports lookup commands.
+- Maintains managed sport channels for sports with events that day, republishes the UK TV schedule daily, creates temporary live event channels, auto-posts highlights when available, and resolves event/team/player lookups from TheSportsDB.
 
 6. `telegram-worker`
 - Handles Telegram workspace linking, sales handoff, points, referrals, and paid-order callbacks.
@@ -47,6 +47,7 @@
 - Sports worker state is persisted in:
   - `sports_guild_configs` for per-server schedule, timezone, broadcaster country, and managed category
   - `sports_channel_bindings` for the one-channel-per-sport mapping inside each server
+  - `sports_live_event_channels` for temporary event-channel lifecycle state, cleanup timing, and highlight delivery tracking
   - `sports_authorized_users` for server-specific activation and `/sports` management access
 
 ## Security and Reliability

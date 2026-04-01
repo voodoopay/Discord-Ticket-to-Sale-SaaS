@@ -9,7 +9,7 @@ It is step-by-step and beginner-friendly, and includes:
 - PM2 process management
 - Nginx + SSL
 - Discord + WooCommerce integration basics
-- separate Discord workers for sales, join-gate verification, nuke, and sports listings
+- separate Discord workers for sales, join-gate verification, nuke, and sports listings/live events
 
 ---
 
@@ -197,7 +197,7 @@ SPORTS_API_KEY=YOUR_THESPORTSDB_PAID_API_KEY
 SPORTS_API_V1_BASE_URL=https://www.thesportsdb.com/api/v1/json
 SPORTS_API_BASE_URL=https://www.thesportsdb.com/api/v2/json
 SPORTS_DEFAULT_TIMEZONE=Europe/London
-SPORTS_DEFAULT_PUBLISH_TIME=01:00
+SPORTS_DEFAULT_PUBLISH_TIME=00:01
 SPORTS_BROADCAST_COUNTRY=United Kingdom
 TELEGRAM_BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN
 TELEGRAM_BOT_USERNAME=YOUR_TELEGRAM_BOT_USERNAME
@@ -248,6 +248,7 @@ pnpm deploy:commands
 
 Telegram does not require slash-command deployment. After the dashboard is online, generate a Telegram link command from `Workspace & Server`, add the Telegram bot to the target group, and run `/connect <token>` as a Telegram group admin. `TELEGRAM_BOT_USERNAME` is also required because `/sale` now hands customers off from the group into a private DM with the bot.
 `pnpm deploy:commands` now deploys the sales bot, join-gate bot, nuke bot, and sports bot command sets together.
+The sports deployment now includes `/sports`, `/sports live-status`, `/search`, `/live`, `/highlights`, `/match`, `/standings`, `/fixtures`, `/results`, `/team`, `/player`, and `/activation`.
 
 ---
 
@@ -448,7 +449,10 @@ Make sure the sports bot app is also invited and has the permissions required by
 - `Manage Messages`
 - `Read Message History`
 
+The sports worker uses those permissions to manage persistent sport channels, create temporary live event channels, publish highlights, and clean up finished event channels 3 hours after the event ends.
 The sports worker also needs a paid `SPORTS_API_KEY` from TheSportsDB for full daily coverage. The public test key is not enough for a production sports schedule bot.
+By default, the sports worker publishes at `00:01` in `Europe/London`, and persistent sport channels only receive posts on days where that sport actually has televised events.
+Highlights can be auto-posted into temporary live event channels when available, and users can also request them on demand with `/highlights`.
 
 After updates:
 
