@@ -11,3 +11,4 @@ AGENTS.md
 *.sh
 *.log
 *.tsbuildinfo
+.worktrees
