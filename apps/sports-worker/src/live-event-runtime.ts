@@ -19,6 +19,7 @@ import {
 } from '@voodoo/core';
 
 import {
+  buildHighlightEmbed,
   buildFinishedLiveEventEmbed,
   buildLiveEventEmbed,
   buildLiveEventHeaderMessage,
@@ -262,6 +263,73 @@ async function renderFinishedLiveEventChannel(input: {
   });
 }
 
+async function postLiveEventHighlightsIfAvailable(input: {
+  guildId: string;
+  trackedEvent: {
+    eventId: string;
+    eventName: string;
+    sportName: string;
+    highlightsPosted: boolean;
+  };
+  channel: TextChannel;
+  now: Date;
+}): Promise<boolean> {
+  if (input.trackedEvent.highlightsPosted) {
+    return false;
+  }
+
+  const highlightResult = await sportsDataService.getEventHighlights({
+    eventId: input.trackedEvent.eventId,
+  });
+  if (highlightResult.isErr()) {
+    logger.warn(
+      {
+        guildId: input.guildId,
+        eventId: input.trackedEvent.eventId,
+        err: highlightResult.error,
+      },
+      'live event runtime could not load event highlights',
+    );
+    return false;
+  }
+  const highlight = highlightResult.value;
+  if (!highlight) {
+    return false;
+  }
+
+  await LIVE_EVENT_QUEUE.add(async () => {
+    await input.channel.send({
+      content: `Highlights are now available for **${input.trackedEvent.eventName}**.`,
+      embeds: [
+        buildHighlightEmbed({
+          eventName: input.trackedEvent.eventName,
+          sportName: input.trackedEvent.sportName,
+          highlight,
+        }),
+      ],
+    });
+  });
+
+  const markHighlightsPostedResult = await sportsLiveEventService.markHighlightsPosted({
+    guildId: input.guildId,
+    eventId: input.trackedEvent.eventId,
+    postedAtUtc: input.now,
+  });
+  if (markHighlightsPostedResult.isErr()) {
+    logger.warn(
+      {
+        guildId: input.guildId,
+        eventId: input.trackedEvent.eventId,
+        err: markHighlightsPostedResult.error,
+      },
+      'live event runtime could not persist highlight delivery',
+    );
+    return false;
+  }
+
+  return true;
+}
+
 async function fetchTrackedEventChannel(
   guild: Guild,
   eventChannelId: string | null,
@@ -272,6 +340,123 @@ async function fetchTrackedEventChannel(
 
   const channel = await guild.channels.fetch(eventChannelId).catch(() => null);
   return isManagedTextChannel(channel) ? channel : null;
+}
+
+async function cleanupTrackedEventIfDue(input: {
+  guild: Guild;
+  trackedEvent: SportsLiveEventChannelSummaryLike;
+  now: Date;
+}): Promise<boolean> {
+  if (!input.trackedEvent.deleteAfterUtc) {
+    return false;
+  }
+
+  const cleanupAt = input.trackedEvent.deleteAfterUtc;
+  if (Number.isNaN(cleanupAt.getTime()) || cleanupAt > input.now) {
+    return false;
+  }
+
+  const channel = await fetchTrackedEventChannel(input.guild, input.trackedEvent.eventChannelId);
+  if (channel) {
+    await LIVE_EVENT_QUEUE.add(() =>
+      channel.delete(`Delete the finished live event channel for ${input.trackedEvent.eventName}.`),
+    );
+  }
+
+  const markDeletedResult = await sportsLiveEventService.markDeleted({
+    guildId: input.guild.id,
+    eventId: input.trackedEvent.eventId,
+    deletedAtUtc: input.now,
+  });
+  if (markDeletedResult.isErr()) {
+    throw markDeletedResult.error;
+  }
+
+  return true;
+}
+
+type SportsLiveEventChannelSummaryLike = {
+  eventId: string;
+  eventName: string;
+  sportName: string;
+  eventChannelId: string | null;
+  status: 'scheduled' | 'live' | 'finished' | 'cleanup_due' | 'deleted' | 'failed';
+  deleteAfterUtc: Date | null;
+  highlightsPosted: boolean;
+};
+
+export async function resumeTrackedLiveEventsForGuild(input: {
+  guild: Guild;
+  now?: Date;
+}): Promise<{
+  deletedChannelCount: number;
+  failedEventCount: number;
+  highlightsPostedCount: number;
+}> {
+  const now = input.now ?? new Date();
+  const recoverableEventsResult = await sportsLiveEventService.listRecoverableEvents({
+    guildId: input.guild.id,
+  });
+  if (recoverableEventsResult.isErr()) {
+    throw recoverableEventsResult.error;
+  }
+
+  let deletedChannelCount = 0;
+  let failedEventCount = 0;
+  let highlightsPostedCount = 0;
+
+  for (const trackedEvent of recoverableEventsResult.value) {
+    const channel = await fetchTrackedEventChannel(input.guild, trackedEvent.eventChannelId);
+    if (!channel) {
+      const markFailedResult = await sportsLiveEventService.markFailed({
+        guildId: input.guild.id,
+        eventId: trackedEvent.eventId,
+        failedAtUtc: now,
+      });
+      if (markFailedResult.isErr()) {
+        logger.warn(
+          { guildId: input.guild.id, eventId: trackedEvent.eventId, err: markFailedResult.error },
+          'live event runtime could not mark the tracked event as failed during recovery',
+        );
+      } else {
+        failedEventCount += 1;
+      }
+
+      logger.warn(
+        { guildId: input.guild.id, eventId: trackedEvent.eventId, eventChannelId: trackedEvent.eventChannelId },
+        'live event runtime could not recover the tracked event channel because it is missing',
+      );
+      continue;
+    }
+
+    if (trackedEvent.status === 'cleanup_due') {
+      const deleted = await cleanupTrackedEventIfDue({
+        guild: input.guild,
+        trackedEvent,
+        now,
+      });
+      if (deleted) {
+        deletedChannelCount += 1;
+        continue;
+      }
+
+      const postedHighlights = await postLiveEventHighlightsIfAvailable({
+        guildId: input.guild.id,
+        trackedEvent,
+        channel,
+        now,
+      });
+      if (postedHighlights) {
+        highlightsPostedCount += 1;
+      }
+    }
+  }
+
+  return {
+    deletedChannelCount,
+    failedEventCount,
+    highlightsPostedCount,
+  };
 }
 
 export async function reconcileLiveEventsForGuild(input: {
@@ -350,6 +535,9 @@ export async function reconcileLiveEventsForGuild(input: {
 
     const parentId = sportChannel.parentId ?? category.id;
     const trackedEvent = trackedEventsByEventId.get(event.eventId) ?? null;
+    if (trackedEvent?.status === 'failed') {
+      continue;
+    }
     const existingChannel = await fetchTrackedEventChannel(input.guild, trackedEvent?.eventChannelId ?? null);
     const desiredName = buildLiveEventChannelName(event.eventName);
     const desiredExistingName = existingChannel
@@ -454,7 +642,8 @@ export async function reconcileLiveEventsForGuild(input: {
     if (
       liveEventIds.has(trackedEvent.eventId) ||
       trackedEvent.status === 'cleanup_due' ||
-      trackedEvent.status === 'deleted'
+      trackedEvent.status === 'deleted' ||
+      trackedEvent.status === 'failed'
     ) {
       continue;
     }
@@ -483,8 +672,32 @@ export async function reconcileLiveEventsForGuild(input: {
         sportName: trackedEvent.sportName,
         deleteAfterUtc,
       });
+      await postLiveEventHighlightsIfAvailable({
+        guildId: input.guild.id,
+        trackedEvent: finishedResult.value,
+        channel: eventChannel,
+        now,
+      });
     }
     markedFinishedCount += 1;
+  }
+
+  for (const trackedEvent of trackedEventsResult.value) {
+    if (trackedEvent.status !== 'cleanup_due' || trackedEvent.highlightsPosted) {
+      continue;
+    }
+
+    const eventChannel = await fetchTrackedEventChannel(input.guild, trackedEvent.eventChannelId);
+    if (!eventChannel) {
+      continue;
+    }
+
+    await postLiveEventHighlightsIfAvailable({
+      guildId: input.guild.id,
+      trackedEvent,
+      channel: eventChannel,
+      now,
+    });
   }
 
   return {
@@ -562,6 +775,7 @@ async function runLiveEventScheduler(client: Client): Promise<void> {
       }
 
       const guild = await client.guilds.fetch(guildPreview.id);
+      await resumeTrackedLiveEventsForGuild({ guild });
       await reconcileLiveEventsForGuild({
         guild,
         timezone: configResult.value.timezone,

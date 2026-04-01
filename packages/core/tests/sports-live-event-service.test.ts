@@ -280,4 +280,106 @@ describe('SportsLiveEventService', () => {
     expect(result.value.deleteAfterUtc?.toISOString()).toBe('2026-03-20T18:00:00.000Z');
     expect(result.value.status).toBe('cleanup_due');
   });
+
+  it('lists recoverable tracked events from live and cleanup states', async () => {
+    const repository = new SportsLiveEventRepository();
+    const listTrackedEventsSpy = vi.spyOn(repository, 'listTrackedEvents').mockResolvedValue([
+      makeRow({
+        id: '01J0SPORTSLIVE000000000010',
+        eventId: 'evt-live',
+        status: 'live',
+      }),
+      makeRow({
+        id: '01J0SPORTSLIVE000000000011',
+        eventId: 'evt-cleanup',
+        status: 'cleanup_due',
+        deleteAfterUtc: new Date('2026-03-20T18:00:00.000Z'),
+      }),
+    ]);
+
+    const service = new SportsLiveEventService(repository);
+
+    const result = await service.listRecoverableEvents({
+      guildId: 'guild-1',
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) {
+      return;
+    }
+
+    expect(listTrackedEventsSpy).toHaveBeenCalledWith({
+      guildId: 'guild-1',
+      statuses: ['live', 'finished', 'cleanup_due'],
+    });
+    expect(result.value.map((row) => row.eventId)).toEqual(['evt-live', 'evt-cleanup']);
+  });
+
+  it('marks highlights as posted once for a tracked event', async () => {
+    const repository = new SportsLiveEventRepository();
+    const markHighlightsPostedSpy = vi.spyOn(repository, 'markHighlightsPosted').mockResolvedValue(
+      makeRow({
+        id: '01J0SPORTSLIVE000000000012',
+        eventId: 'evt-1',
+        status: 'cleanup_due',
+        highlightsPosted: true,
+        lastSyncedAtUtc: new Date('2026-03-20T16:00:00.000Z'),
+        deleteAfterUtc: new Date('2026-03-20T18:00:00.000Z'),
+        updatedAt: new Date('2026-03-20T16:00:00.000Z'),
+      }),
+    );
+
+    const service = new SportsLiveEventService(repository);
+
+    const result = await service.markHighlightsPosted({
+      guildId: 'guild-1',
+      eventId: 'evt-1',
+      postedAtUtc: new Date('2026-03-20T16:00:00.000Z'),
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) {
+      return;
+    }
+
+    expect(markHighlightsPostedSpy).toHaveBeenCalledWith({
+      guildId: 'guild-1',
+      eventId: 'evt-1',
+      postedAtUtc: new Date('2026-03-20T16:00:00.000Z'),
+    });
+    expect(result.value.highlightsPosted).toBe(true);
+  });
+
+  it('marks a recoverable tracked event as failed when recovery cannot continue', async () => {
+    const repository = new SportsLiveEventRepository();
+    const markFailedSpy = vi.spyOn(repository, 'markFailed').mockResolvedValue(
+      makeRow({
+        id: '01J0SPORTSLIVE000000000013',
+        eventId: 'evt-1',
+        status: 'failed',
+        lastSyncedAtUtc: new Date('2026-03-20T16:05:00.000Z'),
+        updatedAt: new Date('2026-03-20T16:05:00.000Z'),
+      }),
+    );
+
+    const service = new SportsLiveEventService(repository);
+
+    const result = await service.markFailed({
+      guildId: 'guild-1',
+      eventId: 'evt-1',
+      failedAtUtc: new Date('2026-03-20T16:05:00.000Z'),
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) {
+      return;
+    }
+
+    expect(markFailedSpy).toHaveBeenCalledWith({
+      guildId: 'guild-1',
+      eventId: 'evt-1',
+      failedAtUtc: new Date('2026-03-20T16:05:00.000Z'),
+    });
+    expect(result.value.status).toBe('failed');
+  });
 });

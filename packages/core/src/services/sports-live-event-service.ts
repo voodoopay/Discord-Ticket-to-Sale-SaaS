@@ -105,6 +105,15 @@ export class SportsLiveEventService {
     }
   }
 
+  public async listRecoverableEvents(input: {
+    guildId: string;
+  }): Promise<Result<SportsLiveEventChannelSummary[], AppError>> {
+    return this.listTrackedEvents({
+      guildId: input.guildId,
+      statuses: ['live', 'finished', 'cleanup_due'],
+    });
+  }
+
   public async getTrackedEvent(input: {
     guildId: string;
     eventId: string;
@@ -167,6 +176,62 @@ export class SportsLiveEventService {
   }): Promise<Result<SportsLiveEventChannelSummary, AppError>> {
     try {
       const record = await this.repository.markDeleted(input);
+
+      if (!record) {
+        return err(
+          new AppError('SPORTS_LIVE_EVENT_NOT_FOUND', 'Tracked live event not found.', 404),
+        );
+      }
+
+      return ok(mapSportsLiveEventChannelSummary(record));
+    } catch (error) {
+      return err(
+        error instanceof AppError
+          ? error
+          : new AppError(
+              'SPORTS_LIVE_EVENT_WRITE_FAILED',
+              'Sports live event update failed due to an internal error.',
+              500,
+            ),
+      );
+    }
+  }
+
+  public async markHighlightsPosted(input: {
+    guildId: string;
+    eventId: string;
+    postedAtUtc: Date;
+  }): Promise<Result<SportsLiveEventChannelSummary, AppError>> {
+    try {
+      const record = await this.repository.markHighlightsPosted(input);
+
+      if (!record) {
+        return err(
+          new AppError('SPORTS_LIVE_EVENT_NOT_FOUND', 'Tracked live event not found.', 404),
+        );
+      }
+
+      return ok(mapSportsLiveEventChannelSummary(record));
+    } catch (error) {
+      return err(
+        error instanceof AppError
+          ? error
+          : new AppError(
+              'SPORTS_LIVE_EVENT_WRITE_FAILED',
+              'Sports live event update failed due to an internal error.',
+              500,
+            ),
+      );
+    }
+  }
+
+  public async markFailed(input: {
+    guildId: string;
+    eventId: string;
+    failedAtUtc: Date;
+  }): Promise<Result<SportsLiveEventChannelSummary, AppError>> {
+    try {
+      const record = await this.repository.markFailed(input);
 
       if (!record) {
         return err(

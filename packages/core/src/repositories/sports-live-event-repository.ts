@@ -82,6 +82,56 @@ export class SportsLiveEventRepository {
     return rows.map((row) => mapSportsLiveEventChannelRow(row));
   }
 
+  public async markHighlightsPosted(input: {
+    guildId: string;
+    eventId: string;
+    postedAtUtc: Date;
+  }): Promise<SportsLiveEventChannelRecord | null> {
+    await this.db
+      .update(sportsLiveEventChannels)
+      .set({
+        highlightsPosted: true,
+        lastSyncedAtUtc: input.postedAtUtc,
+        updatedAt: input.postedAtUtc,
+      })
+      .where(
+        and(
+          eq(sportsLiveEventChannels.guildId, input.guildId),
+          eq(sportsLiveEventChannels.eventId, input.eventId),
+        ),
+      );
+
+    return this.getTrackedEvent({
+      guildId: input.guildId,
+      eventId: input.eventId,
+    });
+  }
+
+  public async markFailed(input: {
+    guildId: string;
+    eventId: string;
+    failedAtUtc: Date;
+  }): Promise<SportsLiveEventChannelRecord | null> {
+    await this.db
+      .update(sportsLiveEventChannels)
+      .set({
+        status: 'failed',
+        lastSyncedAtUtc: input.failedAtUtc,
+        updatedAt: input.failedAtUtc,
+      })
+      .where(
+        and(
+          eq(sportsLiveEventChannels.guildId, input.guildId),
+          eq(sportsLiveEventChannels.eventId, input.eventId),
+        ),
+      );
+
+    return this.getTrackedEvent({
+      guildId: input.guildId,
+      eventId: input.eventId,
+    });
+  }
+
   public async upsertTrackedEvent(input: {
     guildId: string;
     sportName: string;
