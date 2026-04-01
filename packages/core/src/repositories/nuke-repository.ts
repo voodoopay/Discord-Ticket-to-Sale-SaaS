@@ -7,8 +7,6 @@ import {
   channelNukeLocks,
   channelNukeRuns,
   channelNukeSchedules,
-  orderSessions,
-  ticketChannelMetadata,
 } from '../infra/db/schema/index.js';
 import type { NukeScheduleCadence } from '../services/nuke-schedule.js';
 
@@ -604,7 +602,6 @@ export class NukeRepository {
   }
 
   public async finalizeSuccessfulNuke(input: {
-    tenantId: string;
     guildId: string;
     oldChannelId: string;
     newChannelId: string;
@@ -640,7 +637,7 @@ export class NukeRepository {
         await tx
           .update(channelNukeSchedules)
           .set({
-            tenantId: input.tenantId,
+            tenantId: input.guildId,
             channelId: input.newChannelId,
             updatedByDiscordUserId: input.updatedByDiscordUserId,
             updatedAt: now,
@@ -652,35 +649,6 @@ export class NukeRepository {
             ),
           );
       }
-
-      await tx
-        .update(ticketChannelMetadata)
-        .set({
-          channelId: input.newChannelId,
-          updatedAt: now,
-        })
-        .where(
-          and(
-            eq(ticketChannelMetadata.tenantId, input.tenantId),
-            eq(ticketChannelMetadata.guildId, input.guildId),
-            eq(ticketChannelMetadata.channelId, input.oldChannelId),
-          ),
-        );
-
-      await tx
-        .update(orderSessions)
-        .set({
-          ticketChannelId: input.newChannelId,
-          updatedAt: now,
-        })
-        .where(
-          and(
-            eq(orderSessions.tenantId, input.tenantId),
-            eq(orderSessions.guildId, input.guildId),
-            eq(orderSessions.ticketChannelId, input.oldChannelId),
-            eq(orderSessions.status, 'pending_payment'),
-          ),
-        );
     });
   }
 }

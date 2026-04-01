@@ -798,7 +798,6 @@ export class NukeService {
 
       try {
         await this.nukeRepository.finalizeSuccessfulNuke({
-          tenantId: input.tenantId,
           guildId: input.guildId,
           oldChannelId: input.channelId,
           newChannelId: clonedChannel.id,

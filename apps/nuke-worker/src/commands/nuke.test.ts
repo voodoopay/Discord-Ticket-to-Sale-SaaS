@@ -52,16 +52,9 @@ vi.mock('@voodoo/core', () => {
     }
   }
 
-  class TenantRepository {
-    public async getTenantByGuildId(): Promise<never> {
-      throw new Error('Mock getTenantByGuildId not implemented');
-    }
-  }
-
   return {
     AppError,
     NukeService,
-    TenantRepository,
     getEnv: () => ({
       superAdminDiscordIds: (process.env.SUPER_ADMIN_DISCORD_IDS ?? '')
         .split(',')
@@ -82,7 +75,7 @@ vi.mock('@voodoo/core', () => {
   };
 });
 
-import { AppError, NukeService, resetEnvForTests, TenantRepository } from '@voodoo/core';
+import { AppError, NukeService, resetEnvForTests } from '@voodoo/core';
 
 import {
   buildAuthorizedUsersMessage,
@@ -264,10 +257,6 @@ describe('nuke command helpers', () => {
     process.env.SUPER_ADMIN_DISCORD_IDS = 'owner-1';
     resetEnvForTests();
 
-    vi.spyOn(TenantRepository.prototype, 'getTenantByGuildId').mockResolvedValue({
-      tenantId: 'tenant-1',
-    } as Awaited<ReturnType<TenantRepository['getTenantByGuildId']>>);
-
     const { interaction, deferReply, editReply } = createInteractionMock({
       userId: 'user-2',
       subcommand: 'grant',
@@ -287,10 +276,6 @@ describe('nuke command helpers', () => {
   it('blocks regular /nuke usage when the guild access list is locked and the caller is not authorized', async () => {
     process.env.SUPER_ADMIN_DISCORD_IDS = 'owner-1';
     resetEnvForTests();
-
-    vi.spyOn(TenantRepository.prototype, 'getTenantByGuildId').mockResolvedValue({
-      tenantId: 'tenant-1',
-    } as Awaited<ReturnType<TenantRepository['getTenantByGuildId']>>);
     vi.spyOn(NukeService.prototype, 'getCommandAccessState').mockResolvedValue(
       createOkResult({
         locked: true,
@@ -317,10 +302,6 @@ describe('nuke command helpers', () => {
   it('tells the caller the server still needs activation when no /nuke users have been granted yet', async () => {
     process.env.SUPER_ADMIN_DISCORD_IDS = 'owner-1';
     resetEnvForTests();
-
-    vi.spyOn(TenantRepository.prototype, 'getTenantByGuildId').mockResolvedValue({
-      tenantId: 'tenant-1',
-    } as Awaited<ReturnType<TenantRepository['getTenantByGuildId']>>);
     vi.spyOn(NukeService.prototype, 'getCommandAccessState').mockResolvedValue(
       createOkResult({
         locked: true,
@@ -344,11 +325,9 @@ describe('nuke command helpers', () => {
     );
   });
 
-  it('falls back to guild-scoped nuke storage when the server is not linked to a tenant/workspace', async () => {
+  it('always uses guild-scoped nuke storage in standalone mode', async () => {
     process.env.SUPER_ADMIN_DISCORD_IDS = 'owner-1';
     resetEnvForTests();
-
-    vi.spyOn(TenantRepository.prototype, 'getTenantByGuildId').mockResolvedValue(null);
     const getChannelScheduleSpy = vi
       .spyOn(NukeService.prototype, 'getChannelSchedule')
       .mockResolvedValue(
@@ -377,10 +356,6 @@ describe('nuke command helpers', () => {
   it('shows the current schedule when the caller is authorized for /nuke usage', async () => {
     process.env.SUPER_ADMIN_DISCORD_IDS = 'owner-1';
     resetEnvForTests();
-
-    vi.spyOn(TenantRepository.prototype, 'getTenantByGuildId').mockResolvedValue({
-      tenantId: 'tenant-1',
-    } as Awaited<ReturnType<TenantRepository['getTenantByGuildId']>>);
     vi.spyOn(NukeService.prototype, 'getCommandAccessState').mockResolvedValue(
       createOkResult({
         locked: true,
@@ -427,10 +402,6 @@ describe('nuke command helpers', () => {
   it('lets a configured super admin grant /nuke access', async () => {
     process.env.SUPER_ADMIN_DISCORD_IDS = 'owner-1';
     resetEnvForTests();
-
-    vi.spyOn(TenantRepository.prototype, 'getTenantByGuildId').mockResolvedValue({
-      tenantId: 'tenant-1',
-    } as Awaited<ReturnType<TenantRepository['getTenantByGuildId']>>);
     vi.spyOn(NukeService.prototype, 'grantUserAccess').mockResolvedValue(
       createOkResult({
         authorizationId: 'auth-1',
@@ -457,10 +428,6 @@ describe('nuke command helpers', () => {
   it('passes weekly cadence details to the schedule service and reports them back to the caller', async () => {
     process.env.SUPER_ADMIN_DISCORD_IDS = 'owner-1';
     resetEnvForTests();
-
-    vi.spyOn(TenantRepository.prototype, 'getTenantByGuildId').mockResolvedValue({
-      tenantId: 'tenant-1',
-    } as Awaited<ReturnType<TenantRepository['getTenantByGuildId']>>);
     const accessSpy = vi.spyOn(NukeService.prototype, 'getCommandAccessState').mockResolvedValue(
       createOkResult({
         locked: true,
@@ -516,10 +483,6 @@ describe('nuke command helpers', () => {
   it('deletes the current channel without creating a replacement when /nuke delete is confirmed', async () => {
     process.env.SUPER_ADMIN_DISCORD_IDS = 'owner-1';
     resetEnvForTests();
-
-    vi.spyOn(TenantRepository.prototype, 'getTenantByGuildId').mockResolvedValue({
-      tenantId: 'tenant-1',
-    } as Awaited<ReturnType<TenantRepository['getTenantByGuildId']>>);
     vi.spyOn(NukeService.prototype, 'getCommandAccessState').mockResolvedValue(
       createOkResult({
         locked: true,

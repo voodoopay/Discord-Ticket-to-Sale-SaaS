@@ -16,15 +16,8 @@ vi.mock('@voodoo/core', () => {
     }
   }
 
-  class TenantRepository {
-    public async getTenantByGuildId(): Promise<never> {
-      throw new Error('Mock getTenantByGuildId not implemented');
-    }
-  }
-
   return {
     NukeService,
-    TenantRepository,
     getEnv: () => ({
       superAdminDiscordIds: (process.env.SUPER_ADMIN_DISCORD_IDS ?? '')
         .split(',')
@@ -35,7 +28,7 @@ vi.mock('@voodoo/core', () => {
   };
 });
 
-import { NukeService, TenantRepository, resetEnvForTests } from '@voodoo/core';
+import { NukeService, resetEnvForTests } from '@voodoo/core';
 
 import { activationCommand } from './activation.js';
 
@@ -126,17 +119,15 @@ describe('nuke activation command', () => {
     process.env.SUPER_ADMIN_DISCORD_IDS = 'owner-1';
     resetEnvForTests();
 
-    vi.spyOn(TenantRepository.prototype, 'getTenantByGuildId').mockResolvedValue({
-      tenantId: 'tenant-1',
-      guildId: '123456789012345678',
-    } as Awaited<ReturnType<TenantRepository['getTenantByGuildId']>>);
-    vi.spyOn(NukeService.prototype, 'grantUserAccess').mockResolvedValue(
-      createOkResult({
-        authorizationId: 'auth-1',
-        discordUserId: '234567890123456789',
-        created: true,
-      }) as Awaited<ReturnType<NukeService['grantUserAccess']>>,
-    );
+    const grantUserAccessSpy = vi
+      .spyOn(NukeService.prototype, 'grantUserAccess')
+      .mockResolvedValue(
+        createOkResult({
+          authorizationId: 'auth-1',
+          discordUserId: '234567890123456789',
+          created: true,
+        }) as Awaited<ReturnType<NukeService['grantUserAccess']>>,
+      );
 
     const { interaction, deferReply, editReply } = createInteractionMock({
       userId: 'owner-1',
@@ -145,17 +136,22 @@ describe('nuke activation command', () => {
     await activationCommand.execute(interaction);
 
     expect(deferReply).toHaveBeenCalledWith({ flags: MessageFlags.Ephemeral });
+    expect(grantUserAccessSpy).toHaveBeenCalledWith({
+      tenantId: '123456789012345678',
+      guildId: '123456789012345678',
+      discordUserId: '234567890123456789',
+      grantedByDiscordUserId: 'owner-1',
+    });
     expect(editReply).toHaveBeenCalledWith({
       content:
         'Granted `/nuke` access for `234567890123456789` in `Remote Guild` (`123456789012345678`).',
     });
   });
 
-  it('grants remote nuke access even when the target server is not linked to a tenant/workspace', async () => {
+  it('uses guild-scoped activation storage for remote grant actions', async () => {
     process.env.SUPER_ADMIN_DISCORD_IDS = 'owner-1';
     resetEnvForTests();
 
-    vi.spyOn(TenantRepository.prototype, 'getTenantByGuildId').mockResolvedValue(null);
     const grantUserAccessSpy = vi
       .spyOn(NukeService.prototype, 'grantUserAccess')
       .mockResolvedValue(

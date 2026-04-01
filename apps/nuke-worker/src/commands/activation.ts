@@ -7,7 +7,6 @@ import {
 } from 'discord.js';
 import {
   NukeService,
-  TenantRepository,
   type ChannelNukeAuthorizedUserSummary,
   getEnv,
 } from '@voodoo/core';
@@ -15,7 +14,6 @@ import {
 import { mapNukeError } from './nuke.js';
 
 const nukeService = new NukeService();
-const tenantRepository = new TenantRepository();
 
 function isSuperAdminUser(discordUserId: string): boolean {
   return getEnv().superAdminDiscordIds.includes(discordUserId);
@@ -26,9 +24,8 @@ function normalizeDiscordId(value: string): string | null {
   return /^\d{17,32}$/u.test(trimmed) ? trimmed : null;
 }
 
-async function resolveNukeTenantId(guildId: string): Promise<string> {
-  const tenant = await tenantRepository.getTenantByGuildId(guildId);
-  return tenant?.tenantId ?? guildId;
+function resolveNukeScopeId(guildId: string): string {
+  return guildId;
 }
 
 async function deferEphemeralReply(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -175,11 +172,11 @@ export const activationCommand = {
         return;
       }
 
-      const tenantId = await resolveNukeTenantId(guildId);
+      const nukeScopeId = resolveNukeScopeId(guildId);
 
       if (subcommand === 'list') {
         const result = await nukeService.listAuthorizedUsers({
-          tenantId,
+          tenantId: nukeScopeId,
           guildId,
         });
         if (result.isErr()) {
@@ -205,7 +202,7 @@ export const activationCommand = {
 
       if (subcommand === 'grant') {
         const result = await nukeService.grantUserAccess({
-          tenantId,
+          tenantId: nukeScopeId,
           guildId,
           discordUserId: userId,
           grantedByDiscordUserId: interaction.user.id,
@@ -226,7 +223,7 @@ export const activationCommand = {
 
       if (subcommand === 'revoke') {
         const result = await nukeService.revokeUserAccess({
-          tenantId,
+          tenantId: nukeScopeId,
           guildId,
           discordUserId: userId,
         });

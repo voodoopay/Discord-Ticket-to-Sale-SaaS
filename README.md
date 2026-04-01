@@ -242,7 +242,7 @@ Copy `.env.example` to `.env` and fill values.
 - `/activation grant guild_id:<server-id> user_id:<user-id>` can now remotely activate `/nuke` for another server without you joining that server first. Only `SUPER_ADMIN_DISCORD_IDS` can use it.
 - `/activation revoke guild_id:<server-id> user_id:<user-id>` can now remotely revoke `/nuke` access for another server. Only `SUPER_ADMIN_DISCORD_IDS` can use it.
 - `/activation list guild_id:<server-id>` lists the remote `/nuke` activation entries for another server. Only `SUPER_ADMIN_DISCORD_IDS` can use it.
-- The nuke worker can operate as a standalone bot even when a server is not linked to a sales workspace; in that case it falls back to guild-scoped nuke storage.
+- The nuke worker is fully standalone and always uses guild-scoped activation/schedule storage (no workspace/tenant lookup).
 - `/nuke` is now default-deny for every server. Until a super admin grants at least one Discord user, regular members cannot use it even if they have `Manage Channels`.
 - Super admins listed in `SUPER_ADMIN_DISCORD_IDS` can always run `/nuke authorized`, `/nuke grant`, and `/nuke revoke` to activate or manage a server.
 - Once a server has granted `/nuke` users, only those granted users plus the configured `SUPER_ADMIN_DISCORD_IDS` can use `/nuke`.

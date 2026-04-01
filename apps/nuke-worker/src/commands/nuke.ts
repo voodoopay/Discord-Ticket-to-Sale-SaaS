@@ -13,14 +13,12 @@ import {
   formatWeeklyDayOfWeek,
   getEnv,
   NukeService,
-  TenantRepository,
   logger,
 } from '@voodoo/core';
 import { deferEphemeralReply, sendEphemeralReply } from '../utils/replies.js';
 import { getTimezoneAutocompleteChoices } from './nuke-timezones.js';
 
 const nukeService = new NukeService();
-const tenantRepository = new TenantRepository();
 
 type PermissionCheckResult = {
   ok: boolean;
@@ -93,9 +91,8 @@ function getSuperAdminOnlyAccessMessage(): string {
   return 'Only the configured super admin Discord ID can manage `/nuke` access.';
 }
 
-async function resolveNukeTenantId(guildId: string): Promise<string> {
-  const tenant = await tenantRepository.getTenantByGuildId(guildId);
-  return tenant?.tenantId ?? guildId;
+function resolveNukeScopeId(guildId: string): string {
+  return guildId;
 }
 
 type NukeExecutionResult = {
@@ -336,7 +333,7 @@ export const nukeCommand = {
     try {
       const guildId = interaction.guildId as string;
       const channelId = interaction.channelId;
-      const tenantId = await resolveNukeTenantId(guildId);
+      const nukeScopeId = resolveNukeScopeId(guildId);
 
       const subcommand = interaction.options.getSubcommand(true);
       const isSuperAdmin = isSuperAdminUser(interaction.user.id);
@@ -348,7 +345,7 @@ export const nukeCommand = {
         }
 
         const result = await nukeService.listAuthorizedUsers({
-          tenantId,
+          tenantId: nukeScopeId,
           guildId,
         });
 
@@ -369,7 +366,7 @@ export const nukeCommand = {
 
         const targetUser = interaction.options.getUser('user', true);
         const result = await nukeService.grantUserAccess({
-          tenantId,
+          tenantId: nukeScopeId,
           guildId,
           discordUserId: targetUser.id,
           grantedByDiscordUserId: interaction.user.id,
@@ -397,7 +394,7 @@ export const nukeCommand = {
 
         const targetUser = interaction.options.getUser('user', true);
         const result = await nukeService.revokeUserAccess({
-          tenantId,
+          tenantId: nukeScopeId,
           guildId,
           discordUserId: targetUser.id,
         });
@@ -418,7 +415,7 @@ export const nukeCommand = {
 
       if (!isSuperAdmin) {
         const accessState = await nukeService.getCommandAccessState({
-          tenantId,
+          tenantId: nukeScopeId,
           guildId,
           discordUserId: interaction.user.id,
         });
@@ -439,7 +436,7 @@ export const nukeCommand = {
 
       if (subcommand === 'status') {
         const result = await nukeService.getChannelSchedule({
-          tenantId,
+          tenantId: nukeScopeId,
           guildId,
           channelId,
         });
@@ -464,7 +461,7 @@ export const nukeCommand = {
         const monthlyDayOfMonth = interaction.options.getInteger('day_of_month');
 
         const result = await nukeService.setSchedule({
-          tenantId,
+          tenantId: nukeScopeId,
           guildId,
           channelId,
           timeHhMm,
@@ -496,7 +493,7 @@ export const nukeCommand = {
 
       if (subcommand === 'disable') {
         const result = await nukeService.disableSchedule({
-          tenantId,
+          tenantId: nukeScopeId,
           guildId,
           channelId,
           actorDiscordUserId: interaction.user.id,
@@ -529,7 +526,7 @@ export const nukeCommand = {
         );
 
         const result = await nukeService.runNukeNow({
-          tenantId,
+          tenantId: nukeScopeId,
           guildId,
           channelId,
           actorDiscordUserId: interaction.user.id,
@@ -564,7 +561,7 @@ export const nukeCommand = {
         );
 
         const result = await nukeService.runDeleteNow({
-          tenantId,
+          tenantId: nukeScopeId,
           guildId,
           channelId,
           actorDiscordUserId: interaction.user.id,
