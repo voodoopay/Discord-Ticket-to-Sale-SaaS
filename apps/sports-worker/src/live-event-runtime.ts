@@ -634,6 +634,12 @@ export async function reconcileLiveEventsForGuild(input: {
 
   for (const event of televisedLiveEvents) {
     const sportName = event.sportName ?? DEFAULT_CATEGORY_NAME;
+    const trackedEvent = trackedEventsByEventId.get(event.eventId) ?? null;
+    const existingChannel = await fetchTrackedEventChannel(input.guild, trackedEvent?.eventChannelId ?? null);
+    if (!liveCategory) {
+      continue;
+    }
+
     const sportChannel = await ensureSportChannelForLiveEvent({
       guild: input.guild,
       config,
@@ -643,12 +649,6 @@ export async function reconcileLiveEventsForGuild(input: {
       sportName,
     });
     if (!sportChannel) {
-      continue;
-    }
-
-    const trackedEvent = trackedEventsByEventId.get(event.eventId) ?? null;
-    const existingChannel = await fetchTrackedEventChannel(input.guild, trackedEvent?.eventChannelId ?? null);
-    if (!existingChannel && !liveCategory) {
       continue;
     }
     const desiredName = buildLiveEventChannelName(event.eventName);
