@@ -119,6 +119,39 @@ function isManagedTextChannel(channel: unknown): channel is TextChannel {
   return typeof channel === 'object' && channel !== null && 'type' in channel && channel.type === ChannelType.GuildText;
 }
 
+function isUnknownChannelError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+
+  if ('code' in error && error.code === 10_003) {
+    return true;
+  }
+
+  return 'status' in error && error.status === 404;
+}
+
+function findAdoptableLiveEventChannel(input: {
+  channels: Iterable<unknown>;
+  trackedEventChannelIds: Set<string>;
+  desiredName: string;
+  parentIds: Set<string>;
+}): TextChannel | null {
+  for (const channel of input.channels) {
+    if (
+      isManagedTextChannel(channel) &&
+      channel.name === input.desiredName &&
+      typeof channel.parentId === 'string' &&
+      input.parentIds.has(channel.parentId) &&
+      !input.trackedEventChannelIds.has(channel.id)
+    ) {
+      return channel;
+    }
+  }
+
+  return null;
+}
+
 async function clearManagedChannel(channel: TextChannel): Promise<void> {
   while (true) {
     const messages = await channel.messages.fetch({ limit: 100 });
@@ -331,6 +364,22 @@ async function postLiveEventHighlightsIfAvailable(input: {
       });
     });
   } catch (error) {
+    const releaseHighlightClaimResult = await sportsLiveEventService.releaseHighlightClaim({
+      guildId: input.guildId,
+      eventId: input.trackedEvent.eventId,
+      releasedAtUtc: input.now,
+    });
+    if (releaseHighlightClaimResult.isErr()) {
+      logger.warn(
+        {
+          guildId: input.guildId,
+          eventId: input.trackedEvent.eventId,
+          err: releaseHighlightClaimResult.error,
+        },
+        'live event runtime could not release the reserved highlight claim after send failure',
+      );
+    }
+
     logger.warn(
       {
         guildId: input.guildId,
@@ -370,6 +419,10 @@ async function fetchTrackedEventChannelState(
     const channel = await guild.channels.fetch(eventChannelId);
     return isManagedTextChannel(channel) ? { status: 'found', channel } : { status: 'missing' };
   } catch (error) {
+    if (isUnknownChannelError(error)) {
+      return { status: 'missing' };
+    }
+
     return { status: 'error', error };
   }
 }
@@ -554,9 +607,15 @@ export async function reconcileLiveEventsForGuild(input: {
   const trackedEventsByEventId = new Map(
     trackedEventsResult.value.map((trackedEvent) => [trackedEvent.eventId, trackedEvent]),
   );
+  const trackedEventChannelIds = new Set(
+    trackedEventsResult.value.flatMap((trackedEvent) =>
+      trackedEvent.eventChannelId ? [trackedEvent.eventChannelId] : [],
+    ),
+  );
   const bindingsBySport = new Map(bindings.map((binding) => [binding.sportName, binding]));
+  const guildChannels = await input.guild.channels.fetch();
   const usedNames = new Set(
-    [...(await input.guild.channels.fetch()).values()]
+    [...guildChannels.values()]
       .filter((channel): channel is NonNullable<typeof channel> => channel !== null)
       .map((channel) => channel.name),
   );
@@ -581,11 +640,16 @@ export async function reconcileLiveEventsForGuild(input: {
 
     const parentId = sportChannel.parentId ?? category.id;
     const trackedEvent = trackedEventsByEventId.get(event.eventId) ?? null;
-    if (trackedEvent?.status === 'failed') {
-      continue;
-    }
     const existingChannel = await fetchTrackedEventChannel(input.guild, trackedEvent?.eventChannelId ?? null);
     const desiredName = buildLiveEventChannelName(event.eventName);
+    const adoptedChannel = existingChannel
+      ? null
+      : findAdoptableLiveEventChannel({
+          channels: guildChannels.values(),
+          trackedEventChannelIds,
+          desiredName,
+          parentIds: new Set([parentId, sportChannel.id]),
+        });
     const desiredExistingName = existingChannel
       ? reserveUniqueChannelName({
           base: desiredName,
@@ -641,6 +705,9 @@ export async function reconcileLiveEventsForGuild(input: {
       );
       updatedChannelCount += 1;
       targetChannel = existingChannel;
+    } else if (adoptedChannel) {
+      trackedEventChannelIds.add(adoptedChannel.id);
+      targetChannel = adoptedChannel;
     } else {
       const reservedName = reserveUniqueChannelName({
         base: desiredName,
@@ -654,6 +721,7 @@ export async function reconcileLiveEventsForGuild(input: {
           reason: `Create a temporary live event channel for ${event.eventName}.`,
         }),
       )) as TextChannel;
+      trackedEventChannelIds.add(targetChannel.id);
       createdChannelCount += 1;
     }
 

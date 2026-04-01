@@ -432,6 +432,43 @@ describe('SportsLiveEventService', () => {
     expect(rows[0]?.highlightsPosted).toBe(true);
   });
 
+  it('releases a highlight claim after a failed send so delivery can retry later', async () => {
+    const repository = new SportsLiveEventRepository();
+    const releaseHighlightClaimSpy = vi
+      .spyOn(repository, 'releaseHighlightClaim')
+      .mockResolvedValue(
+        makeRow({
+          id: '01J0SPORTSLIVE000000000015',
+          eventId: 'evt-1',
+          status: 'cleanup_due',
+          highlightsPosted: false,
+          lastSyncedAtUtc: new Date('2026-03-20T16:05:00.000Z'),
+          deleteAfterUtc: new Date('2026-03-20T18:00:00.000Z'),
+          updatedAt: new Date('2026-03-20T16:05:00.000Z'),
+        }),
+      );
+
+    const service = new SportsLiveEventService(repository);
+
+    const result = await service.releaseHighlightClaim({
+      guildId: 'guild-1',
+      eventId: 'evt-1',
+      releasedAtUtc: new Date('2026-03-20T16:05:00.000Z'),
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) {
+      return;
+    }
+
+    expect(releaseHighlightClaimSpy).toHaveBeenCalledWith({
+      guildId: 'guild-1',
+      eventId: 'evt-1',
+      releasedAtUtc: new Date('2026-03-20T16:05:00.000Z'),
+    });
+    expect(result.value.highlightsPosted).toBe(false);
+  });
+
   it('marks a recoverable tracked event as failed when recovery cannot continue', async () => {
     const repository = new SportsLiveEventRepository();
     const markFailedSpy = vi.spyOn(repository, 'markFailed').mockResolvedValue(

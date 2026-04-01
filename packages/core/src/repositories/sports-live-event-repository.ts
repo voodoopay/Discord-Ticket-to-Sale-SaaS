@@ -135,6 +135,32 @@ export class SportsLiveEventRepository {
     };
   }
 
+  public async releaseHighlightClaim(input: {
+    guildId: string;
+    eventId: string;
+    releasedAtUtc: Date;
+  }): Promise<SportsLiveEventChannelRecord | null> {
+    await this.db
+      .update(sportsLiveEventChannels)
+      .set({
+        highlightsPosted: false,
+        lastSyncedAtUtc: input.releasedAtUtc,
+        updatedAt: input.releasedAtUtc,
+      })
+      .where(
+        and(
+          eq(sportsLiveEventChannels.guildId, input.guildId),
+          eq(sportsLiveEventChannels.eventId, input.eventId),
+          eq(sportsLiveEventChannels.highlightsPosted, true),
+        ),
+      );
+
+    return this.getTrackedEvent({
+      guildId: input.guildId,
+      eventId: input.eventId,
+    });
+  }
+
   public async markFailed(input: {
     guildId: string;
     eventId: string;

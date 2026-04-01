@@ -226,6 +226,34 @@ export class SportsLiveEventService {
     }
   }
 
+  public async releaseHighlightClaim(input: {
+    guildId: string;
+    eventId: string;
+    releasedAtUtc: Date;
+  }): Promise<Result<SportsLiveEventChannelSummary, AppError>> {
+    try {
+      const record = await this.repository.releaseHighlightClaim(input);
+
+      if (!record) {
+        return err(
+          new AppError('SPORTS_LIVE_EVENT_NOT_FOUND', 'Tracked live event not found.', 404),
+        );
+      }
+
+      return ok(mapSportsLiveEventChannelSummary(record));
+    } catch (error) {
+      return err(
+        error instanceof AppError
+          ? error
+          : new AppError(
+              'SPORTS_LIVE_EVENT_WRITE_FAILED',
+              'Sports live event update failed due to an internal error.',
+              500,
+            ),
+      );
+    }
+  }
+
   public async markFailed(input: {
     guildId: string;
     eventId: string;
