@@ -297,19 +297,6 @@ async function postLiveEventHighlightsIfAvailable(input: {
     return false;
   }
 
-  await LIVE_EVENT_QUEUE.add(async () => {
-    await input.channel.send({
-      content: `Highlights are now available for **${input.trackedEvent.eventName}**.`,
-      embeds: [
-        buildHighlightEmbed({
-          eventName: input.trackedEvent.eventName,
-          sportName: input.trackedEvent.sportName,
-          highlight,
-        }),
-      ],
-    });
-  });
-
   const markHighlightsPostedResult = await sportsLiveEventService.markHighlightsPosted({
     guildId: input.guildId,
     eventId: input.trackedEvent.eventId,
@@ -323,6 +310,31 @@ async function postLiveEventHighlightsIfAvailable(input: {
         err: markHighlightsPostedResult.error,
       },
       'live event runtime could not persist highlight delivery',
+    );
+    return false;
+  }
+
+  try {
+    await LIVE_EVENT_QUEUE.add(async () => {
+      await input.channel.send({
+        content: `Highlights are now available for **${input.trackedEvent.eventName}**.`,
+        embeds: [
+          buildHighlightEmbed({
+            eventName: input.trackedEvent.eventName,
+            sportName: input.trackedEvent.sportName,
+            highlight,
+          }),
+        ],
+      });
+    });
+  } catch (error) {
+    logger.warn(
+      {
+        guildId: input.guildId,
+        eventId: input.trackedEvent.eventId,
+        errorMessage: error instanceof Error ? error.message : 'unknown',
+      },
+      'live event runtime could not send reserved event highlights',
     );
     return false;
   }
@@ -775,13 +787,49 @@ async function runLiveEventScheduler(client: Client): Promise<void> {
       }
 
       const guild = await client.guilds.fetch(guildPreview.id);
-      await resumeTrackedLiveEventsForGuild({ guild });
       await reconcileLiveEventsForGuild({
         guild,
         timezone: configResult.value.timezone,
         broadcastCountry: configResult.value.broadcastCountry,
       });
       await runPendingLiveEventCleanup({ guild });
+    } catch (error) {
+      logger.warn(
+        {
+          guildId: guildPreview.id,
+          errorMessage: error instanceof Error ? error.message : 'unknown',
+        },
+        'live event scheduler tick failed',
+      );
+    }
+  }
+}
+
+async function runLiveEventStartupRecovery(client: Client): Promise<void> {
+  const guilds = await client.guilds.fetch();
+
+  for (const guildPreview of guilds.values()) {
+    try {
+      const activationState = await sportsAccessService.getGuildActivationState({
+        guildId: guildPreview.id,
+      });
+      if (activationState.isErr()) {
+        throw activationState.error;
+      }
+      if (!activationState.value.activated) {
+        continue;
+      }
+
+      const configResult = await sportsService.getGuildConfig({ guildId: guildPreview.id });
+      if (configResult.isErr()) {
+        throw configResult.error;
+      }
+      if (!configResult.value) {
+        continue;
+      }
+
+      const guild = await client.guilds.fetch(guildPreview.id);
+      await resumeTrackedLiveEventsForGuild({ guild });
     } catch (error) {
       logger.warn(
         {
@@ -805,13 +853,28 @@ function queueLiveEventSchedulerTick(client: Client): void {
   });
 }
 
+function queueLiveEventSchedulerStartup(client: Client): void {
+  if (liveEventSchedulerInFlight) {
+    return;
+  }
+
+  liveEventSchedulerInFlight = true;
+  void runLiveEventStartupRecovery(client)
+    .then(async () => {
+      await runLiveEventScheduler(client);
+    })
+    .finally(() => {
+      liveEventSchedulerInFlight = false;
+    });
+}
+
 export function startLiveEventScheduler(client: Client, pollIntervalMs: number): void {
   if (liveEventSchedulerTimer) {
     return;
   }
 
   const effectivePollIntervalMs = Math.max(5_000, Math.floor(pollIntervalMs));
-  queueLiveEventSchedulerTick(client);
+  queueLiveEventSchedulerStartup(client);
   liveEventSchedulerTimer = setInterval(() => {
     queueLiveEventSchedulerTick(client);
   }, effectivePollIntervalMs);
