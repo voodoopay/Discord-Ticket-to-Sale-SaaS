@@ -32,9 +32,16 @@ vi.mock('@voodoo/core', () => {
     }
   }
 
+  class SportsLiveEventService {
+    public async listTrackedEvents(): Promise<never> {
+      throw new Error('Mock listTrackedEvents not implemented');
+    }
+  }
+
   return {
     SportsAccessService,
     SportsDataService,
+    SportsLiveEventService,
     SportsService,
     getEnv: () => ({
       superAdminDiscordIds: (process.env.SUPER_ADMIN_DISCORD_IDS ?? '')
@@ -44,6 +51,7 @@ vi.mock('@voodoo/core', () => {
       SPORTS_DEFAULT_PUBLISH_TIME: '01:00',
       SPORTS_DEFAULT_TIMEZONE: 'Europe/London',
       SPORTS_BROADCAST_COUNTRY: 'United Kingdom',
+      SPORTS_POLL_INTERVAL_MS: 60000,
     }),
     resetEnvForTests: () => undefined,
     resolveSportsLocalDate: () => '2026-03-20',
@@ -79,6 +87,7 @@ vi.mock('../sports-runtime.js', () => ({
 import {
   SportsAccessService,
   SportsDataService,
+  SportsLiveEventService,
   SportsService,
   resetEnvForTests,
 } from '@voodoo/core';
@@ -97,7 +106,7 @@ function createOkResult<T>(value: T): { isErr: () => false; isOk: () => true; va
 
 function createInteractionMock(input?: {
   userId?: string;
-  subcommand?: 'setup' | 'sync' | 'refresh' | 'status';
+  subcommand?: 'setup' | 'sync' | 'refresh' | 'status' | 'live-status';
   categoryName?: string | null;
 }): {
   interaction: ChatInputCommandInteraction;
@@ -260,6 +269,76 @@ describe('sports command', () => {
     });
     expect(editReply).toHaveBeenCalledWith({
       content: expect.not.stringContaining('Empty sport channels today'),
+    });
+  });
+
+  it('shows live-status with tracked events, pending cleanup counts, and sync health', async () => {
+    vi.spyOn(SportsAccessService.prototype, 'getCommandAccessState').mockResolvedValue(
+      createOkResult({
+        locked: false,
+        allowed: true,
+        activated: true,
+        authorizedUserCount: 1,
+      }) as Awaited<ReturnType<SportsAccessService['getCommandAccessState']>>,
+    );
+    vi.spyOn(SportsLiveEventService.prototype, 'listTrackedEvents').mockResolvedValue(
+      createOkResult([
+        {
+          id: 'tracked-1',
+          guildId: 'guild-1',
+          sportName: 'Soccer',
+          eventId: 'evt-1',
+          eventName: 'Rangers vs Celtic',
+          sportChannelId: 'sport-1',
+          eventChannelId: 'live-1',
+          status: 'live',
+          kickoffAtUtc: new Date('2026-03-20T15:00:00.000Z'),
+          lastScoreSnapshot: { scoreLabel: '2-1' },
+          lastStateSnapshot: { statusLabel: 'Live' },
+          lastSyncedAtUtc: new Date(),
+          finishedAtUtc: null,
+          deleteAfterUtc: null,
+          highlightsPosted: false,
+          createdAt: new Date('2026-03-20T15:00:00.000Z'),
+          updatedAt: new Date('2026-03-20T15:58:00.000Z'),
+        },
+        {
+          id: 'tracked-2',
+          guildId: 'guild-1',
+          sportName: 'Soccer',
+          eventId: 'evt-2',
+          eventName: 'Hearts vs Hibs',
+          sportChannelId: 'sport-1',
+          eventChannelId: 'live-2',
+          status: 'cleanup_due',
+          kickoffAtUtc: new Date('2026-03-20T12:00:00.000Z'),
+          lastScoreSnapshot: { scoreLabel: '1-0' },
+          lastStateSnapshot: { statusLabel: 'FT' },
+          lastSyncedAtUtc: new Date(),
+          finishedAtUtc: new Date('2026-03-20T14:45:00.000Z'),
+          deleteAfterUtc: new Date('2026-03-20T17:45:00.000Z'),
+          highlightsPosted: false,
+          createdAt: new Date('2026-03-20T12:00:00.000Z'),
+          updatedAt: new Date('2026-03-20T14:45:00.000Z'),
+        },
+      ]) as unknown as Awaited<ReturnType<SportsLiveEventService['listTrackedEvents']>>,
+    );
+
+    const { interaction, editReply } = createInteractionMock({
+      userId: 'user-2',
+      subcommand: 'live-status',
+    });
+
+    await sportsCommand.execute(interaction);
+
+    expect(editReply).toHaveBeenCalledWith({
+      content: expect.stringContaining('Tracked live events: 2'),
+    });
+    expect(editReply).toHaveBeenCalledWith({
+      content: expect.stringContaining('Pending cleanup: 1'),
+    });
+    expect(editReply).toHaveBeenCalledWith({
+      content: expect.stringContaining('Sync health: Healthy'),
     });
   });
 

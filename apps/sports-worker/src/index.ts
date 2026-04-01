@@ -10,8 +10,16 @@ import {
 import { getEnv, logger } from '@voodoo/core';
 
 import { activationCommand } from './commands/activation.js';
+import { fixturesCommand } from './commands/fixtures.js';
+import { highlightsCommand } from './commands/highlights.js';
+import { liveCommand } from './commands/live.js';
+import { matchCommand } from './commands/match.js';
+import { playerCommand } from './commands/player.js';
+import { resultsCommand } from './commands/results.js';
 import { searchCommand } from './commands/search.js';
+import { standingsCommand } from './commands/standings.js';
 import { sportsCommand } from './commands/sports.js';
+import { teamCommand } from './commands/team.js';
 import { startLiveEventScheduler } from './live-event-runtime.js';
 import { mapSportsError, startSportsScheduler } from './sports-runtime.js';
 
@@ -37,8 +45,16 @@ const client = new Client({
 
 const commands = new Collection<string, Command>();
 commands.set(activationCommand.data.name, activationCommand as unknown as Command);
+commands.set(fixturesCommand.data.name, fixturesCommand as unknown as Command);
+commands.set(highlightsCommand.data.name, highlightsCommand as unknown as Command);
+commands.set(liveCommand.data.name, liveCommand as unknown as Command);
+commands.set(matchCommand.data.name, matchCommand as unknown as Command);
+commands.set(playerCommand.data.name, playerCommand as unknown as Command);
+commands.set(resultsCommand.data.name, resultsCommand as unknown as Command);
 commands.set(searchCommand.data.name, searchCommand as unknown as Command);
+commands.set(standingsCommand.data.name, standingsCommand as unknown as Command);
 commands.set(sportsCommand.data.name, sportsCommand as unknown as Command);
+commands.set(teamCommand.data.name, teamCommand as unknown as Command);
 
 client.once(Events.ClientReady, () => {
   logger.info({ botUser: client.user?.tag }, 'sports-worker ready');

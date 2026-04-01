@@ -8,6 +8,7 @@ import {
 } from 'discord.js';
 import {
   SportsAccessService,
+  SportsLiveEventService,
   SportsService,
   type SportsGuildConfigSummary,
   getEnv,
@@ -20,6 +21,7 @@ import {
 } from '../sports-runtime.js';
 
 const sportsAccessService = new SportsAccessService();
+const sportsLiveEventService = new SportsLiveEventService();
 const sportsService = new SportsService();
 
 function isSuperAdminUser(discordUserId: string): boolean {
@@ -141,6 +143,45 @@ function buildSportsStatusMessage(input: {
   ].join('\n');
 }
 
+function buildSportsLiveStatusMessage(input: {
+  trackedEvents: Array<{
+    status: 'scheduled' | 'live' | 'finished' | 'cleanup_due' | 'deleted' | 'failed';
+    lastSyncedAtUtc: Date | null;
+  }>;
+  now: Date;
+  pollIntervalMs: number;
+}): string {
+  const trackedEvents = input.trackedEvents.filter((event) => event.status !== 'deleted');
+  const liveCount = trackedEvents.filter((event) => event.status === 'live').length;
+  const pendingCleanupCount = trackedEvents.filter((event) => event.status === 'cleanup_due').length;
+  const staleThresholdMs = Math.max(input.pollIntervalMs * 3, 5 * 60 * 1000);
+  const staleCount = trackedEvents.filter(
+    (event) =>
+      !event.lastSyncedAtUtc ||
+      input.now.getTime() - event.lastSyncedAtUtc.getTime() > staleThresholdMs,
+  ).length;
+  const latestSync = trackedEvents
+    .map((event) => event.lastSyncedAtUtc)
+    .filter((value): value is Date => value instanceof Date)
+    .sort((left, right) => right.getTime() - left.getTime())[0];
+
+  const syncHealth =
+    trackedEvents.length === 0
+      ? 'Idle'
+      : staleCount === 0
+        ? 'Healthy'
+        : `Degraded (${staleCount} stale tracked event${staleCount === 1 ? '' : 's'})`;
+
+  return [
+    'Sports live sync status for this server:',
+    `Tracked live events: ${trackedEvents.length}`,
+    `Currently live: ${liveCount}`,
+    `Pending cleanup: ${pendingCleanupCount}`,
+    `Sync health: ${syncHealth}`,
+    `Latest tracked sync (UTC): ${latestSync?.toISOString() ?? 'Never'}`,
+  ].join('\n');
+}
+
 function buildSetupMessage(input: {
   guildId: string;
   activated: boolean;
@@ -206,6 +247,11 @@ export const sportsCommand = {
       subcommand
         .setName('status')
         .setDescription('Show sports worker activation, schedule, and channel status'),
+    )
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName('live-status')
+        .setDescription('Show tracked live events, cleanup counts, and sync health'),
     ),
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     if (!interaction.inGuild() || !interaction.guild) {
@@ -262,6 +308,24 @@ export const sportsCommand = {
             authorizedUserCount: result.value.authorizedUserCount,
             channelCount: result.value.channelCount,
             config: result.value.config,
+          }),
+        );
+        return;
+      }
+
+      if (subcommand === 'live-status') {
+        const trackedEventsResult = await sportsLiveEventService.listTrackedEvents({ guildId });
+        if (trackedEventsResult.isErr()) {
+          await sendEphemeralReply(interaction, mapSportsError(trackedEventsResult.error));
+          return;
+        }
+
+        await sendEphemeralReply(
+          interaction,
+          buildSportsLiveStatusMessage({
+            trackedEvents: trackedEventsResult.value,
+            now: new Date(),
+            pollIntervalMs: getEnv().SPORTS_POLL_INTERVAL_MS,
           }),
         );
         return;
