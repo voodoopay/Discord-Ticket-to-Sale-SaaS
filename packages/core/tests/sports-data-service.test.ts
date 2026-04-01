@@ -523,4 +523,380 @@ describe('pickBestSportsSearchResult', () => {
       },
     ]);
   });
+
+  it('maps live scores into live event summaries', async () => {
+    process.env.SPORTS_API_KEY = 'premium-key';
+    process.env.SPORTS_API_BASE_URL = 'https://example.com/api/v2/json';
+    process.env.SPORTS_API_V1_BASE_URL = 'https://example.com/api/v1/json';
+    resetEnvForTests();
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          events: [
+            {
+              idEvent: 'evt-1',
+              strEvent: 'Rangers vs Celtic',
+              strSport: 'Soccer',
+              strLeague: 'Scottish Premiership',
+              strStatus: 'Live',
+              intHomeScore: '2',
+              intAwayScore: '1',
+              strHomeTeam: 'Rangers',
+              strAwayTeam: 'Celtic',
+              dateEvent: '2026-03-20',
+              strTime: '15:00:00',
+              strTimestamp: '2026-03-20T15:00:00+00:00',
+              strThumb: 'https://img.test/live-event.jpg',
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          tvshows: [
+            {
+              idChannel: 'chan-1',
+              strTvChannel: 'Sky Sports Main Event',
+              strCountry: 'United Kingdom',
+              strLogo: 'https://img.test/sky-logo.png',
+            },
+          ],
+        }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new SportsDataService();
+    const result = await service.listLiveEvents({
+      timezone: 'Europe/London',
+      broadcastCountry: 'United Kingdom',
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://example.com/api/v2/json/livescore/all');
+    expect(fetchMock.mock.calls[1]?.[0]).toBe('https://example.com/api/v1/json/premium-key/lookuptv.php?id=evt-1');
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) {
+      throw result.error;
+    }
+
+    expect(result.value[0]).toMatchObject({
+      eventId: 'evt-1',
+      eventName: 'Rangers vs Celtic',
+      sportName: 'Soccer',
+      leagueName: 'Scottish Premiership',
+      statusLabel: 'Live',
+      scoreLabel: '2-1',
+      startTimeUkLabel: '15:00',
+      imageUrl: 'https://img.test/live-event.jpg',
+      broadcasters: [
+        {
+          channelId: 'chan-1',
+          channelName: 'Sky Sports Main Event',
+          country: 'United Kingdom',
+          logoUrl: 'https://img.test/sky-logo.png',
+        },
+      ],
+    });
+  });
+
+  it('returns highlight links for a finished event', async () => {
+    process.env.SPORTS_API_KEY = 'premium-key';
+    process.env.SPORTS_API_BASE_URL = 'https://example.com/api/v2/json';
+    process.env.SPORTS_API_V1_BASE_URL = 'https://example.com/api/v1/json';
+    resetEnvForTests();
+
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      createJsonResponse({
+        highlights: [
+          {
+            idEvent: 'evt-1',
+            strSport: 'Soccer',
+            strEvent: 'Rangers vs Celtic',
+            strVideo: 'https://youtube.com/watch?v=highlights',
+            strFanart: 'https://img.test/highlights.jpg',
+          },
+        ],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new SportsDataService();
+    const result = await service.getEventHighlights({ eventId: 'evt-1' });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://example.com/api/v2/json/lookup/event_highlights/evt-1',
+      expect.objectContaining({
+        headers: {
+          'X-API-KEY': 'premium-key',
+        },
+      }),
+    );
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) {
+      throw result.error;
+    }
+
+    expect(result.value).toMatchObject({
+      eventId: 'evt-1',
+      eventName: 'Rangers vs Celtic',
+      sportName: 'Soccer',
+      videoUrl: 'https://youtube.com/watch?v=highlights',
+      imageUrl: 'https://img.test/highlights.jpg',
+    });
+  });
+
+  it('returns standings, fixtures, results, team, and player lookup payloads', async () => {
+    process.env.SPORTS_API_KEY = 'premium-key';
+    process.env.SPORTS_API_BASE_URL = 'https://example.com/api/v2/json';
+    process.env.SPORTS_API_V1_BASE_URL = 'https://example.com/api/v1/json';
+    resetEnvForTests();
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          search: [
+            {
+              idLeague: '4328',
+              strLeague: 'Scottish Premiership',
+              strSport: 'Soccer',
+              strBadge: 'https://img.test/league-badge.png',
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          table: [
+            {
+              name: 'Rangers',
+              teamid: '133642',
+              played: '30',
+              goalsfor: '65',
+              goalsagainst: '22',
+              goalsdifference: '43',
+              win: '21',
+              draw: '5',
+              loss: '4',
+              total: '68',
+              rank: '1',
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          search: [
+            {
+              idTeam: '133642',
+              strTeam: 'Rangers',
+              strTeamShort: 'RFC',
+              strAlternate: 'Glasgow Rangers',
+              strSport: 'Soccer',
+              strLeague: 'Scottish Premiership',
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          schedule: [
+            {
+              idEvent: 'fix-1',
+              strEvent: 'Rangers vs Hearts',
+              strLeague: 'Scottish Premiership',
+              strSport: 'Soccer',
+              dateEvent: '2026-03-25',
+              strThumb: 'https://img.test/fixture.jpg',
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          search: [
+            {
+              idTeam: '133642',
+              strTeam: 'Rangers',
+              strTeamShort: 'RFC',
+              strAlternate: 'Glasgow Rangers',
+              strSport: 'Soccer',
+              strLeague: 'Scottish Premiership',
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          schedule: [
+            {
+              idEvent: 'res-1',
+              strEvent: 'Celtic vs Rangers',
+              strLeague: 'Scottish Premiership',
+              strSport: 'Soccer',
+              dateEvent: '2026-03-18',
+              strThumb: 'https://img.test/result.jpg',
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          search: [
+            {
+              idTeam: '133642',
+              strTeam: 'Rangers',
+              strTeamShort: 'RFC',
+              strAlternate: 'Glasgow Rangers',
+              strSport: 'Soccer',
+              strLeague: 'Scottish Premiership',
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          teams: [
+            {
+              idTeam: '133642',
+              strTeam: 'Rangers',
+              strTeamShort: 'RFC',
+              strLeague: 'Scottish Premiership',
+              strSport: 'Soccer',
+              strCountry: 'Scotland',
+              strStadium: 'Ibrox Stadium',
+              strBadge: 'https://img.test/team-badge.png',
+              strTeamBanner: 'https://img.test/team-banner.jpg',
+              strDescriptionEN: 'Rangers Football Club',
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          player: [
+            {
+              idPlayer: '34145937',
+              strPlayer: 'James Tavernier',
+              strTeam: 'Rangers',
+              strPosition: 'Defender',
+              dateBorn: '1991-10-31',
+              strThumb: 'https://img.test/player-thumb.jpg',
+              strCutout: 'https://img.test/player-cutout.png',
+              strDescriptionEN: 'Captain of Rangers.',
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          player: [
+            {
+              idPlayer: '34145937',
+              strPlayer: 'James Tavernier',
+              strTeam: 'Rangers',
+              strPosition: 'Defender',
+              dateBorn: '1991-10-31',
+              strThumb: 'https://img.test/player-thumb.jpg',
+              strCutout: 'https://img.test/player-cutout.png',
+              strDescriptionEN: 'Captain of Rangers.',
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          players: [
+            {
+              idPlayer: '34145937',
+              strPlayer: 'James Tavernier',
+              strTeam: 'Rangers',
+              strPosition: 'Defender',
+              dateBorn: '1991-10-31',
+              strThumb: 'https://img.test/player-thumb.jpg',
+              strCutout: 'https://img.test/player-cutout.png',
+              strDescriptionEN: 'Captain of Rangers.',
+            },
+          ],
+        }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new SportsDataService();
+
+    const standings = await service.getStandings({ league: 'Scottish Premiership' });
+    const fixtures = await service.getFixtures({ query: 'Rangers' });
+    const results = await service.getResults({ query: 'Rangers' });
+    const team = await service.getTeamDetails({ query: 'Rangers' });
+    const player = await service.getPlayerDetails({ query: 'James Tavernier' });
+
+    expect(standings.isOk()).toBe(true);
+    expect(fixtures.isOk()).toBe(true);
+    expect(results.isOk()).toBe(true);
+    expect(team.isOk()).toBe(true);
+    expect(player.isOk()).toBe(true);
+
+    if (standings.isErr() || fixtures.isErr() || results.isErr() || team.isErr() || player.isErr()) {
+      throw new Error('Expected all service results to be ok');
+    }
+
+    expect(standings.value).toMatchObject({
+      leagueId: '4328',
+      leagueName: 'Scottish Premiership',
+      rows: [
+        {
+          rank: 1,
+          teamId: '133642',
+          teamName: 'Rangers',
+          points: 68,
+          played: 30,
+          goalDifference: 43,
+        },
+      ],
+    });
+
+    expect(fixtures.value).toEqual([
+      {
+        eventId: 'fix-1',
+        eventName: 'Rangers vs Hearts',
+        sportName: 'Soccer',
+        leagueName: 'Scottish Premiership',
+        dateEvent: '2026-03-25',
+        imageUrl: 'https://img.test/fixture.jpg',
+      },
+    ]);
+
+    expect(results.value).toEqual([
+      {
+        eventId: 'res-1',
+        eventName: 'Celtic vs Rangers',
+        sportName: 'Soccer',
+        leagueName: 'Scottish Premiership',
+        dateEvent: '2026-03-18',
+        imageUrl: 'https://img.test/result.jpg',
+      },
+    ]);
+
+    expect(team.value).toMatchObject({
+      teamId: '133642',
+      teamName: 'Rangers',
+      sportName: 'Soccer',
+      leagueName: 'Scottish Premiership',
+      country: 'Scotland',
+      stadiumName: 'Ibrox Stadium',
+      imageUrl: 'https://img.test/team-badge.png',
+    });
+
+    expect(player.value).toMatchObject({
+      playerId: '34145937',
+      playerName: 'James Tavernier',
+      teamName: 'Rangers',
+      position: 'Defender',
+      dateBorn: '1991-10-31',
+      imageUrl: 'https://img.test/player-thumb.jpg',
+    });
+  });
 });

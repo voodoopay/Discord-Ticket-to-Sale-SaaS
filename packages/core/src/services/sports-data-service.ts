@@ -61,6 +61,11 @@ type SportsApiV2EventLookup = {
   strFanart?: string | null;
   strThumb?: string | null;
   strBanner?: string | null;
+  strStatus?: string | null;
+  intHomeScore?: string | number | null;
+  intAwayScore?: string | number | null;
+  intScore?: string | number | null;
+  strVideo?: string | null;
 };
 
 type SportsApiV2EventSearchPayload = {
@@ -82,6 +87,19 @@ type SportsApiV2TeamSearchPayload = {
   teams?: SportsApiV2TeamSearch[] | null;
 };
 
+type SportsApiV2LeagueSearch = {
+  idLeague?: string | number | null;
+  strLeague?: string | null;
+  strSport?: string | null;
+  strBadge?: string | null;
+};
+
+type SportsApiV2LeagueSearchPayload = {
+  countries?: SportsApiV2LeagueSearch[] | null;
+  leagues?: SportsApiV2LeagueSearch[] | null;
+  search?: SportsApiV2LeagueSearch[] | null;
+};
+
 type SportsApiV2TeamScheduleEvent = {
   dateEvent?: string | null;
   idAwayTeam?: string | number | null;
@@ -99,6 +117,100 @@ type SportsApiV2TeamScheduleEvent = {
 
 type SportsApiV2TeamSchedulePayload = {
   schedule?: SportsApiV2TeamScheduleEvent[] | null;
+};
+
+type SportsApiV2LiveScoreEvent = {
+  idEvent?: string | number | null;
+  strEvent?: string | null;
+  strSport?: string | null;
+  strLeague?: string | null;
+  strStatus?: string | null;
+  intHomeScore?: string | number | null;
+  intAwayScore?: string | number | null;
+  intScore?: string | number | null;
+  dateEvent?: string | null;
+  strTime?: string | null;
+  strTimestamp?: string | null;
+  strThumb?: string | null;
+  strPoster?: string | null;
+  strHomeTeam?: string | null;
+  strAwayTeam?: string | null;
+};
+
+type SportsApiV2LiveScorePayload = {
+  events?: SportsApiV2LiveScoreEvent[] | null;
+  livescore?: SportsApiV2LiveScoreEvent[] | null;
+};
+
+type SportsApiV2EventHighlightsRow = {
+  idEvent?: string | number | null;
+  strEvent?: string | null;
+  strSport?: string | null;
+  strVideo?: string | null;
+  strThumb?: string | null;
+  strPoster?: string | null;
+  strFanart?: string | null;
+};
+
+type SportsApiV2EventHighlightsPayload = {
+  highlights?: SportsApiV2EventHighlightsRow[] | null;
+  lookup?: SportsApiV2EventHighlightsRow[] | null;
+};
+
+type SportsApiV1StandingsRow = {
+  name?: string | null;
+  teamid?: string | number | null;
+  played?: string | number | null;
+  goalsfor?: string | number | null;
+  goalsagainst?: string | number | null;
+  goalsdifference?: string | number | null;
+  win?: string | number | null;
+  draw?: string | number | null;
+  loss?: string | number | null;
+  total?: string | number | null;
+  rank?: string | number | null;
+};
+
+type SportsApiV1StandingsPayload = {
+  table?: SportsApiV1StandingsRow[] | null;
+};
+
+type SportsApiV2TeamLookup = {
+  idTeam?: string | number | null;
+  strTeam?: string | null;
+  strTeamShort?: string | null;
+  strLeague?: string | null;
+  strSport?: string | null;
+  strCountry?: string | null;
+  strStadium?: string | null;
+  strDescriptionEN?: string | null;
+  strBadge?: string | null;
+  strTeamBadge?: string | null;
+  strTeamBanner?: string | null;
+  strBanner?: string | null;
+};
+
+type SportsApiV2TeamLookupPayload = {
+  lookup?: SportsApiV2TeamLookup[] | null;
+  teams?: SportsApiV2TeamLookup[] | null;
+};
+
+type SportsApiV2Player = {
+  idPlayer?: string | number | null;
+  idTeam?: string | number | null;
+  strPlayer?: string | null;
+  strTeam?: string | null;
+  strPosition?: string | null;
+  dateBorn?: string | null;
+  strThumb?: string | null;
+  strCutout?: string | null;
+  strDescriptionEN?: string | null;
+};
+
+type SportsApiV2PlayerPayload = {
+  lookup?: SportsApiV2Player[] | null;
+  player?: SportsApiV2Player[] | null;
+  players?: SportsApiV2Player[] | null;
 };
 
 type SportsApiV1TvShow = {
@@ -172,6 +284,79 @@ export type SportsEventDetails = {
   imageUrl: string | null;
   description: string | null;
   broadcasters: SportsBroadcast[];
+};
+
+export type SportsLiveEvent = {
+  eventId: string;
+  eventName: string;
+  sportName: string | null;
+  leagueName: string | null;
+  statusLabel: string;
+  scoreLabel: string | null;
+  startTimeUkLabel: string | null;
+  imageUrl: string | null;
+  broadcasters: SportsBroadcast[];
+};
+
+export type SportsEventHighlight = {
+  eventId: string;
+  eventName: string | null;
+  sportName: string | null;
+  videoUrl: string;
+  imageUrl: string | null;
+};
+
+export type SportsStandingsRow = {
+  rank: number | null;
+  teamId: string | null;
+  teamName: string;
+  played: number | null;
+  wins: number | null;
+  draws: number | null;
+  losses: number | null;
+  goalsFor: number | null;
+  goalsAgainst: number | null;
+  goalDifference: number | null;
+  points: number | null;
+};
+
+export type SportsStandings = {
+  leagueId: string | null;
+  leagueName: string;
+  sportName: string | null;
+  imageUrl: string | null;
+  rows: SportsStandingsRow[];
+};
+
+export type SportsTeamPlayerSummary = {
+  playerId: string;
+  playerName: string;
+  position: string | null;
+  imageUrl: string | null;
+};
+
+export type SportsTeamDetails = {
+  teamId: string;
+  teamName: string;
+  sportName: string | null;
+  leagueName: string | null;
+  country: string | null;
+  stadiumName: string | null;
+  description: string | null;
+  imageUrl: string | null;
+  bannerUrl: string | null;
+  players: SportsTeamPlayerSummary[];
+};
+
+export type SportsPlayerDetails = {
+  playerId: string;
+  playerName: string;
+  teamName: string | null;
+  position: string | null;
+  dateBorn: string | null;
+  description: string | null;
+  imageUrl: string | null;
+  cutoutUrl: string | null;
 };
 
 type CacheEntry<T> = {
@@ -378,6 +563,38 @@ function extractTeamSearchRows(payload: SportsApiV2TeamSearchPayload): SportsApi
   return payload.search ?? payload.teams ?? [];
 }
 
+function extractLeagueSearchRows(payload: SportsApiV2LeagueSearchPayload): SportsApiV2LeagueSearch[] {
+  return payload.search ?? payload.leagues ?? payload.countries ?? [];
+}
+
+function extractLiveScoreRows(payload: SportsApiV2LiveScorePayload): SportsApiV2LiveScoreEvent[] {
+  return payload.events ?? payload.livescore ?? [];
+}
+
+function extractEventHighlightsRows(
+  payload: SportsApiV2EventHighlightsPayload,
+): SportsApiV2EventHighlightsRow[] {
+  return payload.highlights ?? payload.lookup ?? [];
+}
+
+function extractTeamLookupRows(payload: SportsApiV2TeamLookupPayload): SportsApiV2TeamLookup[] {
+  return payload.lookup ?? payload.teams ?? [];
+}
+
+function extractPlayerRows(payload: SportsApiV2PlayerPayload): SportsApiV2Player[] {
+  return payload.lookup ?? payload.player ?? payload.players ?? [];
+}
+
+function toNumberValue(value: string | number | null | undefined): number | null {
+  const normalized = firstNonEmpty(value);
+  if (!normalized) {
+    return null;
+  }
+
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function pickBestTeamSearchResult(
   query: string,
   results: SportsApiV2TeamSearch[],
@@ -408,6 +625,63 @@ function pickBestTeamSearchResult(
 
   scored.sort((left, right) => right.score - left.score);
   return scored[0]?.result ?? null;
+}
+
+function pickBestLeagueSearchResult(
+  query: string,
+  results: SportsApiV2LeagueSearch[],
+): SportsApiV2LeagueSearch | null {
+  const normalizedQuery = normalizeForSearch(query);
+  const scored = results.map((result) => {
+    const leagueName = normalizeForSearch(firstNonEmpty(result.strLeague) ?? '');
+    let score = 0;
+
+    if (leagueName === normalizedQuery) {
+      score += 100;
+    }
+    if (leagueName.includes(normalizedQuery) || normalizedQuery.includes(leagueName)) {
+      score += 30;
+    }
+
+    return { result, score };
+  });
+
+  scored.sort((left, right) => right.score - left.score);
+  return scored[0]?.result ?? null;
+}
+
+function pickBestPlayerResult(query: string, results: SportsApiV2Player[]): SportsApiV2Player | null {
+  const normalizedQuery = normalizeForSearch(query);
+  const scored = results.map((result) => {
+    const playerName = normalizeForSearch(firstNonEmpty(result.strPlayer) ?? '');
+    let score = 0;
+
+    if (playerName === normalizedQuery) {
+      score += 100;
+    }
+    if (playerName.includes(normalizedQuery) || normalizedQuery.includes(playerName)) {
+      score += 30;
+    }
+
+    return { result, score };
+  });
+
+  scored.sort((left, right) => right.score - left.score);
+  return scored[0]?.result ?? null;
+}
+
+function buildScoreLabel(input: {
+  homeScore?: string | number | null;
+  awayScore?: string | number | null;
+  score?: string | number | null;
+}): string | null {
+  const homeScore = firstNonEmpty(input.homeScore);
+  const awayScore = firstNonEmpty(input.awayScore);
+  if (homeScore && awayScore) {
+    return `${homeScore}-${awayScore}`;
+  }
+
+  return firstNonEmpty(input.score);
 }
 
 export function pickBestSportsSearchResult(
@@ -579,6 +853,38 @@ export class SportsDataService {
         imageUrl: firstNonEmpty(row.strThumb, row.strEventThumb, row.strPoster),
       }))
       .filter((result) => result.eventId.length > 0 && result.eventName.length > 0);
+  }
+
+  private pickVisibleBroadcasters(input: {
+    broadcasters: SportsBroadcast[];
+    broadcastCountry: string;
+  }): SportsBroadcast[] {
+    const countryMatches = input.broadcasters.filter((broadcaster) =>
+      matchesCountry({
+        actual: broadcaster.country,
+        expected: input.broadcastCountry,
+      }),
+    );
+
+    return (countryMatches.length > 0 ? countryMatches : input.broadcasters).sort((left, right) =>
+      left.channelName.localeCompare(right.channelName, UK_LOCALE),
+    );
+  }
+
+  private async lookupTeam(query: string): Promise<SportsApiV2TeamSearch | null> {
+    const teamPayload = await this.requestV2<SportsApiV2TeamSearchPayload>({
+      path: `/search/team/${toApiPathSegment(query)}`,
+    });
+
+    return pickBestTeamSearchResult(query, extractTeamSearchRows(teamPayload));
+  }
+
+  private async lookupLeague(query: string): Promise<SportsApiV2LeagueSearch | null> {
+    const leaguePayload = await this.requestV2<SportsApiV2LeagueSearchPayload>({
+      path: `/search/league/${toApiPathSegment(query)}`,
+    });
+
+    return pickBestLeagueSearchResult(query, extractLeagueSearchRows(leaguePayload));
   }
 
   private async searchHeadToHeadEvents(query: string): Promise<SportsSearchResult[]> {
@@ -957,18 +1263,10 @@ export class SportsDataService {
         date: event.dateEvent,
         time: event.strTime,
       });
-      const broadcasters = extractTvBroadcasts(tvPayload);
-
-      const countryMatches = broadcasters.filter(
-        (broadcaster) =>
-          matchesCountry({
-            actual: broadcaster.country,
-            expected: input.broadcastCountry,
-          }),
-      );
-      const visibleBroadcasters = (countryMatches.length > 0 ? countryMatches : broadcasters).sort((left, right) =>
-        left.channelName.localeCompare(right.channelName, UK_LOCALE),
-      );
+      const visibleBroadcasters = this.pickVisibleBroadcasters({
+        broadcasters: extractTvBroadcasts(tvPayload),
+        broadcastCountry: input.broadcastCountry,
+      });
 
       return ok({
         eventId: firstNonEmpty(event.idEvent) ?? input.eventId,
@@ -989,6 +1287,304 @@ export class SportsDataService {
         ),
         description: firstNonEmpty(event.strDescriptionEN),
         broadcasters: visibleBroadcasters,
+      });
+    } catch (error) {
+      return err(this.toSportsApiError(error));
+    }
+  }
+
+  public async listLiveEvents(input: {
+    timezone: string;
+    broadcastCountry: string;
+  }): Promise<Result<SportsLiveEvent[], AppError>> {
+    try {
+      const payload = await this.requestV2<SportsApiV2LiveScorePayload>({
+        path: '/livescore/all',
+      });
+
+      const events = extractLiveScoreRows(payload);
+      const results = await Promise.all(
+        events.map(async (event) => {
+          const eventId = firstNonEmpty(event.idEvent);
+          const eventName = firstNonEmpty(
+            event.strEvent,
+            firstNonEmpty(event.strHomeTeam) && firstNonEmpty(event.strAwayTeam)
+              ? `${firstNonEmpty(event.strHomeTeam)} vs ${firstNonEmpty(event.strAwayTeam)}`
+              : null,
+          );
+          if (!eventId || !eventName) {
+            return null;
+          }
+
+          let broadcasters: SportsBroadcast[] = [];
+          try {
+            const tvPayload = await this.requestV1<SportsApiTvPayload>({
+              endpoint: 'lookuptv.php',
+              params: {
+                id: eventId,
+              },
+            });
+            broadcasters = this.pickVisibleBroadcasters({
+              broadcasters: extractTvBroadcasts(tvPayload),
+              broadcastCountry: input.broadcastCountry,
+            });
+          } catch {
+            broadcasters = [];
+          }
+
+          const eventDateTime = parseUtcDateTime({
+            timestamp: event.strTimestamp,
+            date: event.dateEvent,
+            time: event.strTime,
+          });
+
+          return {
+            eventId,
+            eventName,
+            sportName: firstNonEmpty(event.strSport),
+            leagueName: firstNonEmpty(event.strLeague),
+            statusLabel: firstNonEmpty(event.strStatus) ?? 'Live',
+            scoreLabel: buildScoreLabel({
+              homeScore: event.intHomeScore,
+              awayScore: event.intAwayScore,
+              score: event.intScore,
+            }),
+            startTimeUkLabel: eventDateTime ? formatUkTime(eventDateTime, input.timezone) : null,
+            imageUrl: firstNonEmpty(event.strThumb, event.strPoster),
+            broadcasters,
+          } satisfies SportsLiveEvent;
+        }),
+      );
+
+      return ok(
+        results
+          .filter((event): event is SportsLiveEvent => event !== null)
+          .sort((left, right) => left.eventName.localeCompare(right.eventName, UK_LOCALE)),
+      );
+    } catch (error) {
+      return err(this.toSportsApiError(error));
+    }
+  }
+
+  public async getEventHighlights(input: {
+    eventId: string;
+  }): Promise<Result<SportsEventHighlight | null, AppError>> {
+    try {
+      const payload = await this.requestV2<SportsApiV2EventHighlightsPayload>({
+        path: `/lookup/event_highlights/${encodeURIComponent(input.eventId)}`,
+      });
+      const highlight = extractEventHighlightsRows(payload)[0];
+
+      if (!highlight) {
+        return ok(null);
+      }
+
+      const videoUrl = firstNonEmpty(highlight.strVideo);
+      if (!videoUrl) {
+        return ok(null);
+      }
+
+      return ok({
+        eventId: firstNonEmpty(highlight.idEvent) ?? input.eventId,
+        eventName: firstNonEmpty(highlight.strEvent),
+        sportName: firstNonEmpty(highlight.strSport),
+        videoUrl,
+        imageUrl: firstNonEmpty(highlight.strThumb, highlight.strPoster, highlight.strFanart),
+      });
+    } catch (error) {
+      return err(this.toSportsApiError(error));
+    }
+  }
+
+  public async getStandings(input: {
+    league: string;
+  }): Promise<Result<SportsStandings | null, AppError>> {
+    try {
+      const league = await this.lookupLeague(input.league);
+      const leagueId = firstNonEmpty(league?.idLeague);
+      if (!league || !leagueId) {
+        return ok(null);
+      }
+
+      const payload = await this.requestV1<SportsApiV1StandingsPayload>({
+        endpoint: 'lookuptable.php',
+        params: {
+          l: leagueId,
+        },
+      });
+
+      return ok({
+        leagueId,
+        leagueName: firstNonEmpty(league.strLeague) ?? input.league,
+        sportName: firstNonEmpty(league.strSport),
+        imageUrl: firstNonEmpty(league.strBadge),
+        rows: (payload.table ?? [])
+          .map((row) => {
+            const teamName = firstNonEmpty(row.name);
+            if (!teamName) {
+              return null;
+            }
+
+            return {
+              rank: toNumberValue(row.rank),
+              teamId: firstNonEmpty(row.teamid),
+              teamName,
+              played: toNumberValue(row.played),
+              wins: toNumberValue(row.win),
+              draws: toNumberValue(row.draw),
+              losses: toNumberValue(row.loss),
+              goalsFor: toNumberValue(row.goalsfor),
+              goalsAgainst: toNumberValue(row.goalsagainst),
+              goalDifference: toNumberValue(row.goalsdifference),
+              points: toNumberValue(row.total),
+            } satisfies SportsStandingsRow;
+          })
+          .filter((row): row is SportsStandingsRow => row !== null),
+      });
+    } catch (error) {
+      return err(this.toSportsApiError(error));
+    }
+  }
+
+  public async getFixtures(input: {
+    query: string;
+  }): Promise<Result<SportsSearchResult[], AppError>> {
+    try {
+      const team = await this.lookupTeam(input.query);
+      const teamId = firstNonEmpty(team?.idTeam);
+      if (teamId) {
+        const payload = await this.requestV2<SportsApiV2TeamSchedulePayload>({
+          path: `/schedule/next/team/${encodeURIComponent(teamId)}`,
+        });
+        return ok(this.mapTeamScheduleResults(payload.schedule ?? []));
+      }
+
+      const league = await this.lookupLeague(input.query);
+      const leagueId = firstNonEmpty(league?.idLeague);
+      if (!leagueId) {
+        return ok([]);
+      }
+
+      const payload = await this.requestV2<SportsApiV2TeamSchedulePayload>({
+        path: `/schedule/next/league/${encodeURIComponent(leagueId)}`,
+      });
+      return ok(this.mapTeamScheduleResults(payload.schedule ?? []));
+    } catch (error) {
+      return err(this.toSportsApiError(error));
+    }
+  }
+
+  public async getResults(input: {
+    query: string;
+  }): Promise<Result<SportsSearchResult[], AppError>> {
+    try {
+      const team = await this.lookupTeam(input.query);
+      const teamId = firstNonEmpty(team?.idTeam);
+      if (teamId) {
+        const payload = await this.requestV2<SportsApiV2TeamSchedulePayload>({
+          path: `/schedule/previous/team/${encodeURIComponent(teamId)}`,
+        });
+        return ok(this.mapTeamScheduleResults(payload.schedule ?? []));
+      }
+
+      const league = await this.lookupLeague(input.query);
+      const leagueId = firstNonEmpty(league?.idLeague);
+      if (!leagueId) {
+        return ok([]);
+      }
+
+      const payload = await this.requestV2<SportsApiV2TeamSchedulePayload>({
+        path: `/schedule/previous/league/${encodeURIComponent(leagueId)}`,
+      });
+      return ok(this.mapTeamScheduleResults(payload.schedule ?? []));
+    } catch (error) {
+      return err(this.toSportsApiError(error));
+    }
+  }
+
+  public async getTeamDetails(input: {
+    query: string;
+  }): Promise<Result<SportsTeamDetails | null, AppError>> {
+    try {
+      const team = await this.lookupTeam(input.query);
+      const teamId = firstNonEmpty(team?.idTeam);
+      if (!team || !teamId) {
+        return ok(null);
+      }
+
+      const [teamPayload, playersPayload] = await Promise.all([
+        this.requestV2<SportsApiV2TeamLookupPayload>({
+          path: `/lookup/team/${encodeURIComponent(teamId)}`,
+        }),
+        this.requestV2<SportsApiV2PlayerPayload>({
+          path: `/list/players/${encodeURIComponent(teamId)}`,
+        }),
+      ]);
+
+      const teamDetails = extractTeamLookupRows(teamPayload)[0];
+      if (!teamDetails) {
+        return ok(null);
+      }
+
+      return ok({
+        teamId: firstNonEmpty(teamDetails.idTeam) ?? teamId,
+        teamName: firstNonEmpty(teamDetails.strTeam) ?? firstNonEmpty(team.strTeam) ?? input.query,
+        sportName: firstNonEmpty(teamDetails.strSport, team.strSport),
+        leagueName: firstNonEmpty(teamDetails.strLeague, team.strLeague),
+        country: firstNonEmpty(teamDetails.strCountry),
+        stadiumName: firstNonEmpty(teamDetails.strStadium),
+        description: firstNonEmpty(teamDetails.strDescriptionEN),
+        imageUrl: firstNonEmpty(teamDetails.strBadge, teamDetails.strTeamBadge),
+        bannerUrl: firstNonEmpty(teamDetails.strTeamBanner, teamDetails.strBanner),
+        players: extractPlayerRows(playersPayload)
+          .map((player) => {
+            const playerId = firstNonEmpty(player.idPlayer);
+            const playerName = firstNonEmpty(player.strPlayer);
+            if (!playerId || !playerName) {
+              return null;
+            }
+
+            return {
+              playerId,
+              playerName,
+              position: firstNonEmpty(player.strPosition),
+              imageUrl: firstNonEmpty(player.strThumb, player.strCutout),
+            } satisfies SportsTeamPlayerSummary;
+          })
+          .filter((player): player is SportsTeamPlayerSummary => player !== null),
+      });
+    } catch (error) {
+      return err(this.toSportsApiError(error));
+    }
+  }
+
+  public async getPlayerDetails(input: {
+    query: string;
+  }): Promise<Result<SportsPlayerDetails | null, AppError>> {
+    try {
+      const searchPayload = await this.requestV2<SportsApiV2PlayerPayload>({
+        path: `/search/player/${toApiPathSegment(input.query)}`,
+      });
+      const player = pickBestPlayerResult(input.query, extractPlayerRows(searchPayload));
+      const playerId = firstNonEmpty(player?.idPlayer);
+      if (!player || !playerId) {
+        return ok(null);
+      }
+
+      const lookupPayload = await this.requestV2<SportsApiV2PlayerPayload>({
+        path: `/lookup/player/${encodeURIComponent(playerId)}`,
+      });
+      const details = extractPlayerRows(lookupPayload)[0] ?? player;
+
+      return ok({
+        playerId: firstNonEmpty(details.idPlayer) ?? playerId,
+        playerName: firstNonEmpty(details.strPlayer) ?? input.query,
+        teamName: firstNonEmpty(details.strTeam),
+        position: firstNonEmpty(details.strPosition),
+        dateBorn: firstNonEmpty(details.dateBorn),
+        description: firstNonEmpty(details.strDescriptionEN),
+        imageUrl: firstNonEmpty(details.strThumb),
+        cutoutUrl: firstNonEmpty(details.strCutout),
       });
     } catch (error) {
       return err(this.toSportsApiError(error));
