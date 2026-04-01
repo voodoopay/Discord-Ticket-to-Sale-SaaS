@@ -9,6 +9,7 @@ export type SportsGuildConfigRecord = {
   guildId: string;
   enabled: boolean;
   managedCategoryChannelId: string | null;
+  liveCategoryChannelId?: string | null;
   localTimeHhmm: string;
   timezone: string;
   broadcastCountry: string;
@@ -39,6 +40,7 @@ function mapGuildConfigRow(
     guildId: row.guildId,
     enabled: row.enabled,
     managedCategoryChannelId: row.managedCategoryChannelId ?? null,
+    liveCategoryChannelId: row.liveCategoryChannelId ?? null,
     localTimeHhmm: row.localTimeHhmm,
     timezone: row.timezone,
     broadcastCountry: row.broadcastCountry,
@@ -80,6 +82,7 @@ export class SportsRepository {
   public async upsertGuildConfig(input: {
     guildId: string;
     managedCategoryChannelId: string | null;
+    liveCategoryChannelId: string | null;
     localTimeHhmm: string;
     timezone: string;
     broadcastCountry: string;
@@ -95,6 +98,7 @@ export class SportsRepository {
         .set({
           enabled: true,
           managedCategoryChannelId: input.managedCategoryChannelId,
+          liveCategoryChannelId: input.liveCategoryChannelId,
           localTimeHhmm: input.localTimeHhmm,
           timezone: input.timezone,
           broadcastCountry: input.broadcastCountry,
@@ -109,6 +113,7 @@ export class SportsRepository {
         guildId: input.guildId,
         enabled: true,
         managedCategoryChannelId: input.managedCategoryChannelId,
+        liveCategoryChannelId: input.liveCategoryChannelId,
         localTimeHhmm: input.localTimeHhmm,
         timezone: input.timezone,
         broadcastCountry: input.broadcastCountry,

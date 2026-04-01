@@ -198,6 +198,7 @@ SPORTS_API_V1_BASE_URL=https://www.thesportsdb.com/api/v1/json
 SPORTS_API_BASE_URL=https://www.thesportsdb.com/api/v2/json
 SPORTS_DEFAULT_TIMEZONE=Europe/London
 SPORTS_DEFAULT_PUBLISH_TIME=00:01
+# Default broadcaster-country filter used until a server overrides it with /sports setup or /sports sync.
 SPORTS_BROADCAST_COUNTRY=United Kingdom
 TELEGRAM_BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN
 TELEGRAM_BOT_USERNAME=YOUR_TELEGRAM_BOT_USERNAME
@@ -449,10 +450,11 @@ Make sure the sports bot app is also invited and has the permissions required by
 - `Manage Messages`
 - `Read Message History`
 
-The sports worker uses those permissions to manage persistent sport channels, create temporary live event channels, publish highlights, and clean up finished event channels 3 hours after the event ends.
+The sports worker uses those permissions to manage persistent sport channels, create temporary live event channels inside the configured live-event category, publish highlights, and clean up finished event channels 3 hours after the event ends.
 The sports worker also needs a paid `SPORTS_API_KEY` from TheSportsDB for full daily coverage. The public test key is not enough for a production sports schedule bot.
-By default, the sports worker publishes at `00:01` in `Europe/London`, and persistent sport channels only receive posts on days where that sport actually has televised events.
-Highlights can be auto-posted into temporary live event channels when available, and users can also request them on demand with `/highlights`.
+By default, the sports worker publishes at `00:01` in `Europe/London`, and persistent sport channels only receive posts on days where that sport actually has televised events. When a sport has no events that day, its channel is cleared and left empty.
+Highlights can be auto-posted into temporary live event channels when available, and users can also request them on demand with `/highlights`. Finished live-event channels keep the final score/state visible until the 3-hour cleanup window expires.
+New live-event channels are intentionally disabled until you configure a dedicated live-event category through `/sports setup live_category_name:<name>` or `/sports sync live_category_name:<name>`.
 
 After updates:
 

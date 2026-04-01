@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { MessageFlags, PermissionFlagsBits, type ChatInputCommandInteraction } from 'discord.js';
+import {
+  MessageFlags,
+  PermissionFlagsBits,
+  type APIApplicationCommandBasicOption,
+  type APIApplicationCommandSubcommandOption,
+  type ChatInputCommandInteraction,
+} from 'discord.js';
 
 vi.mock('@voodoo/core', () => {
   class SportsAccessService {
@@ -19,6 +25,10 @@ vi.mock('@voodoo/core', () => {
 
     public async getGuildConfig(): Promise<never> {
       throw new Error('Mock getGuildConfig not implemented');
+    }
+
+    public async upsertGuildConfig(): Promise<never> {
+      throw new Error('Mock upsertGuildConfig not implemented');
     }
 
     public async listChannelBindings(): Promise<never> {
@@ -108,6 +118,8 @@ function createInteractionMock(input?: {
   userId?: string;
   subcommand?: 'setup' | 'sync' | 'refresh' | 'status' | 'live-status';
   categoryName?: string | null;
+  broadcastCountry?: string | null;
+  liveCategoryName?: string | null;
 }): {
   interaction: ChatInputCommandInteraction;
   deferReply: ReturnType<typeof vi.fn>;
@@ -150,6 +162,12 @@ function createInteractionMock(input?: {
       getString: vi.fn((name: string) => {
         if (name === 'category_name') {
           return input?.categoryName ?? null;
+        }
+        if (name === 'broadcast_country') {
+          return input?.broadcastCountry ?? null;
+        }
+        if (name === 'live_category_name') {
+          return input?.liveCategoryName ?? null;
         }
 
         return null;
@@ -500,5 +518,50 @@ describe('sports command', () => {
     expect(rugbyChannel.bulkDelete).toHaveBeenCalled();
     expect(rugbyChannel.send).not.toHaveBeenCalled();
     expect(soccerChannel.send).toHaveBeenCalled();
+  });
+
+  it('exposes broadcaster-country options on setup and sync', () => {
+    const commandJson = sportsCommand.data.toJSON();
+    const topLevelOptions = (commandJson.options ?? []) as APIApplicationCommandSubcommandOption[];
+    const setup = topLevelOptions.find((option) => option.name === 'setup');
+    const sync = topLevelOptions.find((option) => option.name === 'sync');
+
+    expect((setup?.options ?? []).some((option: APIApplicationCommandBasicOption) => option.name === 'broadcast_country')).toBe(true);
+    expect((sync?.options ?? []).some((option: APIApplicationCommandBasicOption) => option.name === 'broadcast_country')).toBe(true);
+    expect((setup?.options ?? []).some((option: APIApplicationCommandBasicOption) => option.name === 'live_category_name')).toBe(true);
+    expect((sync?.options ?? []).some((option: APIApplicationCommandBasicOption) => option.name === 'live_category_name')).toBe(true);
+  });
+
+  it('passes the selected broadcaster country and live category into setup sync', async () => {
+    process.env.SUPER_ADMIN_DISCORD_IDS = 'owner-1';
+    resetEnvForTests();
+
+    vi.spyOn(SportsAccessService.prototype, 'getGuildActivationState').mockResolvedValue(
+      createOkResult({
+        activated: true,
+        authorizedUserCount: 1,
+      }) as Awaited<ReturnType<SportsAccessService['getGuildActivationState']>>,
+    );
+
+    const sportsRuntime = await import('../sports-runtime.js');
+    const { interaction } = createInteractionMock({
+      userId: 'owner-1',
+      subcommand: 'setup',
+      categoryName: 'Sports Listings',
+      broadcastCountry: 'United States',
+      liveCategoryName: 'Live Sports',
+    });
+
+    await sportsCommand.execute(interaction);
+
+    expect(sportsRuntime.syncSportsGuildChannels).toHaveBeenCalledWith(
+      expect.objectContaining({
+        guild: interaction.guild,
+        actorDiscordUserId: 'owner-1',
+        categoryName: 'Sports Listings',
+        broadcastCountry: 'United States',
+        liveCategoryName: 'Live Sports',
+      }),
+    );
   });
 });

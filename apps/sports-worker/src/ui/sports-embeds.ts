@@ -27,6 +27,10 @@ function formatBroadcasters(value: { channelName: string; country: string | null
   return remaining > 0 ? `${visible.join(', ')}\n+ ${remaining} more channel(s)` : visible.join(', ');
 }
 
+function buildTimezoneFooter(timezone: string): string {
+  return `Times shown in the configured server timezone (${timezone}).`;
+}
+
 export function buildSportHeaderMessage(input: {
   sportName: string;
   dateLabel: string;
@@ -75,13 +79,13 @@ export function buildEmptySportEmbed(input: {
     );
 }
 
-export function buildSportEventEmbed(listing: SportsListing): EmbedBuilder {
+export function buildSportEventEmbed(listing: SportsListing, timezone: string): EmbedBuilder {
   const embed = new EmbedBuilder()
     .setColor(SPORTS_COLOR)
     .setTitle(listing.eventName)
     .setDescription(
       [
-        `Start time (UK): **${listing.startTimeUkLabel}**`,
+        `Start time (${timezone}): **${listing.startTimeUkLabel}**`,
         `Channels: ${formatBroadcasters(listing.broadcasters)}`,
         listing.eventCountry ? `Event country: ${listing.eventCountry}` : null,
         listing.season ? `Season: ${listing.season}` : null,
@@ -89,7 +93,7 @@ export function buildSportEventEmbed(listing: SportsListing): EmbedBuilder {
         .filter(Boolean)
         .join('\n'),
     )
-    .setFooter({ text: 'Times shown in UK time (Europe/London).' });
+    .setFooter({ text: buildTimezoneFooter(timezone) });
 
   if (listing.imageUrl) {
     embed.setThumbnail(listing.imageUrl);
@@ -151,7 +155,7 @@ export function buildFinishedLiveEventEmbed(input: {
     );
 }
 
-export function buildSearchResultEmbed(details: SportsEventDetails): EmbedBuilder {
+export function buildSearchResultEmbed(details: SportsEventDetails, timezone: string): EmbedBuilder {
   const embed = new EmbedBuilder()
     .setColor(SPORTS_COLOR)
     .setTitle(details.eventName)
@@ -160,7 +164,7 @@ export function buildSearchResultEmbed(details: SportsEventDetails): EmbedBuilde
         details.leagueName ? `League: **${details.leagueName}**` : null,
         details.sportName ? `Sport: **${details.sportName}**` : null,
         details.dateUkLabel ? `Date: **${details.dateUkLabel}**` : null,
-        details.startTimeUkLabel ? `Start time (UK): **${details.startTimeUkLabel}**` : null,
+        details.startTimeUkLabel ? `Start time (${timezone}): **${details.startTimeUkLabel}**` : null,
         details.venueName ? `Venue: ${details.venueName}` : null,
         details.city || details.country
           ? `Location: ${[details.city, details.country].filter(Boolean).join(', ')}`
@@ -170,7 +174,7 @@ export function buildSearchResultEmbed(details: SportsEventDetails): EmbedBuilde
         .filter(Boolean)
         .join('\n'),
     )
-    .setFooter({ text: 'Times shown in UK time (Europe/London).' });
+    .setFooter({ text: buildTimezoneFooter(timezone) });
 
   if (details.imageUrl) {
     embed.setThumbnail(details.imageUrl);

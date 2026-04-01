@@ -207,20 +207,20 @@ async function getManagedGuildContext(guildId: string): Promise<{
 
 async function fetchManagedCategory(
   guild: Guild,
-  config: SportsGuildConfigSummary | null,
+  categoryChannelId: string | null | undefined,
 ): Promise<CategoryChannel | null> {
-  if (!config?.managedCategoryChannelId) {
+  if (!categoryChannelId) {
     return null;
   }
 
-  const category = await guild.channels.fetch(config.managedCategoryChannelId).catch(() => null);
+  const category = await guild.channels.fetch(categoryChannelId).catch(() => null);
   return isCategoryChannel(category) ? category : null;
 }
 
 async function ensureSportChannelForLiveEvent(input: {
   guild: Guild;
   config: SportsGuildConfigSummary;
-  category: CategoryChannel;
+  listingsCategory: CategoryChannel;
   bindingsBySport: Map<string, SportsChannelBindingSummary>;
   usedNames: Set<string>;
   sportName: string;
@@ -241,7 +241,7 @@ async function ensureSportChannelForLiveEvent(input: {
     input.guild.channels.create({
       name: channelName,
       type: ChannelType.GuildText,
-      parent: input.category.id,
+      parent: input.listingsCategory.id,
       topic: buildManagedChannelTopic({
         timezone: input.config.timezone,
         publishTime: input.config.localTimeHhMm,
@@ -288,7 +288,6 @@ async function renderFinishedLiveEventChannel(input: {
   deleteAfterUtc: string;
 }): Promise<void> {
   await LIVE_EVENT_QUEUE.add(async () => {
-    await clearManagedChannel(input.channel);
     await input.channel.send({
       content: `**${input.eventName}**\nThis televised ${input.sportName} event has finished. This temporary channel will be deleted after the cleanup window ends.`,
     });
@@ -586,14 +585,15 @@ export async function reconcileLiveEventsForGuild(input: {
     };
   }
 
-  const category = await fetchManagedCategory(input.guild, config);
-  if (!category) {
+  const listingsCategory = await fetchManagedCategory(input.guild, config.managedCategoryChannelId);
+  if (!listingsCategory) {
     return {
       createdChannelCount: 0,
       updatedChannelCount: 0,
       markedFinishedCount: 0,
     };
   }
+  const liveCategory = await fetchManagedCategory(input.guild, config.liveCategoryChannelId ?? null);
 
   const liveEventsResult = await sportsDataService.listLiveEvents({
     timezone: input.timezone,
@@ -637,7 +637,7 @@ export async function reconcileLiveEventsForGuild(input: {
     const sportChannel = await ensureSportChannelForLiveEvent({
       guild: input.guild,
       config,
-      category,
+      listingsCategory,
       bindingsBySport,
       usedNames,
       sportName,
@@ -646,9 +646,11 @@ export async function reconcileLiveEventsForGuild(input: {
       continue;
     }
 
-    const parentId = sportChannel.parentId ?? category.id;
     const trackedEvent = trackedEventsByEventId.get(event.eventId) ?? null;
     const existingChannel = await fetchTrackedEventChannel(input.guild, trackedEvent?.eventChannelId ?? null);
+    if (!existingChannel && !liveCategory) {
+      continue;
+    }
     const desiredName = buildLiveEventChannelName(event.eventName);
     const desiredTopic = buildLiveEventChannelTopic(event.eventId);
     const adoptedChannel = existingChannel
@@ -658,7 +660,7 @@ export async function reconcileLiveEventsForGuild(input: {
           trackedEventChannelIds,
           desiredName,
           eventId: event.eventId,
-          parentIds: new Set([parentId, sportChannel.id]),
+          parentIds: liveCategory ? new Set([liveCategory.id]) : new Set<string>(),
         });
     const desiredExistingName = existingChannel
       ? reserveUniqueChannelName({
@@ -671,7 +673,7 @@ export async function reconcileLiveEventsForGuild(input: {
     const isPlacementUnchanged =
       existingChannel?.name === desiredExistingName &&
       existingChannel.topic === desiredTopic &&
-      (existingChannel.parentId ?? category.id) === parentId;
+      (liveCategory ? (existingChannel.parentId ?? null) === liveCategory.id : true);
     const isTrackedStateUnchanged =
       trackedEvent?.status === 'live' &&
       trackedEvent.eventChannelId === existingChannel?.id &&
@@ -709,11 +711,18 @@ export async function reconcileLiveEventsForGuild(input: {
         currentName: existingChannel.name,
       });
       await LIVE_EVENT_QUEUE.add(async () =>
-        existingChannel.edit({
-          name: reservedName,
-          parent: parentId,
-          topic: desiredTopic,
-        }),
+        existingChannel.edit(
+          liveCategory
+            ? {
+                name: reservedName,
+                parent: liveCategory.id,
+                topic: desiredTopic,
+              }
+            : {
+                name: reservedName,
+                topic: desiredTopic,
+              },
+        ),
       );
       updatedChannelCount += 1;
       targetChannel = existingChannel;
@@ -729,7 +738,7 @@ export async function reconcileLiveEventsForGuild(input: {
         input.guild.channels.create({
           name: reservedName,
           type: ChannelType.GuildText,
-          parent: parentId,
+          parent: liveCategory?.id,
           topic: desiredTopic,
           reason: `Create a temporary live event channel for ${event.eventName}.`,
         }),

@@ -145,6 +145,10 @@ describe('search command', () => {
     });
   });
 
+  it('does not describe search results as UK-only', () => {
+    expect(searchCommand.data.toJSON().description).not.toContain('UK');
+  });
+
   it('returns all upcoming sports event details found in the next 7 days', async () => {
     process.env.SUPER_ADMIN_DISCORD_IDS = 'owner-1';
     resetEnvForTests();

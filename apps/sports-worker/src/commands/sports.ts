@@ -129,13 +129,14 @@ function buildSportsStatusMessage(input: {
   }
 
   return [
-    'Sports worker status for this server:',
-    `Activation: ${input.activated ? 'Active' : 'Pending'}`,
-    `Authorized users: ${input.authorizedUserCount}`,
-    `Managed category: ${input.config.managedCategoryChannelId ? `<#${input.config.managedCategoryChannelId}>` : 'Not set'}`,
-    `Managed channels: ${input.channelCount}`,
-    `Publish time: ${input.config.localTimeHhMm}`,
-    `Timezone: ${input.config.timezone}`,
+      'Sports worker status for this server:',
+      `Activation: ${input.activated ? 'Active' : 'Pending'}`,
+      `Authorized users: ${input.authorizedUserCount}`,
+      `Managed category: ${input.config.managedCategoryChannelId ? `<#${input.config.managedCategoryChannelId}>` : 'Not set'}`,
+      `Live event category: ${input.config.liveCategoryChannelId ? `<#${input.config.liveCategoryChannelId}>` : 'Not set'}`,
+      `Managed channels: ${input.channelCount}`,
+      `Publish time: ${input.config.localTimeHhMm}`,
+      `Timezone: ${input.config.timezone}`,
     `Broadcaster country: ${input.config.broadcastCountry}`,
     `Next run (UTC): ${input.config.nextRunAtUtc}`,
     `Last run (UTC): ${input.config.lastRunAtUtc ?? 'Never'}`,
@@ -198,6 +199,7 @@ function buildSetupMessage(input: {
   const lines = [
     'Sports worker setup is complete for this server.',
     `Managed category: ${input.setup.config.managedCategoryChannelId ? `<#${input.setup.config.managedCategoryChannelId}>` : 'Not set'}`,
+    `Live event category: ${input.setup.config.liveCategoryChannelId ? `<#${input.setup.config.liveCategoryChannelId}>` : 'Not set'}`,
     `Tracked sport channels: ${input.setup.channelCount}`,
     `Channels created: ${input.setup.createdChannelCount}`,
     `Channels updated: ${input.setup.updatedChannelCount}`,
@@ -212,6 +214,10 @@ function buildSetupMessage(input: {
     );
   } else if (input.authorizedUserCount > 0) {
     lines.push(`Activation is active for ${input.authorizedUserCount} authorized user(s).`);
+  }
+
+  if (!input.setup.config.liveCategoryChannelId) {
+    lines.push('Live event channels are disabled until a live event category is configured.');
   }
 
   return lines.join('\n');
@@ -231,6 +237,18 @@ export const sportsCommand = {
             .setName('category_name')
             .setDescription('Optional category name for the managed sport channels')
             .setMaxLength(90),
+        )
+        .addStringOption((option) =>
+          option
+            .setName('broadcast_country')
+            .setDescription('Optional broadcaster country filter, for example United States')
+            .setMaxLength(120),
+        )
+        .addStringOption((option) =>
+          option
+            .setName('live_category_name')
+            .setDescription('Optional category name for live scores and highlights channels')
+            .setMaxLength(90),
         ),
     )
     .addSubcommand((subcommand) =>
@@ -241,6 +259,18 @@ export const sportsCommand = {
           option
             .setName('category_name')
             .setDescription('Optional category name for the managed sport channels')
+            .setMaxLength(90),
+        )
+        .addStringOption((option) =>
+          option
+            .setName('broadcast_country')
+            .setDescription('Optional broadcaster country filter, for example United States')
+            .setMaxLength(120),
+        )
+        .addStringOption((option) =>
+          option
+            .setName('live_category_name')
+            .setDescription('Optional category name for live scores and highlights channels')
             .setMaxLength(90),
         ),
     )
@@ -339,10 +369,14 @@ export const sportsCommand = {
 
       if (subcommand === 'sync') {
         const categoryName = interaction.options.getString('category_name');
+        const broadcastCountry = interaction.options.getString('broadcast_country');
+        const liveCategoryName = interaction.options.getString('live_category_name');
         const syncResult = await syncSportsGuildChannels({
           guild: interaction.guild,
           actorDiscordUserId: interaction.user.id,
           categoryName,
+          broadcastCountry,
+          liveCategoryName,
         });
 
         await sendEphemeralReply(
@@ -350,6 +384,7 @@ export const sportsCommand = {
           [
             'Sports channel sync completed.',
             `Managed category: ${syncResult.config.managedCategoryChannelId ? `<#${syncResult.config.managedCategoryChannelId}>` : 'Not set'}`,
+            `Live event category: ${syncResult.config.liveCategoryChannelId ? `<#${syncResult.config.liveCategoryChannelId}>` : 'Not set'}`,
             `Tracked sport channels: ${syncResult.channelCount}`,
             `Channels created: ${syncResult.createdChannelCount}`,
             `Channels updated: ${syncResult.updatedChannelCount}`,
@@ -379,12 +414,16 @@ export const sportsCommand = {
 
       if (subcommand === 'setup') {
         const categoryName = interaction.options.getString('category_name');
+        const broadcastCountry = interaction.options.getString('broadcast_country');
+        const liveCategoryName = interaction.options.getString('live_category_name');
         const [activationStateResult, syncResult] = await Promise.all([
           sportsAccessService.getGuildActivationState({ guildId }),
           syncSportsGuildChannels({
             guild: interaction.guild,
             actorDiscordUserId: interaction.user.id,
             categoryName,
+            broadcastCountry,
+            liveCategoryName,
           }),
         ]);
 

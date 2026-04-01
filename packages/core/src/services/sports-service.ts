@@ -1,6 +1,7 @@
 import { err, ok, type Result } from 'neverthrow';
 
 import { AppError } from '../domain/errors.js';
+import { getEnv } from '../config/env.js';
 import {
   SportsRepository,
   type SportsChannelBindingRecord,
@@ -19,6 +20,7 @@ export type SportsGuildConfigSummary = {
   guildId: string;
   enabled: boolean;
   managedCategoryChannelId: string | null;
+  liveCategoryChannelId?: string | null;
   localTimeHhMm: string;
   timezone: string;
   broadcastCountry: string;
@@ -49,6 +51,7 @@ function mapGuildConfigSummary(config: SportsGuildConfigRecord): SportsGuildConf
     guildId: config.guildId,
     enabled: config.enabled,
     managedCategoryChannelId: config.managedCategoryChannelId,
+    liveCategoryChannelId: config.liveCategoryChannelId,
     localTimeHhMm: config.localTimeHhmm,
     timezone: config.timezone,
     broadcastCountry: config.broadcastCountry,
@@ -74,6 +77,7 @@ function mapChannelBindingSummary(
 export class SportsService {
   private readonly sportsRepository = new SportsRepository();
   private readonly sportsAccessService = new SportsAccessService();
+  private readonly env = getEnv();
 
   public async getGuildStatus(input: {
     guildId: string;
@@ -122,6 +126,7 @@ export class SportsService {
   public async upsertGuildConfig(input: {
     guildId: string;
     managedCategoryChannelId: string | null;
+    liveCategoryChannelId: string | null;
     localTimeHhMm: string;
     timezone: string;
     broadcastCountry: string;
@@ -140,9 +145,10 @@ export class SportsService {
       const config = await this.sportsRepository.upsertGuildConfig({
         guildId: input.guildId,
         managedCategoryChannelId: input.managedCategoryChannelId,
+        liveCategoryChannelId: input.liveCategoryChannelId,
         localTimeHhmm: normalizedTime,
         timezone,
-        broadcastCountry: input.broadcastCountry.trim() || 'United Kingdom',
+        broadcastCountry: input.broadcastCountry.trim() || this.env.SPORTS_BROADCAST_COUNTRY,
         nextRunAtUtc,
         updatedByDiscordUserId: input.actorDiscordUserId,
       });

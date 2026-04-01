@@ -813,6 +813,7 @@ export const sportsGuildConfigs = mysqlTable(
     guildId: varchar('guild_id', { length: 32 }).notNull(),
     enabled: boolean('enabled').notNull().default(true),
     managedCategoryChannelId: varchar('managed_category_channel_id', { length: 32 }),
+    liveCategoryChannelId: varchar('live_category_channel_id', { length: 32 }),
     localTimeHhmm: varchar('local_time_hhmm', { length: 5 }).notNull(),
     timezone: varchar('timezone', { length: 64 }).notNull(),
     broadcastCountry: varchar('broadcast_country', { length: 120 }).notNull(),

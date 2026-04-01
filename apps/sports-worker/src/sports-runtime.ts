@@ -95,13 +95,13 @@ function isManagedTextChannel(channel: unknown): channel is TextChannel {
 
 async function ensureManagedCategory(input: {
   guild: Guild;
-  existingConfig: SportsGuildConfigSummary | null;
+  existingCategoryChannelId: string | null | undefined;
   categoryName: string | null;
 }): Promise<CategoryChannel> {
   const desiredName = input.categoryName?.trim() || DEFAULT_CATEGORY_NAME;
 
-  if (input.existingConfig?.managedCategoryChannelId) {
-    const existing = await input.guild.channels.fetch(input.existingConfig.managedCategoryChannelId).catch(() => null);
+  if (input.existingCategoryChannelId) {
+    const existing = await input.guild.channels.fetch(input.existingCategoryChannelId).catch(() => null);
     if (isCategoryChannel(existing)) {
       if (existing.name !== desiredName) {
         await existing.setName(desiredName);
@@ -116,6 +116,23 @@ async function ensureManagedCategory(input: {
   });
 
   return created;
+}
+
+async function ensureOptionalManagedCategory(input: {
+  guild: Guild;
+  existingCategoryChannelId: string | null | undefined;
+  categoryName: string | null;
+}): Promise<CategoryChannel | null> {
+  if (input.categoryName?.trim()) {
+    return ensureManagedCategory(input);
+  }
+
+  if (!input.existingCategoryChannelId) {
+    return null;
+  }
+
+  const existing = await input.guild.channels.fetch(input.existingCategoryChannelId).catch(() => null);
+  return isCategoryChannel(existing) ? existing : null;
 }
 
 async function ensureManagedTextChannel(input: {
@@ -254,6 +271,8 @@ export async function syncSportsGuildChannels(input: {
   guild: Guild;
   actorDiscordUserId: string;
   categoryName: string | null;
+  broadcastCountry?: string | null;
+  liveCategoryName?: string | null;
 }): Promise<{
   config: SportsGuildConfigSummary;
   channelCount: number;
@@ -267,16 +286,25 @@ export async function syncSportsGuildChannels(input: {
 
   const category = await ensureManagedCategory({
     guild: input.guild,
-    existingConfig: existingConfigResult.value,
+    existingCategoryChannelId: existingConfigResult.value?.managedCategoryChannelId,
     categoryName: input.categoryName,
+  });
+  const liveCategory = await ensureOptionalManagedCategory({
+    guild: input.guild,
+    existingCategoryChannelId: existingConfigResult.value?.liveCategoryChannelId,
+    categoryName: input.liveCategoryName ?? null,
   });
 
   const configResult = await sportsService.upsertGuildConfig({
     guildId: input.guild.id,
     managedCategoryChannelId: category.id,
-    localTimeHhMm: env.SPORTS_DEFAULT_PUBLISH_TIME,
-    timezone: env.SPORTS_DEFAULT_TIMEZONE,
-    broadcastCountry: env.SPORTS_BROADCAST_COUNTRY,
+    liveCategoryChannelId: liveCategory?.id ?? null,
+    localTimeHhMm: existingConfigResult.value?.localTimeHhMm ?? env.SPORTS_DEFAULT_PUBLISH_TIME,
+    timezone: existingConfigResult.value?.timezone ?? env.SPORTS_DEFAULT_TIMEZONE,
+    broadcastCountry:
+      input.broadcastCountry?.trim() ||
+      existingConfigResult.value?.broadcastCountry ||
+      env.SPORTS_BROADCAST_COUNTRY,
     actorDiscordUserId: input.actorDiscordUserId,
   });
   if (configResult.isErr()) {
@@ -421,7 +449,7 @@ export async function publishSportsForGuild(input: {
       }),
     });
 
-    const embeds = listings.map((listing) => buildSportEventEmbed(listing));
+    const embeds = listings.map((listing) => buildSportEventEmbed(listing, config.timezone));
     for (const embedChunk of chunkArray(embeds, 10)) {
       await channel.send({ embeds: embedChunk });
     }

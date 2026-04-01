@@ -77,7 +77,7 @@ function getSearchPermissionError(interaction: ChatInputCommandInteraction): str
 export const searchCommand = {
   data: new SlashCommandBuilder()
     .setName('search')
-    .setDescription('Search for a sports event and show the UK schedule details')
+    .setDescription('Search for a sports event and show the configured schedule details')
     .addStringOption((option) =>
       option
         .setName('query')
@@ -150,7 +150,7 @@ export const searchCommand = {
             return buildSearchFallbackEmbed(result);
           }
 
-          return buildSearchResultEmbed(detailsResult.value);
+          return buildSearchResultEmbed(detailsResult.value, timezone);
         }),
       );
 
