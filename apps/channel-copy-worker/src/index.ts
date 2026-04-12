@@ -10,6 +10,7 @@ import {
 import { getEnv, logger } from '@voodoo/core';
 
 import { activationCommand } from './commands/activation.js';
+import { channelCopyCommand } from './commands/channel-copy.js';
 
 type Command = {
   data: { name: string };
@@ -40,6 +41,7 @@ const client = new Client({
 
 const commands = new Collection<string, Command>();
 commands.set(activationCommand.data.name, activationCommand as unknown as Command);
+commands.set(channelCopyCommand.data.name, channelCopyCommand as unknown as Command);
 
 async function sendInteractionFailure(interaction: Interaction, message: string): Promise<void> {
   if (!interaction.isRepliable()) {

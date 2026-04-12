@@ -2,6 +2,7 @@ import { REST, Routes } from 'discord.js';
 import { getEnv, logger } from '@voodoo/core';
 
 import { activationCommand } from './commands/activation.js';
+import { channelCopyCommand } from './commands/channel-copy.js';
 
 function resolveDeployConfig(): { token: string; clientId: string } {
   const env = getEnv();
@@ -22,7 +23,7 @@ function resolveDeployConfig(): { token: string; clientId: string } {
 async function deploy(): Promise<void> {
   const { token, clientId } = resolveDeployConfig();
   const rest = new REST({ version: '10' }).setToken(token);
-  const payload = [activationCommand.data.toJSON()];
+  const payload = [channelCopyCommand.data.toJSON(), activationCommand.data.toJSON()];
   const guildId = process.env.DISCORD_TEST_GUILD_ID?.trim();
 
   if (guildId) {
