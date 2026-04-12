@@ -7,10 +7,10 @@ import {
   type ChatInputCommandInteraction,
   type Interaction,
 } from 'discord.js';
-import { getEnv, logger } from '@voodoo/core';
+import { ChannelCopyService, getEnv, logger } from '@voodoo/core';
 
 import { activationCommand } from './commands/activation.js';
-import { channelCopyCommand } from './commands/channel-copy.js';
+import { channelCopyCommand, createDiscordRuntimeAdapter } from './commands/channel-copy.js';
 
 type Command = {
   data: { name: string };
@@ -42,6 +42,9 @@ const client = new Client({
 const commands = new Collection<string, Command>();
 commands.set(activationCommand.data.name, activationCommand as unknown as Command);
 commands.set(channelCopyCommand.data.name, channelCopyCommand as unknown as Command);
+const channelCopyService = new ChannelCopyService();
+const CHANNEL_COPY_POLL_INTERVAL_MS = 5_000;
+let copyLoopRunning = false;
 
 async function sendInteractionFailure(interaction: Interaction, message: string): Promise<void> {
   if (!interaction.isRepliable()) {
@@ -78,8 +81,49 @@ async function handleInteraction(interaction: Interaction): Promise<void> {
   }
 }
 
+async function processQueuedCopyJobs(): Promise<void> {
+  if (copyLoopRunning) {
+    return;
+  }
+
+  copyLoopRunning = true;
+  try {
+    for (;;) {
+      const result = await channelCopyService.processNextCopyJob({
+        adapter: createDiscordRuntimeAdapter(client),
+      });
+      if (result.isErr()) {
+        logger.error({ err: result.error }, 'channel-copy-worker job processor failed');
+        return;
+      }
+
+      if (!result.value) {
+        return;
+      }
+
+      logger.info(
+        {
+          jobId: result.value.jobId,
+          status: result.value.status,
+          copiedMessageCount: result.value.copiedMessageCount,
+          skippedMessageCount: result.value.skippedMessageCount,
+          scannedMessageCount: result.value.scannedMessageCount,
+          failureMessage: result.value.failureMessage,
+        },
+        'channel-copy-worker processed job',
+      );
+    }
+  } finally {
+    copyLoopRunning = false;
+  }
+}
+
 client.once(Events.ClientReady, () => {
   logger.info({ botUser: client.user?.tag }, 'channel-copy-worker ready');
+  void processQueuedCopyJobs();
+  setInterval(() => {
+    void processQueuedCopyJobs();
+  }, CHANNEL_COPY_POLL_INTERVAL_MS);
 });
 
 client.on(Events.InteractionCreate, (interaction: Interaction) => {

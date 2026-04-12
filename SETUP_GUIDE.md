@@ -9,7 +9,7 @@ It is step-by-step and beginner-friendly, and includes:
 - PM2 process management
 - Nginx + SSL
 - Discord + WooCommerce integration basics
-- separate Discord workers for sales, join-gate verification, nuke, and sports listings/live events
+- separate Discord workers for sales, join-gate verification, nuke, sports listings/live events, and one-time channel copy backfills
 
 ---
 
@@ -191,6 +191,8 @@ JOIN_GATE_DISCORD_TOKEN=YOUR_JOIN_GATE_BOT_TOKEN
 JOIN_GATE_DISCORD_CLIENT_ID=YOUR_JOIN_GATE_BOT_CLIENT_ID
 SPORTS_DISCORD_TOKEN=YOUR_SPORTS_BOT_TOKEN
 SPORTS_DISCORD_CLIENT_ID=YOUR_SPORTS_BOT_CLIENT_ID
+CHANNEL_COPY_DISCORD_TOKEN=YOUR_CHANNEL_COPY_BOT_TOKEN
+CHANNEL_COPY_DISCORD_CLIENT_ID=YOUR_CHANNEL_COPY_BOT_CLIENT_ID
 SPORTS_POLL_INTERVAL_MS=30000
 SALES_HISTORY_POLL_INTERVAL_MS=30000
 SPORTS_API_KEY=YOUR_THESPORTSDB_PAID_API_KEY
@@ -248,8 +250,9 @@ pnpm deploy:commands
 ```
 
 Telegram does not require slash-command deployment. After the dashboard is online, generate a Telegram link command from `Workspace & Server`, add the Telegram bot to the target group, and run `/connect <token>` as a Telegram group admin. `TELEGRAM_BOT_USERNAME` is also required because `/sale` now hands customers off from the group into a private DM with the bot.
-`pnpm deploy:commands` now deploys the sales bot, join-gate bot, nuke bot, and sports bot command sets together.
+`pnpm deploy:commands` now deploys the sales bot, join-gate bot, nuke bot, sports bot, and channel-copy bot command sets together.
 The sports deployment now includes `/sports`, `/sports live-status`, `/search`, `/live`, `/highlights`, `/match`, `/standings`, `/fixtures`, `/results`, `/team`, `/player`, and `/activation`.
+The channel-copy deployment includes `/channel-copy run`, `/channel-copy status`, and `/activation`.
 
 ---
 
@@ -327,6 +330,16 @@ module.exports = {
         NODE_ENV: 'production'
       },
       env_file: '/var/www/voodoo/.env'
+    },
+    {
+      name: 'voodoo-channel-copy',
+      cwd: '/var/www/voodoo',
+      script: 'node',
+      args: 'apps/channel-copy-worker/dist/index.js',
+      env: {
+        NODE_ENV: 'production'
+      },
+      env_file: '/var/www/voodoo/.env'
     }
   ]
 };
@@ -357,6 +370,7 @@ pm2 logs voodoo-telegram --lines 100
 pm2 logs voodoo-join-gate --lines 100
 pm2 logs voodoo-nuke --lines 100
 pm2 logs voodoo-sports --lines 100
+pm2 logs voodoo-channel-copy --lines 100
 ```
 
 ---
@@ -456,6 +470,17 @@ By default, the sports worker publishes at `00:01` in `Europe/London`, and persi
 Highlights can be auto-posted into temporary live event channels when available, and users can also request them on demand with `/highlights`. Finished live-event channels keep the final score/state visible until the 3-hour cleanup window expires.
 New live-event channels are intentionally disabled until you configure a dedicated live-event category through `/sports setup live_category_name:<name>` or `/sports sync live_category_name:<name>`.
 
+### 14.5 Channel-copy bot app
+
+Make sure the channel-copy bot app is also invited anywhere you plan to copy from or copy into, and give it:
+
+- `View Channels`
+- `Read Message History`
+- `Send Messages`
+- `Attach Files`
+
+The bot must be able to read the source channel and post/upload in the destination channel. It can copy across different servers as long as it is present in both places.
+
 After updates:
 
 ```bash
@@ -467,6 +492,7 @@ pm2 restart voodoo-telegram
 pm2 start ecosystem.config.cjs --only voodoo-join-gate --update-env
 pm2 start ecosystem.config.cjs --only voodoo-nuke --update-env
 pm2 start ecosystem.config.cjs --only voodoo-sports --update-env
+pm2 start ecosystem.config.cjs --only voodoo-channel-copy --update-env
 pm2 save
 ```
 
@@ -541,6 +567,7 @@ pm2 restart voodoo-telegram
 pm2 start ecosystem.config.cjs --only voodoo-join-gate --update-env
 pm2 start ecosystem.config.cjs --only voodoo-nuke --update-env
 pm2 start ecosystem.config.cjs --only voodoo-sports --update-env
+pm2 start ecosystem.config.cjs --only voodoo-channel-copy --update-env
 pm2 save
 ```
 
@@ -634,6 +661,24 @@ Expected:
   - Use a Discord account listed in `SUPER_ADMIN_DISCORD_IDS`
   - Run `/join-gate authorized` to inspect the current allowlist
   - Run `/join-gate grant user:@someone` to activate the server for the first allowed user
+
+- Channel-copy worker offline:
+  - Verify `CHANNEL_COPY_DISCORD_TOKEN`
+  - Verify `CHANNEL_COPY_DISCORD_CLIENT_ID`
+  - If PM2 says `Process or Namespace voodoo-channel-copy not found`, register it first with `pm2 start ecosystem.config.cjs --only voodoo-channel-copy --update-env`
+  - Run `pm2 save` after it starts successfully
+  - Check `pm2 logs voodoo-channel-copy`
+
+- `/channel-copy` says the worker is locked for this server:
+  - The destination server has not been activated for channel-copy yet
+  - Use a Discord account listed in `SUPER_ADMIN_DISCORD_IDS`
+  - Run `/activation grant guild_id:<server-id> user_id:<user-id>` to authorize the first destination-server user
+  - Activation is separate from `/nuke`, `/sports`, and `/join-gate`
+
+- `/channel-copy` returns a `COPY-...` token:
+  - The destination channel already contains messages
+  - Rerun `/channel-copy run` with the same source and destination IDs plus `confirm:<token>`
+  - This confirmation is required before the worker appends into a non-empty destination
 
 - New members can still see the whole server before verification:
   - Your Discord channel permissions are too open

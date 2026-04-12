@@ -10,6 +10,10 @@ vi.mock('@voodoo/core', () => {
     public async startCopyRun(): Promise<never> {
       throw new Error('Mock startCopyRun not implemented');
     }
+
+    public async getJobStatus(): Promise<never> {
+      throw new Error('Mock getJobStatus not implemented');
+    }
   }
 
   class AppError extends Error {
@@ -48,9 +52,11 @@ function createOkResult<T>(value: T): { isErr: () => false; isOk: () => true; va
 
 function createInteractionMock(input?: {
   userId?: string;
+  subcommand?: 'run' | 'status';
   sourceChannelId?: string;
   destinationChannelId?: string;
   confirmToken?: string | null;
+  jobId?: string;
 }): {
   interaction: ChatInputCommandInteraction;
   deferReply: ReturnType<typeof vi.fn>;
@@ -74,7 +80,7 @@ function createInteractionMock(input?: {
     guildId: 'guild-dest',
     inGuild: vi.fn().mockReturnValue(true),
     options: {
-      getSubcommand: vi.fn().mockReturnValue('run'),
+      getSubcommand: vi.fn().mockReturnValue(input?.subcommand ?? 'run'),
       getString: vi.fn((name: string) => {
         if (name === 'source_channel_id') {
           return input?.sourceChannelId ?? '123456789012345678';
@@ -86,6 +92,10 @@ function createInteractionMock(input?: {
 
         if (name === 'confirm') {
           return input?.confirmToken ?? null;
+        }
+
+        if (name === 'job_id') {
+          return input?.jobId ?? 'job-2';
         }
 
         return null;
@@ -151,7 +161,7 @@ describe('channel-copy command', () => {
     });
   });
 
-  it('reports copied and skipped totals after a successful backfill', async () => {
+  it('queues the backfill and tells the operator to check the job later', async () => {
     vi.spyOn(ChannelCopyService.prototype, 'getCommandAccessState').mockResolvedValue(
       createOkResult({
         locked: true,
@@ -165,10 +175,10 @@ describe('channel-copy command', () => {
       .mockResolvedValue(
         createOkResult({
           jobId: 'job-2',
-          status: 'completed',
+          status: 'queued',
           requiresConfirmToken: null,
-          copiedMessageCount: 45,
-          skippedMessageCount: 3,
+          copiedMessageCount: 0,
+          skippedMessageCount: 0,
         }) as Awaited<ReturnType<ChannelCopyService['startCopyRun']>>,
       );
 
@@ -196,7 +206,40 @@ describe('channel-copy command', () => {
       }),
     );
     expect(editReply).toHaveBeenCalledWith({
-      content: 'Copy complete. Job ID: `job-2`. Copied 45 message(s) and skipped 3.',
+      content: 'Channel copy queued. Job ID: `job-2`. Use `/channel-copy status job_id:job-2` to check progress.',
+    });
+  });
+
+  it('shows copied, skipped, and scanned totals for a queued job status lookup', async () => {
+    vi.spyOn(ChannelCopyService.prototype, 'getCommandAccessState').mockResolvedValue(
+      createOkResult({
+        locked: true,
+        allowed: true,
+        activated: true,
+        authorizedUserCount: 1,
+      }) as Awaited<ReturnType<ChannelCopyService['getCommandAccessState']>>,
+    );
+    vi.spyOn(ChannelCopyService.prototype, 'getJobStatus').mockResolvedValue(
+      createOkResult({
+        jobId: 'job-2',
+        status: 'running',
+        copiedMessageCount: 12,
+        skippedMessageCount: 2,
+        scannedMessageCount: 14,
+        failureMessage: null,
+      }) as Awaited<ReturnType<ChannelCopyService['getJobStatus']>>,
+    );
+
+    const { interaction, editReply } = createInteractionMock({
+      subcommand: 'status',
+      jobId: 'job-2',
+    });
+
+    await channelCopyCommand.execute(interaction);
+
+    expect(editReply).toHaveBeenCalledWith({
+      content:
+        'Job `job-2` is `running`. Scanned 14 source message(s), copied 12, skipped 2.',
     });
   });
 });

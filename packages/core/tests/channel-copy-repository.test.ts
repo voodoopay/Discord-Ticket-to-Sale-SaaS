@@ -309,4 +309,51 @@ describe('ChannelCopyRepository', () => {
     expect(getOrderByColumnNames(query.orderBy)).toEqual(['updated_at', 'created_at']);
     expect(getStatusFilterValues(query.where)).toEqual(['awaiting_confirmation', 'queued', 'running']);
   });
+
+  it('prefers resuming a running job before taking a queued job', async () => {
+    const findFirst = vi
+      .fn()
+      .mockResolvedValueOnce({
+        id: 'job-running-1',
+        destinationGuildId: 'guild-9',
+        sourceGuildId: 'guild-1',
+        sourceChannelId: 'source-1',
+        destinationChannelId: 'dest-1',
+        requestedByDiscordUserId: 'user-1',
+        confirmToken: null,
+        status: 'running',
+        forceConfirmed: true,
+        startedAt: new Date('2026-04-12T09:05:30.000Z'),
+        finishedAt: null,
+        lastProcessedSourceMessageId: '1002',
+        scannedMessageCount: 2,
+        copiedMessageCount: 2,
+        skippedMessageCount: 0,
+        failureMessage: null,
+        createdAt: new Date('2026-04-12T09:05:00.000Z'),
+        updatedAt: new Date('2026-04-12T09:06:00.000Z'),
+      });
+
+    const repository = createRepositoryWithMockDb({
+      query: {
+        channelCopyAuthorizedUsers: {
+          findFirst: vi.fn(),
+        },
+        channelCopyJobs: {
+          findFirst,
+        },
+      },
+      insert: vi.fn(),
+      update: vi.fn(),
+    });
+
+    await expect(repository.findNextRunnableJob()).resolves.toEqual(
+      expect.objectContaining({
+        id: 'job-running-1',
+        status: 'running',
+        lastProcessedSourceMessageId: '1002',
+      }),
+    );
+    expect(findFirst).toHaveBeenCalledTimes(1);
+  });
 });

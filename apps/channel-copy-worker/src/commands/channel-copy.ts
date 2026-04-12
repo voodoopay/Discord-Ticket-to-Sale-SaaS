@@ -6,7 +6,6 @@ import {
   SlashCommandBuilder,
   type ChatInputCommandInteraction,
   type Client,
-  type GuildBasedChannel,
   type GuildTextBasedChannel,
   type NonThreadGuildBasedChannel,
 } from 'discord.js';
@@ -42,8 +41,61 @@ async function deferEphemeralReply(interaction: ChatInputCommandInteraction): Pr
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 }
 
+function renderSourceMessageContent(message: {
+  content: string;
+  embeds: Array<{
+    title: string | null;
+    description: string | null;
+    url: string | null;
+  }>;
+  stickers: Array<{ name: string }>;
+  components: Array<{
+    components?: Array<{
+      label?: string | null;
+      url?: string | null;
+      customId?: string | null;
+    }>;
+  }>;
+}): string {
+  const lines: string[] = [];
+  const trimmedContent = message.content.trim();
+  if (trimmedContent.length > 0) {
+    lines.push(trimmedContent);
+  }
+
+  for (const embed of message.embeds) {
+    if (embed.title) {
+      lines.push(`Embed title: ${embed.title}`);
+    }
+    if (embed.description) {
+      lines.push(`Embed description: ${embed.description}`);
+    }
+    if (embed.url) {
+      lines.push(`Embed URL: ${embed.url}`);
+    }
+  }
+
+  for (const sticker of message.stickers) {
+    lines.push(`Sticker: ${sticker.name}`);
+  }
+
+  for (const row of message.components) {
+    for (const component of row.components ?? []) {
+      if (component.label) {
+        lines.push(`Component: ${component.label}`);
+      } else if (component.url) {
+        lines.push(`Component URL: ${component.url}`);
+      } else if (component.customId) {
+        lines.push(`Component ID: ${component.customId}`);
+      }
+    }
+  }
+
+  return lines.join('\n').trim();
+}
+
 function hasGuildTextChannelShape(
-  channel: GuildBasedChannel,
+  channel: { type: ChannelType },
 ): channel is GuildTextBasedChannel & NonThreadGuildBasedChannel {
   return (
     channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildAnnouncement
@@ -55,7 +107,7 @@ async function fetchSupportedGuildTextChannel(
   channelId: string,
 ): Promise<GuildTextBasedChannel & NonThreadGuildBasedChannel> {
   const channel = await client.channels.fetch(channelId);
-  if (!channel || !channel.isTextBased() || !channel.inGuild() || !hasGuildTextChannelShape(channel)) {
+  if (!channel || !channel.isTextBased() || !('guildId' in channel) || !hasGuildTextChannelShape(channel)) {
     throw new AppError(
       'CHANNEL_COPY_INVALID_CHANNEL',
       'Only guild text and announcement channels are supported for channel copy.',
@@ -136,7 +188,46 @@ export function createDiscordRuntimeAdapter(client: Client): ChannelCopyRuntimeA
       return Promise.all(
         orderedMessages.map(async (message) => ({
           id: message.id,
-          content: message.content,
+          content: renderSourceMessageContent({
+            content: message.content,
+            embeds: message.embeds.map((embed) => ({
+              title: embed.title ?? null,
+              description: embed.description ?? null,
+              url: embed.url ?? null,
+            })),
+            stickers: [...message.stickers.values()].map((sticker) => ({
+              name: sticker.name,
+            })),
+            components: message.components
+              .filter((row): row is (typeof message.components)[number] & { components: unknown[] } =>
+                'components' in row,
+              )
+              .map((row) => ({
+                components: row.components.map((component) => ({
+                  label:
+                    typeof component === 'object' &&
+                    component !== null &&
+                    'label' in component &&
+                    typeof component.label === 'string'
+                      ? component.label
+                      : null,
+                  url:
+                    typeof component === 'object' &&
+                    component !== null &&
+                    'url' in component &&
+                    typeof component.url === 'string'
+                      ? component.url
+                      : null,
+                  customId:
+                    typeof component === 'object' &&
+                    component !== null &&
+                    'customId' in component &&
+                    typeof component.customId === 'string'
+                      ? component.customId
+                      : null,
+                })),
+              })),
+          }),
           attachments: await Promise.all(
             [...message.attachments.values()].map(async (attachment) => {
               const response = await fetch(attachment.url);
@@ -206,6 +297,19 @@ export const channelCopyCommand = {
             .setName('confirm')
             .setDescription('Force-confirm token returned when the destination is not empty'),
         ),
+    )
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName('status')
+        .setDescription('Check the status of a queued or completed channel-copy job')
+        .addStringOption((option) =>
+          option
+            .setName('job_id')
+            .setDescription('Channel-copy job ID')
+            .setRequired(true)
+            .setMinLength(26)
+            .setMaxLength(26),
+        ),
     ),
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     await deferEphemeralReply(interaction);
@@ -218,22 +322,17 @@ export const channelCopyCommand = {
     }
 
     const subcommand = interaction.options.getSubcommand(true);
-    if (subcommand !== 'run') {
-      await interaction.editReply({
-        content: `Unknown channel-copy subcommand: ${subcommand}`,
-      });
-      return;
-    }
 
-    const sourceChannelId = interaction.options.getString('source_channel_id', true).trim();
-    const destinationChannelId = interaction.options.getString('destination_channel_id', true).trim();
-    const confirmToken = interaction.options.getString('confirm');
+    if (subcommand === 'run') {
+      const sourceChannelId = interaction.options.getString('source_channel_id', true).trim();
+      const destinationChannelId = interaction.options.getString('destination_channel_id', true).trim();
 
-    if (sourceChannelId === destinationChannelId) {
-      await interaction.editReply({
-        content: 'Source and destination channels must be different.',
-      });
-      return;
+      if (sourceChannelId === destinationChannelId) {
+        await interaction.editReply({
+          content: 'Source and destination channels must be different.',
+        });
+        return;
+      }
     }
 
     const accessState = await channelCopyService.getCommandAccessState({
@@ -254,6 +353,34 @@ export const channelCopyCommand = {
       });
       return;
     }
+
+    if (subcommand === 'status') {
+      const jobId = interaction.options.getString('job_id', true).trim();
+      const result = await channelCopyService.getJobStatus({ jobId });
+      if (result.isErr()) {
+        await interaction.editReply({ content: mapChannelCopyError(result.error) });
+        return;
+      }
+
+      const failureSuffix = result.value.failureMessage
+        ? ` Failure: ${result.value.failureMessage}`
+        : '';
+      await interaction.editReply({
+        content: `Job \`${result.value.jobId}\` is \`${result.value.status}\`. Scanned ${result.value.scannedMessageCount} source message(s), copied ${result.value.copiedMessageCount}, skipped ${result.value.skippedMessageCount}.${failureSuffix}`,
+      });
+      return;
+    }
+
+    if (subcommand !== 'run') {
+      await interaction.editReply({
+        content: `Unknown channel-copy subcommand: ${subcommand}`,
+      });
+      return;
+    }
+
+    const sourceChannelId = interaction.options.getString('source_channel_id', true).trim();
+    const destinationChannelId = interaction.options.getString('destination_channel_id', true).trim();
+    const confirmToken = interaction.options.getString('confirm');
 
     const result = await channelCopyService.startCopyRun({
       sourceChannelId,
@@ -276,7 +403,7 @@ export const channelCopyCommand = {
     }
 
     await interaction.editReply({
-      content: `Copy complete. Job ID: \`${result.value.jobId}\`. Copied ${result.value.copiedMessageCount} message(s) and skipped ${result.value.skippedMessageCount}.`,
+      content: `Channel copy queued. Job ID: \`${result.value.jobId}\`. Use \`/channel-copy status job_id:${result.value.jobId}\` to check progress.`,
     });
   },
 };

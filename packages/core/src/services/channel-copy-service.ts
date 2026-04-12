@@ -6,7 +6,6 @@ import {
   ChannelCopyRepository,
   type ChannelCopyAuthorizedUserRecord,
   type ChannelCopyJobRecord,
-  type ChannelCopyJobStatus,
 } from '../repositories/channel-copy-repository.js';
 
 export type ChannelCopyAuthorizedUserSummary = {
@@ -54,10 +53,19 @@ export type ChannelCopyRuntimeAdapter = {
 
 export type ChannelCopyRunSummary = {
   jobId: string;
-  status: 'awaiting_confirmation' | 'completed';
+  status: 'awaiting_confirmation' | 'queued';
   requiresConfirmToken: string | null;
   copiedMessageCount: number;
   skippedMessageCount: number;
+};
+
+export type ChannelCopyJobStatusSummary = {
+  jobId: string;
+  status: ChannelCopyJobRecord['status'];
+  copiedMessageCount: number;
+  skippedMessageCount: number;
+  scannedMessageCount: number;
+  failureMessage: string | null;
 };
 
 type ChannelCopyRepositoryPort = Pick<
@@ -66,6 +74,8 @@ type ChannelCopyRepositoryPort = Pick<
   | 'upsertAuthorizedUser'
   | 'revokeAuthorizedUser'
   | 'findLatestIncompleteJob'
+  | 'findNextRunnableJob'
+  | 'getJobByIdOrNull'
   | 'createJob'
   | 'updateJob'
 >;
@@ -235,76 +245,52 @@ export class ChannelCopyService {
         });
       }
 
-      const startedJob =
-        jobToRun.status === 'running'
-          ? jobToRun
-          : await this.repository.updateJob({
-              jobId: jobToRun.id,
-              status: 'running',
-              forceConfirmed: jobToRun.forceConfirmed,
-              confirmToken: jobToRun.confirmToken,
-              startedAt: jobToRun.startedAt ?? new Date(),
-              finishedAt: null,
-            });
+      return ok({
+        jobId: jobToRun.id,
+        status: 'queued',
+        requiresConfirmToken: null,
+        copiedMessageCount: jobToRun.copiedMessageCount,
+        skippedMessageCount: jobToRun.skippedMessageCount,
+      });
+    } catch (error) {
+      return err(new AppError('CHANNEL_COPY_RUN_FAILED', fromUnknownError(error).message, 500));
+    }
+  }
 
-      let afterMessageId = startedJob.lastProcessedSourceMessageId;
-      let scannedMessageCount = startedJob.scannedMessageCount;
-      let copiedMessageCount = startedJob.copiedMessageCount;
-      let skippedMessageCount = startedJob.skippedMessageCount;
-
-      for (;;) {
-        const messages = await input.adapter.listSourceMessages({
-          channelId: input.sourceChannelId,
-          afterMessageId,
-          limit: 100,
-        });
-
-        if (messages.length === 0) {
-          break;
-        }
-
-        for (const message of messages) {
-          scannedMessageCount += 1;
-          afterMessageId = message.id;
-
-          if (shouldSkipMessage(message)) {
-            skippedMessageCount += 1;
-          } else {
-            await input.adapter.repostMessage({
-              channelId: input.destinationChannelId,
-              content: message.content,
-              attachments: message.attachments,
-            });
-            copiedMessageCount += 1;
-          }
-
-          await this.repository.updateJob({
-            jobId: startedJob.id,
-            lastProcessedSourceMessageId: afterMessageId,
-            scannedMessageCount,
-            copiedMessageCount,
-            skippedMessageCount,
-          });
-        }
+  public async getJobStatus(input: {
+    jobId: string;
+  }): Promise<Result<ChannelCopyJobStatusSummary, AppError>> {
+    try {
+      const job = await this.repository.getJobByIdOrNull(input.jobId);
+      if (!job) {
+        return err(
+          new AppError('CHANNEL_COPY_JOB_NOT_FOUND', 'No channel-copy job exists for that ID.', 404),
+        );
       }
 
-      const completedJob = await this.repository.updateJob({
-        jobId: startedJob.id,
-        status: 'completed',
-        finishedAt: new Date(),
-        lastProcessedSourceMessageId: afterMessageId,
-        scannedMessageCount,
-        copiedMessageCount,
-        skippedMessageCount,
-      });
-
       return ok({
-        jobId: completedJob.id,
-        status: 'completed',
-        requiresConfirmToken: null,
-        copiedMessageCount: completedJob.copiedMessageCount,
-        skippedMessageCount: completedJob.skippedMessageCount,
+        jobId: job.id,
+        status: job.status,
+        copiedMessageCount: job.copiedMessageCount,
+        skippedMessageCount: job.skippedMessageCount,
+        scannedMessageCount: job.scannedMessageCount,
+        failureMessage: job.failureMessage,
       });
+    } catch (error) {
+      return err(new AppError('CHANNEL_COPY_RUN_READ_FAILED', fromUnknownError(error).message, 500));
+    }
+  }
+
+  public async processNextCopyJob(input: {
+    adapter: ChannelCopyRuntimeAdapter;
+  }): Promise<Result<ChannelCopyJobStatusSummary | null, AppError>> {
+    try {
+      const job = await this.repository.findNextRunnableJob();
+      if (!job) {
+        return ok(null);
+      }
+
+      return ok(await this.processJob(job, input.adapter));
     } catch (error) {
       return err(new AppError('CHANNEL_COPY_RUN_FAILED', fromUnknownError(error).message, 500));
     }
@@ -374,5 +360,110 @@ export class ChannelCopyService {
       status: 'queued',
       forceConfirmed: false,
     });
+  }
+
+  private async processJob(
+    job: ChannelCopyJobRecord,
+    adapter: ChannelCopyRuntimeAdapter,
+  ): Promise<ChannelCopyJobStatusSummary> {
+    await adapter.assertReadableSource({ channelId: job.sourceChannelId });
+    await adapter.assertWritableDestination({ channelId: job.destinationChannelId });
+
+    let activeJob = job;
+
+    if (activeJob.status !== 'running') {
+      activeJob = await this.repository.updateJob({
+        jobId: activeJob.id,
+        status: 'running',
+        forceConfirmed: activeJob.forceConfirmed,
+        confirmToken: activeJob.confirmToken,
+        startedAt: activeJob.startedAt ?? new Date(),
+        finishedAt: null,
+        failureMessage: null,
+      });
+    }
+
+    let afterMessageId = activeJob.lastProcessedSourceMessageId;
+    let scannedMessageCount = activeJob.scannedMessageCount;
+    let copiedMessageCount = activeJob.copiedMessageCount;
+    let skippedMessageCount = activeJob.skippedMessageCount;
+
+    try {
+      for (;;) {
+        const messages = await adapter.listSourceMessages({
+          channelId: activeJob.sourceChannelId,
+          afterMessageId,
+          limit: 100,
+        });
+
+        if (messages.length === 0) {
+          break;
+        }
+
+        for (const message of messages) {
+          scannedMessageCount += 1;
+          afterMessageId = message.id;
+
+          if (shouldSkipMessage(message)) {
+            skippedMessageCount += 1;
+          } else {
+            await adapter.repostMessage({
+              channelId: activeJob.destinationChannelId,
+              content: message.content,
+              attachments: message.attachments,
+            });
+            copiedMessageCount += 1;
+          }
+
+          await this.repository.updateJob({
+            jobId: activeJob.id,
+            lastProcessedSourceMessageId: afterMessageId,
+            scannedMessageCount,
+            copiedMessageCount,
+            skippedMessageCount,
+          });
+        }
+      }
+
+      const completedJob = await this.repository.updateJob({
+        jobId: activeJob.id,
+        status: 'completed',
+        finishedAt: new Date(),
+        lastProcessedSourceMessageId: afterMessageId,
+        scannedMessageCount,
+        copiedMessageCount,
+        skippedMessageCount,
+      });
+
+      return {
+        jobId: completedJob.id,
+        status: completedJob.status,
+        copiedMessageCount: completedJob.copiedMessageCount,
+        skippedMessageCount: completedJob.skippedMessageCount,
+        scannedMessageCount: completedJob.scannedMessageCount,
+        failureMessage: completedJob.failureMessage,
+      };
+    } catch (error) {
+      const failure = fromUnknownError(error);
+      const failedJob = await this.repository.updateJob({
+        jobId: activeJob.id,
+        status: 'failed',
+        finishedAt: new Date(),
+        lastProcessedSourceMessageId: afterMessageId,
+        scannedMessageCount,
+        copiedMessageCount,
+        skippedMessageCount,
+        failureMessage: failure.message,
+      });
+
+      return {
+        jobId: failedJob.id,
+        status: failedJob.status,
+        copiedMessageCount: failedJob.copiedMessageCount,
+        skippedMessageCount: failedJob.skippedMessageCount,
+        scannedMessageCount: failedJob.scannedMessageCount,
+        failureMessage: failedJob.failureMessage,
+      };
+    }
   }
 }

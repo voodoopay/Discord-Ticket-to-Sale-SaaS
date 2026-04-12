@@ -130,6 +130,10 @@ export class ChannelCopyRepository {
     return row ? mapJobRow(row) : null;
   }
 
+  public async getJobByIdOrNull(jobId: string): Promise<ChannelCopyJobRecord | null> {
+    return this.getJobById(jobId);
+  }
+
   public async listAuthorizedUsers(input: {
     guildId: string;
   }): Promise<ChannelCopyAuthorizedUserRecord[]> {
@@ -239,6 +243,23 @@ export class ChannelCopyRepository {
     });
 
     return row ? mapJobRow(row) : null;
+  }
+
+  public async findNextRunnableJob(): Promise<ChannelCopyJobRecord | null> {
+    const runningRow = await this.db.query.channelCopyJobs.findFirst({
+      where: eq(channelCopyJobs.status, 'running'),
+      orderBy: [desc(channelCopyJobs.updatedAt), desc(channelCopyJobs.createdAt)],
+    });
+    if (runningRow) {
+      return mapJobRow(runningRow);
+    }
+
+    const queuedRow = await this.db.query.channelCopyJobs.findFirst({
+      where: eq(channelCopyJobs.status, 'queued'),
+      orderBy: [desc(channelCopyJobs.updatedAt), desc(channelCopyJobs.createdAt)],
+    });
+
+    return queuedRow ? mapJobRow(queuedRow) : null;
   }
 
   public async createJob(input: {
