@@ -10,7 +10,12 @@ import {
 import { ChannelCopyService, getEnv, logger } from '@voodoo/core';
 
 import { activationCommand } from './commands/activation.js';
-import { channelCopyCommand, createDiscordRuntimeAdapter } from './commands/channel-copy.js';
+import {
+  channelCopyCommand,
+  createDiscordRuntimeAdapter,
+  handleChannelCopyConfirmationButton,
+  isChannelCopyConfirmationButtonCustomId,
+} from './commands/channel-copy.js';
 
 type Command = {
   data: { name: string };
@@ -60,6 +65,11 @@ async function sendInteractionFailure(interaction: Interaction, message: string)
 }
 
 async function handleInteraction(interaction: Interaction): Promise<void> {
+  if (interaction.isButton() && isChannelCopyConfirmationButtonCustomId(interaction.customId)) {
+    await handleChannelCopyConfirmationButton(interaction);
+    return;
+  }
+
   if (!interaction.isChatInputCommand()) {
     return;
   }

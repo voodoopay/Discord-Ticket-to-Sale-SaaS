@@ -68,6 +68,11 @@ export type ChannelCopyJobStatusSummary = {
   failureMessage: string | null;
 };
 
+export type ChannelCopyCancelSummary = {
+  jobId: string;
+  status: 'failed';
+};
+
 type ChannelCopyRepositoryPort = Pick<
   ChannelCopyRepository,
   | 'listAuthorizedUsers'
@@ -282,6 +287,115 @@ export class ChannelCopyService {
       });
     } catch (error) {
       return err(new AppError('CHANNEL_COPY_RUN_READ_FAILED', fromUnknownError(error).message, 500));
+    }
+  }
+
+  public async confirmPendingJob(input: {
+    jobId: string;
+    requestedByDiscordUserId: string;
+  }): Promise<Result<ChannelCopyRunSummary, AppError>> {
+    try {
+      const job = await this.repository.getJobByIdOrNull(input.jobId);
+      if (!job) {
+        return err(
+          new AppError('CHANNEL_COPY_JOB_NOT_FOUND', 'No channel-copy job exists for that ID.', 404),
+        );
+      }
+
+      if (job.requestedByDiscordUserId !== input.requestedByDiscordUserId) {
+        return err(
+          new AppError(
+            'CHANNEL_COPY_CONFIRMATION_FORBIDDEN',
+            'Only the user who started this channel copy can confirm it.',
+            403,
+          ),
+        );
+      }
+
+      if (job.status !== 'awaiting_confirmation') {
+        return err(
+          new AppError(
+            'CHANNEL_COPY_CONFIRMATION_NOT_PENDING',
+            'This channel copy is no longer waiting for confirmation.',
+            409,
+          ),
+        );
+      }
+
+      const confirmedJob = await this.repository.updateJob({
+        jobId: job.id,
+        status: 'queued',
+        forceConfirmed: true,
+        confirmToken: job.confirmToken,
+        failureMessage: null,
+        finishedAt: null,
+      });
+
+      return ok({
+        jobId: confirmedJob.id,
+        status: 'queued',
+        requiresConfirmToken: null,
+        copiedMessageCount: confirmedJob.copiedMessageCount,
+        skippedMessageCount: confirmedJob.skippedMessageCount,
+      });
+    } catch (error) {
+      return err(
+        error instanceof AppError
+          ? error
+          : new AppError('CHANNEL_COPY_RUN_FAILED', fromUnknownError(error).message, 500),
+      );
+    }
+  }
+
+  public async cancelPendingJob(input: {
+    jobId: string;
+    requestedByDiscordUserId: string;
+  }): Promise<Result<ChannelCopyCancelSummary, AppError>> {
+    try {
+      const job = await this.repository.getJobByIdOrNull(input.jobId);
+      if (!job) {
+        return err(
+          new AppError('CHANNEL_COPY_JOB_NOT_FOUND', 'No channel-copy job exists for that ID.', 404),
+        );
+      }
+
+      if (job.requestedByDiscordUserId !== input.requestedByDiscordUserId) {
+        return err(
+          new AppError(
+            'CHANNEL_COPY_CONFIRMATION_FORBIDDEN',
+            'Only the user who started this channel copy can cancel it.',
+            403,
+          ),
+        );
+      }
+
+      if (job.status !== 'awaiting_confirmation') {
+        return err(
+          new AppError(
+            'CHANNEL_COPY_CONFIRMATION_NOT_PENDING',
+            'This channel copy is no longer waiting for confirmation.',
+            409,
+          ),
+        );
+      }
+
+      const cancelledJob = await this.repository.updateJob({
+        jobId: job.id,
+        status: 'failed',
+        finishedAt: new Date(),
+        failureMessage: 'Channel copy was cancelled before it started.',
+      });
+
+      return ok({
+        jobId: cancelledJob.id,
+        status: 'failed',
+      });
+    } catch (error) {
+      return err(
+        error instanceof AppError
+          ? error
+          : new AppError('CHANNEL_COPY_RUN_FAILED', fromUnknownError(error).message, 500),
+      );
     }
   }
 

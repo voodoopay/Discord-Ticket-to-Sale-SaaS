@@ -358,4 +358,182 @@ describe('ChannelCopyService', () => {
       'Only guild text and announcement channels are supported for channel copy.',
     );
   });
+
+  it('queues an awaiting confirmation job when the requesting user confirms it', async () => {
+    const repository = createMockRepository();
+    const service = new ChannelCopyService(repository);
+
+    repository.getJobByIdOrNull.mockResolvedValue({
+      id: 'job-awaiting-1',
+      destinationGuildId: 'guild-dest',
+      sourceGuildId: 'guild-src',
+      sourceChannelId: 'src-1',
+      destinationChannelId: 'dest-1',
+      requestedByDiscordUserId: 'user-2',
+      confirmToken: 'COPY-ABCD',
+      status: 'awaiting_confirmation',
+      forceConfirmed: false,
+      startedAt: null,
+      finishedAt: null,
+      lastProcessedSourceMessageId: null,
+      scannedMessageCount: 0,
+      copiedMessageCount: 0,
+      skippedMessageCount: 0,
+      failureMessage: null,
+      createdAt: new Date('2026-04-12T12:00:00.000Z'),
+      updatedAt: new Date('2026-04-12T12:00:00.000Z'),
+    });
+    repository.updateJob.mockResolvedValue({
+      id: 'job-awaiting-1',
+      destinationGuildId: 'guild-dest',
+      sourceGuildId: 'guild-src',
+      sourceChannelId: 'src-1',
+      destinationChannelId: 'dest-1',
+      requestedByDiscordUserId: 'user-2',
+      confirmToken: 'COPY-ABCD',
+      status: 'queued',
+      forceConfirmed: true,
+      startedAt: null,
+      finishedAt: null,
+      lastProcessedSourceMessageId: null,
+      scannedMessageCount: 0,
+      copiedMessageCount: 0,
+      skippedMessageCount: 0,
+      failureMessage: null,
+      createdAt: new Date('2026-04-12T12:00:00.000Z'),
+      updatedAt: new Date('2026-04-12T12:01:00.000Z'),
+    });
+
+    const result = await service.confirmPendingJob({
+      jobId: 'job-awaiting-1',
+      requestedByDiscordUserId: 'user-2',
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) {
+      return;
+    }
+
+    expect(repository.updateJob).toHaveBeenCalledWith({
+      jobId: 'job-awaiting-1',
+      status: 'queued',
+      forceConfirmed: true,
+      confirmToken: 'COPY-ABCD',
+      failureMessage: null,
+      finishedAt: null,
+    });
+    expect(result.value).toEqual({
+      jobId: 'job-awaiting-1',
+      status: 'queued',
+      requiresConfirmToken: null,
+      copiedMessageCount: 0,
+      skippedMessageCount: 0,
+    });
+  });
+
+  it('rejects confirmation clicks from a different user', async () => {
+    const repository = createMockRepository();
+    const service = new ChannelCopyService(repository);
+
+    repository.getJobByIdOrNull.mockResolvedValue({
+      id: 'job-awaiting-1',
+      destinationGuildId: 'guild-dest',
+      sourceGuildId: 'guild-src',
+      sourceChannelId: 'src-1',
+      destinationChannelId: 'dest-1',
+      requestedByDiscordUserId: 'user-2',
+      confirmToken: 'COPY-ABCD',
+      status: 'awaiting_confirmation',
+      forceConfirmed: false,
+      startedAt: null,
+      finishedAt: null,
+      lastProcessedSourceMessageId: null,
+      scannedMessageCount: 0,
+      copiedMessageCount: 0,
+      skippedMessageCount: 0,
+      failureMessage: null,
+      createdAt: new Date('2026-04-12T12:00:00.000Z'),
+      updatedAt: new Date('2026-04-12T12:00:00.000Z'),
+    });
+
+    const result = await service.confirmPendingJob({
+      jobId: 'job-awaiting-1',
+      requestedByDiscordUserId: 'user-9',
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isOk()) {
+      return;
+    }
+
+    expect(result.error.code).toBe('CHANNEL_COPY_CONFIRMATION_FORBIDDEN');
+    expect(repository.updateJob).not.toHaveBeenCalled();
+  });
+
+  it('cancels an awaiting confirmation job for the requesting user', async () => {
+    const repository = createMockRepository();
+    const service = new ChannelCopyService(repository);
+
+    repository.getJobByIdOrNull.mockResolvedValue({
+      id: 'job-awaiting-1',
+      destinationGuildId: 'guild-dest',
+      sourceGuildId: 'guild-src',
+      sourceChannelId: 'src-1',
+      destinationChannelId: 'dest-1',
+      requestedByDiscordUserId: 'user-2',
+      confirmToken: 'COPY-ABCD',
+      status: 'awaiting_confirmation',
+      forceConfirmed: false,
+      startedAt: null,
+      finishedAt: null,
+      lastProcessedSourceMessageId: null,
+      scannedMessageCount: 0,
+      copiedMessageCount: 0,
+      skippedMessageCount: 0,
+      failureMessage: null,
+      createdAt: new Date('2026-04-12T12:00:00.000Z'),
+      updatedAt: new Date('2026-04-12T12:00:00.000Z'),
+    });
+    repository.updateJob.mockResolvedValue({
+      id: 'job-awaiting-1',
+      destinationGuildId: 'guild-dest',
+      sourceGuildId: 'guild-src',
+      sourceChannelId: 'src-1',
+      destinationChannelId: 'dest-1',
+      requestedByDiscordUserId: 'user-2',
+      confirmToken: 'COPY-ABCD',
+      status: 'failed',
+      forceConfirmed: false,
+      startedAt: null,
+      finishedAt: new Date('2026-04-12T12:01:00.000Z'),
+      lastProcessedSourceMessageId: null,
+      scannedMessageCount: 0,
+      copiedMessageCount: 0,
+      skippedMessageCount: 0,
+      failureMessage: 'Channel copy was cancelled before it started.',
+      createdAt: new Date('2026-04-12T12:00:00.000Z'),
+      updatedAt: new Date('2026-04-12T12:01:00.000Z'),
+    });
+
+    const result = await service.cancelPendingJob({
+      jobId: 'job-awaiting-1',
+      requestedByDiscordUserId: 'user-2',
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) {
+      return;
+    }
+
+    expect(repository.updateJob).toHaveBeenCalledWith({
+      jobId: 'job-awaiting-1',
+      status: 'failed',
+      finishedAt: expect.any(Date),
+      failureMessage: 'Channel copy was cancelled before it started.',
+    });
+    expect(result.value).toEqual({
+      jobId: 'job-awaiting-1',
+      status: 'failed',
+    });
+  });
 });

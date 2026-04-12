@@ -675,10 +675,10 @@ Expected:
   - Run `/activation grant guild_id:<server-id> user_id:<user-id>` to authorize the first destination-server user
   - Activation is separate from `/nuke`, `/sports`, and `/join-gate`
 
-- `/channel-copy` returns a `COPY-...` token:
+- `/channel-copy` asks for confirmation before appending into a non-empty destination:
   - The destination channel already contains messages
-  - Rerun `/channel-copy run` with the same source and destination IDs plus `confirm:<token>`
-  - This confirmation is required before the worker appends into a non-empty destination
+  - Use the ephemeral `Confirm Copy` button on the bot reply to proceed, or `Cancel` to abort
+  - Only the same Discord user who started the copy can press those confirmation buttons
 
 - New members can still see the whole server before verification:
   - Your Discord channel permissions are too open

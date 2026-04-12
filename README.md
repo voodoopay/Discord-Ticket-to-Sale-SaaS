@@ -141,7 +141,8 @@ Copy `.env.example` to `.env` and fill values.
 - Copy order is oldest-to-newest, and reposts include message text plus attachments/media files.
 - The command must be run from the destination server, and activation is checked against the destination server only.
 - The worker processes queued jobs in the background, so large channel histories do not depend on the original slash-command interaction staying open.
-- If the destination channel already has messages, the first run returns a `COPY-...` confirm token and refuses to continue until you rerun with that exact token.
+- If the destination channel already has messages, the bot replies with ephemeral `Confirm Copy` and `Cancel` buttons instead of appending immediately.
+- Only the same Discord user who started the copy can press those confirmation buttons.
 - Cross-server copies are supported as long as the channel-copy bot can read the source channel and post/upload in the destination channel.
 - `/activation grant guild_id:<server-id> user_id:<user-id>` remotely activates the channel-copy worker for another server without requiring the super admin to join that server first.
 - `/activation revoke guild_id:<server-id> user_id:<user-id>` remotely removes channel-copy access for another server.

@@ -1,9 +1,13 @@
 import {
+  ActionRowBuilder,
   AttachmentBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   ChannelType,
   MessageFlags,
   PermissionFlagsBits,
   SlashCommandBuilder,
+  type ButtonInteraction,
   type ChatInputCommandInteraction,
   type Client,
   type GuildTextBasedChannel,
@@ -16,6 +20,9 @@ import {
 } from '@voodoo/core';
 
 const channelCopyService = new ChannelCopyService();
+const CHANNEL_COPY_CONFIRM_BUTTON_PREFIX = 'channel-copy';
+
+type ChannelCopyConfirmationAction = 'confirm' | 'cancel';
 
 function mapChannelCopyError(error: unknown): string {
   if (error instanceof AppError) {
@@ -39,6 +46,106 @@ async function deferEphemeralReply(interaction: ChatInputCommandInteraction): Pr
   }
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+}
+
+async function deferEphemeralComponentReply(interaction: ButtonInteraction): Promise<void> {
+  if (interaction.deferred || interaction.replied) {
+    return;
+  }
+
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+}
+
+function buildChannelCopyConfirmationCustomId(input: {
+  action: ChannelCopyConfirmationAction;
+  jobId: string;
+}): string {
+  return `${CHANNEL_COPY_CONFIRM_BUTTON_PREFIX}:${input.action}:${input.jobId}`;
+}
+
+function parseChannelCopyConfirmationCustomId(customId: string): {
+  action: ChannelCopyConfirmationAction;
+  jobId: string;
+} | null {
+  const parts = customId.split(':');
+  if (parts.length !== 3) {
+    return null;
+  }
+
+  const [prefix, action, jobId] = parts as [string, string, string];
+  if (
+    prefix !== CHANNEL_COPY_CONFIRM_BUTTON_PREFIX ||
+    (action !== 'confirm' && action !== 'cancel') ||
+    jobId.trim().length === 0
+  ) {
+    return null;
+  }
+
+  return {
+    action,
+    jobId,
+  };
+}
+
+function buildChannelCopyConfirmationRow(jobId: string): ActionRowBuilder<ButtonBuilder> {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(buildChannelCopyConfirmationCustomId({ action: 'confirm', jobId }))
+      .setLabel('Confirm Copy')
+      .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId(buildChannelCopyConfirmationCustomId({ action: 'cancel', jobId }))
+      .setLabel('Cancel')
+      .setStyle(ButtonStyle.Secondary),
+  );
+}
+
+export function isChannelCopyConfirmationButtonCustomId(customId: string): boolean {
+  return parseChannelCopyConfirmationCustomId(customId) !== null;
+}
+
+export async function handleChannelCopyConfirmationButton(
+  interaction: ButtonInteraction,
+): Promise<void> {
+  const parsed = parseChannelCopyConfirmationCustomId(interaction.customId);
+  if (!parsed) {
+    return;
+  }
+
+  if (parsed.action === 'confirm') {
+    const result = await channelCopyService.confirmPendingJob({
+      jobId: parsed.jobId,
+      requestedByDiscordUserId: interaction.user.id,
+    });
+
+    if (result.isErr()) {
+      await deferEphemeralComponentReply(interaction);
+      await interaction.editReply({ content: mapChannelCopyError(result.error) });
+      return;
+    }
+
+    await interaction.update({
+      content: `Channel copy queued. Job ID: \`${result.value.jobId}\`. Use \`/channel-copy status job_id:${result.value.jobId}\` to check progress.`,
+      components: [],
+    });
+    return;
+  }
+
+  const result = await channelCopyService.cancelPendingJob({
+    jobId: parsed.jobId,
+    requestedByDiscordUserId: interaction.user.id,
+  });
+
+  if (result.isErr()) {
+    await deferEphemeralComponentReply(interaction);
+    await interaction.editReply({ content: mapChannelCopyError(result.error) });
+    return;
+  }
+
+  await interaction.update({
+    content: `Channel copy cancelled. Job ID: \`${result.value.jobId}\`.`,
+    components: [],
+  });
 }
 
 function renderSourceMessageContent(message: {
@@ -397,7 +504,9 @@ export const channelCopyCommand = {
 
     if (result.value.status === 'awaiting_confirmation') {
       await interaction.editReply({
-        content: `Destination channel is not empty. Rerun this command with confirm:\`${result.value.requiresConfirmToken}\`. Job ID: \`${result.value.jobId}\`.`,
+        content:
+          `Destination channel is not empty. Confirm to append into it or cancel this pending copy. Job ID: \`${result.value.jobId}\`.`,
+        components: [buildChannelCopyConfirmationRow(result.value.jobId)],
       });
       return;
     }
