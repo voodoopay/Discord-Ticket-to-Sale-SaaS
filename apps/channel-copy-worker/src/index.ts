@@ -2,7 +2,6 @@ import {
   Client,
   Collection,
   Events,
-  GatewayIntentBits,
   MessageFlags,
   type ChatInputCommandInteraction,
   type Interaction,
@@ -16,6 +15,7 @@ import {
   handleChannelCopyConfirmationButton,
   isChannelCopyConfirmationButtonCustomId,
 } from './commands/channel-copy.js';
+import { createChannelCopyClientOptions } from './runtime.js';
 
 type Command = {
   data: { name: string };
@@ -40,9 +40,7 @@ function mapChannelCopyWorkerError(error: unknown): string {
   return 'Channel-copy worker failed due to an internal error.';
 }
 
-const client = new Client({
-  intents: [GatewayIntentBits.Guilds],
-});
+const client = new Client(createChannelCopyClientOptions());
 
 const commands = new Collection<string, Command>();
 commands.set(activationCommand.data.name, activationCommand as unknown as Command);

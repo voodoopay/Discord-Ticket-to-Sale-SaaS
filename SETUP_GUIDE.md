@@ -481,6 +481,7 @@ Make sure the channel-copy bot app is also invited anywhere you plan to copy fro
 - `Attach Files`
 
 The bot must be able to read the source channel and post/upload in the destination channel. It can copy across different servers as long as it is present in both places.
+Also enable `MESSAGE CONTENT INTENT` for the channel-copy bot application in Discord Developer Portal, or Discord may return source messages as empty content with no embeds/attachments to the worker.
 
 After updates:
 

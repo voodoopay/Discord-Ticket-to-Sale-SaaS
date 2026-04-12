@@ -136,6 +136,7 @@ Copy `.env.example` to `.env` and fill values.
 ## Channel Copy Worker
 
 - Runs from separate worker/token (`apps/channel-copy-worker`).
+- The channel-copy Discord application must have `Message Content Intent` enabled in Discord Developer Portal or source messages can arrive as empty payloads.
 - `/channel-copy run source_channel_id:<id> destination_channel_id:<id> [confirm:<token>]` queues a one-time full source-channel backfill into the destination channel.
 - `/channel-copy status job_id:<id>` shows the current queued, running, completed, or failed state for a copy job.
 - Copy order is oldest-to-newest, and reposts include message text, embeds, and attachments/media files.
