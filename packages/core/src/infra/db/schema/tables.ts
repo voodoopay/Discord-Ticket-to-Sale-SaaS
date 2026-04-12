@@ -812,7 +812,7 @@ export const channelCopyAuthorizedUsers = mysqlTable(
     id: varchar('id', { length: 26 }).primaryKey(),
     guildId: varchar('guild_id', { length: 32 }).notNull(),
     discordUserId: varchar('discord_user_id', { length: 32 }).notNull(),
-    grantedByDiscordUserId: varchar('granted_by_discord_user_id', { length: 32 }).notNull(),
+    grantedByDiscordUserId: varchar('granted_by_discord_user_id', { length: 32 }),
     createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
   },
@@ -834,7 +834,7 @@ export const channelCopyJobs = mysqlTable(
     sourceChannelId: varchar('source_channel_id', { length: 32 }).notNull(),
     destinationChannelId: varchar('destination_channel_id', { length: 32 }).notNull(),
     requestedByDiscordUserId: varchar('requested_by_discord_user_id', { length: 32 }).notNull(),
-    confirmToken: varchar('confirm_token', { length: 64 }).notNull(),
+    confirmToken: varchar('confirm_token', { length: 64 }),
     status: mysqlEnum('status', ['awaiting_confirmation', 'queued', 'running', 'completed', 'failed'])
       .notNull()
       .default('awaiting_confirmation'),
@@ -852,6 +852,14 @@ export const channelCopyJobs = mysqlTable(
   (table) => ({
     destinationGuildCreatedIdx: index('channel_copy_jobs_destination_guild_created_idx').on(
       table.destinationGuildId,
+      table.createdAt,
+    ),
+    incompleteLookupIdx: index('channel_copy_jobs_incomplete_lookup_idx').on(
+      table.requestedByDiscordUserId,
+      table.sourceChannelId,
+      table.destinationChannelId,
+      table.status,
+      table.updatedAt,
       table.createdAt,
     ),
     statusUpdatedIdx: index('channel_copy_jobs_status_updated_idx').on(table.status, table.updatedAt),

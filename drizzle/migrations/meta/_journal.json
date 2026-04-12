@@ -176,6 +176,13 @@
       "when": 1776024090380,
       "tag": "0024_channel_copy_worker",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "5",
+      "when": 1776025316049,
+      "tag": "0025_channel_copy_repository_fixes",
+      "breakpoints": true
     }
   ]
 }

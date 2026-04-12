@@ -3,6 +3,7 @@ import { ulid } from 'ulid';
 
 import { getDb } from '../infra/db/client.js';
 import { channelCopyAuthorizedUsers, channelCopyJobs } from '../infra/db/schema/index.js';
+import { isMysqlDuplicateEntryError } from '../utils/mysql-errors.js';
 
 export type ChannelCopyJobStatus =
   | 'awaiting_confirmation'
@@ -15,7 +16,7 @@ export type ChannelCopyAuthorizedUserRecord = {
   id: string;
   guildId: string;
   discordUserId: string;
-  grantedByDiscordUserId: string;
+  grantedByDiscordUserId: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -27,7 +28,7 @@ export type ChannelCopyJobRecord = {
   sourceChannelId: string;
   destinationChannelId: string;
   requestedByDiscordUserId: string;
-  confirmToken: string;
+  confirmToken: string | null;
   status: ChannelCopyJobStatus;
   forceConfirmed: boolean;
   startedAt: Date | null;
@@ -104,13 +105,14 @@ export class ChannelCopyRepository {
   public async upsertAuthorizedUser(input: {
     guildId: string;
     discordUserId: string;
-    grantedByDiscordUserId: string;
+    grantedByDiscordUserId: string | null;
   }): Promise<{ created: boolean; record: ChannelCopyAuthorizedUserRecord }> {
     const existing = await this.getAuthorizedUserByDiscordId({
       guildId: input.guildId,
       discordUserId: input.discordUserId,
     });
     const now = new Date();
+    let created = false;
 
     if (existing) {
       await this.db
@@ -121,14 +123,21 @@ export class ChannelCopyRepository {
         })
         .where(eq(channelCopyAuthorizedUsers.id, existing.id));
     } else {
-      await this.db.insert(channelCopyAuthorizedUsers).values({
-        id: ulid(),
-        guildId: input.guildId,
-        discordUserId: input.discordUserId,
-        grantedByDiscordUserId: input.grantedByDiscordUserId,
-        createdAt: now,
-        updatedAt: now,
-      });
+      try {
+        await this.db.insert(channelCopyAuthorizedUsers).values({
+          id: ulid(),
+          guildId: input.guildId,
+          discordUserId: input.discordUserId,
+          grantedByDiscordUserId: input.grantedByDiscordUserId,
+          createdAt: now,
+          updatedAt: now,
+        });
+        created = true;
+      } catch (error) {
+        if (!isMysqlDuplicateEntryError(error)) {
+          throw error;
+        }
+      }
     }
 
     const record = await this.getAuthorizedUserByDiscordId({
@@ -140,7 +149,7 @@ export class ChannelCopyRepository {
     }
 
     return {
-      created: !existing,
+      created,
       record,
     };
   }

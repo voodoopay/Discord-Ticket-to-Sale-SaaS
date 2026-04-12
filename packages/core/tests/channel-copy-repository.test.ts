@@ -22,6 +22,58 @@ function createInsertChain() {
   return { insert, values };
 }
 
+function createUpdateChain() {
+  const where = vi.fn().mockResolvedValue(undefined);
+  const set = vi.fn(() => ({ where }));
+  const update = vi.fn(() => ({ set }));
+
+  return { update, set, where };
+}
+
+function getOrderByColumnNames(orderBy: unknown[]): string[] {
+  return orderBy.map((clause) => {
+    const queryChunks = (clause as { queryChunks: unknown[] }).queryChunks;
+    return (queryChunks[1] as { name: string }).name;
+  });
+}
+
+function getStatusFilterValues(where: unknown): string[] {
+  const groupedClauses = (where as { queryChunks: unknown[] }).queryChunks[1] as {
+    queryChunks: unknown[];
+  };
+  const sqlClauses = groupedClauses.queryChunks.filter(
+    (chunk): chunk is { queryChunks: unknown[] } => typeof chunk === 'object' && chunk !== null && 'queryChunks' in chunk,
+  );
+  const statusClause = sqlClauses.at(-1);
+  if (!statusClause) {
+    throw new Error('Missing status clause');
+  }
+
+  return collectParamValues(statusClause).filter((value) =>
+    ['awaiting_confirmation', 'queued', 'running', 'completed', 'failed'].includes(value),
+  );
+}
+
+function collectParamValues(node: unknown): string[] {
+  if (Array.isArray(node)) {
+    return node.flatMap((entry) => collectParamValues(entry));
+  }
+
+  if (typeof node !== 'object' || node === null) {
+    return [];
+  }
+
+  if ('value' in node && typeof (node as { value?: unknown }).value === 'string') {
+    return [(node as { value: string }).value];
+  }
+
+  if ('queryChunks' in node) {
+    return collectParamValues((node as { queryChunks: unknown[] }).queryChunks);
+  }
+
+  return [];
+}
+
 function createRepositoryWithMockDb(mockDb: MockDb): ChannelCopyRepository {
   const repository = new ChannelCopyRepository();
   Object.defineProperty(repository, 'db', {
@@ -90,6 +142,106 @@ describe('ChannelCopyRepository', () => {
     expect(jobsFindFirst).not.toHaveBeenCalled();
   });
 
+  it('updates an existing authorized user entry instead of inserting a duplicate row', async () => {
+    const { update, set } = createUpdateChain();
+    const authorizedUserFindFirst = vi
+      .fn()
+      .mockResolvedValueOnce({
+        id: 'auth-1',
+        guildId: 'guild-1',
+        discordUserId: 'user-1',
+        grantedByDiscordUserId: 'admin-1',
+        createdAt: new Date('2026-04-12T09:00:00.000Z'),
+        updatedAt: new Date('2026-04-12T09:00:00.000Z'),
+      })
+      .mockResolvedValueOnce({
+        id: 'auth-1',
+        guildId: 'guild-1',
+        discordUserId: 'user-1',
+        grantedByDiscordUserId: null,
+        createdAt: new Date('2026-04-12T09:00:00.000Z'),
+        updatedAt: new Date('2026-04-12T09:05:00.000Z'),
+      });
+
+    const repository = createRepositoryWithMockDb({
+      query: {
+        channelCopyAuthorizedUsers: {
+          findFirst: authorizedUserFindFirst,
+        },
+        channelCopyJobs: {
+          findFirst: vi.fn(),
+        },
+      },
+      insert: vi.fn(),
+      update,
+    });
+
+    const result = await repository.upsertAuthorizedUser({
+      guildId: 'guild-1',
+      discordUserId: 'user-1',
+      grantedByDiscordUserId: null,
+    });
+
+    expect(result.created).toBe(false);
+    expect(result.record.grantedByDiscordUserId).toBeNull();
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        grantedByDiscordUserId: null,
+      }),
+    );
+  });
+
+  it('re-reads the authorized user when an insert loses a duplicate-key race', async () => {
+    const duplicateKeyError = Object.assign(new Error('Duplicate entry'), {
+      code: 'ER_DUP_ENTRY',
+    });
+    const { insert } = createInsertChain();
+    insert.mockImplementationOnce(() => ({
+      values: vi.fn().mockRejectedValueOnce(duplicateKeyError),
+    }));
+    const authorizedUserFindFirst = vi
+      .fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: 'auth-1',
+        guildId: 'guild-1',
+        discordUserId: 'user-1',
+        grantedByDiscordUserId: null,
+        createdAt: new Date('2026-04-12T09:00:00.000Z'),
+        updatedAt: new Date('2026-04-12T09:00:01.000Z'),
+      });
+
+    const repository = createRepositoryWithMockDb({
+      query: {
+        channelCopyAuthorizedUsers: {
+          findFirst: authorizedUserFindFirst,
+        },
+        channelCopyJobs: {
+          findFirst: vi.fn(),
+        },
+      },
+      insert,
+      update: vi.fn(),
+    });
+
+    await expect(
+      repository.upsertAuthorizedUser({
+        guildId: 'guild-1',
+        discordUserId: 'user-1',
+        grantedByDiscordUserId: null,
+      }),
+    ).resolves.toEqual({
+      created: false,
+      record: expect.objectContaining({
+        id: 'auth-1',
+        guildId: 'guild-1',
+        discordUserId: 'user-1',
+        grantedByDiscordUserId: null,
+      }),
+    });
+  });
+
   it('finds the latest incomplete job for the same requester and channel pair', async () => {
     const findFirst = vi.fn().mockResolvedValue({
       id: 'job-2',
@@ -98,10 +250,10 @@ describe('ChannelCopyRepository', () => {
       sourceChannelId: 'source-1',
       destinationChannelId: 'dest-1',
       requestedByDiscordUserId: 'user-1',
-      confirmToken: 'confirm-2',
-      status: 'queued',
+      confirmToken: null,
+      status: 'running',
       forceConfirmed: true,
-      startedAt: null,
+      startedAt: new Date('2026-04-12T09:05:30.000Z'),
       finishedAt: null,
       lastProcessedSourceMessageId: null,
       scannedMessageCount: 15,
@@ -137,10 +289,14 @@ describe('ChannelCopyRepository', () => {
         sourceChannelId: 'source-1',
         destinationChannelId: 'dest-1',
         requestedByDiscordUserId: 'user-1',
-        status: 'queued',
+        status: 'running',
+        confirmToken: null,
       }),
     );
 
     expect(findFirst).toHaveBeenCalledTimes(1);
+    const query = findFirst.mock.calls[0]?.[0] as { where: unknown; orderBy: unknown[] };
+    expect(getOrderByColumnNames(query.orderBy)).toEqual(['updated_at', 'created_at']);
+    expect(getStatusFilterValues(query.where)).toEqual(['awaiting_confirmation', 'queued', 'running']);
   });
 });
