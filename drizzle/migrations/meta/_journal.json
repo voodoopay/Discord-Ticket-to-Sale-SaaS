@@ -183,6 +183,13 @@
       "when": 1776025316049,
       "tag": "0025_channel_copy_repository_fixes",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "5",
+      "when": 1776110400000,
+      "tag": "0026_sports_config_legacy_columns",
+      "breakpoints": true
     }
   ]
 }
