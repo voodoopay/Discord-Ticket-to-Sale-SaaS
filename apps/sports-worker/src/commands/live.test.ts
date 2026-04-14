@@ -28,6 +28,17 @@ vi.mock('@voodoo/core', () => {
     SportsAccessService,
     SportsDataService,
     SportsService,
+    normalizeBroadcastCountries: (input: readonly string[] | null | undefined) => {
+      const normalized = [
+        ...new Set(
+          (input ?? [])
+            .map((value) => value?.trim?.() ?? '')
+            .filter((value) => value.length > 0),
+        ),
+      ];
+
+      return normalized.length > 0 ? normalized : ['United Kingdom', 'United States'];
+    },
     getEnv: () => ({
       superAdminDiscordIds: (process.env.SUPER_ADMIN_DISCORD_IDS ?? '')
         .split(',')

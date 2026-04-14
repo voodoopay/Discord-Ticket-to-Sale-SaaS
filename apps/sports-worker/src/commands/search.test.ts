@@ -28,6 +28,17 @@ vi.mock('@voodoo/core', () => {
     SportsAccessService,
     SportsDataService,
     SportsService,
+    normalizeBroadcastCountries: (input: readonly string[] | null | undefined) => {
+      const normalized = [
+        ...new Set(
+          (input ?? [])
+            .map((value) => value?.trim?.() ?? '')
+            .filter((value) => value.length > 0),
+        ),
+      ];
+
+      return normalized.length > 0 ? normalized : ['United Kingdom', 'United States'];
+    },
     getEnv: () => ({
       superAdminDiscordIds: (process.env.SUPER_ADMIN_DISCORD_IDS ?? '')
         .split(',')
@@ -201,6 +212,9 @@ describe('search command', () => {
         }) as Awaited<ReturnType<SportsDataService['getEventDetails']>>,
       )
       .mockResolvedValueOnce(
+        createOkResult(null) as Awaited<ReturnType<SportsDataService['getEventDetails']>>,
+      )
+      .mockResolvedValueOnce(
         createOkResult({
           eventId: 'event-2',
           eventName: 'Rangers vs Hearts',
@@ -215,6 +229,9 @@ describe('search command', () => {
           description: null,
           broadcasters: [],
         }) as Awaited<ReturnType<SportsDataService['getEventDetails']>>,
+      )
+      .mockResolvedValueOnce(
+        createOkResult(null) as Awaited<ReturnType<SportsDataService['getEventDetails']>>,
       );
 
     const { interaction, editReply } = createInteractionMock({
@@ -224,7 +241,31 @@ describe('search command', () => {
 
     await searchCommand.execute(interaction);
 
-    expect(getEventDetails).toHaveBeenCalledTimes(2);
+    expect(getEventDetails).toHaveBeenCalledTimes(4);
+    expect(getEventDetails).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventId: 'event-1',
+        broadcastCountry: 'United Kingdom',
+      }),
+    );
+    expect(getEventDetails).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventId: 'event-1',
+        broadcastCountry: 'United States',
+      }),
+    );
+    expect(getEventDetails).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventId: 'event-2',
+        broadcastCountry: 'United Kingdom',
+      }),
+    );
+    expect(getEventDetails).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventId: 'event-2',
+        broadcastCountry: 'United States',
+      }),
+    );
     expect(editReply).toHaveBeenCalledWith({
       content: 'Found 2 upcoming televised events for `Rangers v Celtic` from today through the next 7 days.',
       embeds: [expect.any(Object), expect.any(Object)],
