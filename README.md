@@ -17,7 +17,7 @@ Multi-tenant Discord + Telegram bot stack with a web dashboard for ticket-based 
 - `apps/telegram-worker`: Telegram group worker with `/connect`, `/sale`, `/points`, `/refer`, and paid-order fulfillment callbacks.
 - `apps/join-gate-worker`: separate-token Discord worker for new-member verification, email matching, and private verification ticket creation.
 - `apps/nuke-worker`: separate-token Discord worker for `/nuke` scheduling and channel nukes.
-- `apps/sports-worker`: separate-token Discord worker for daily sports TV listings with configurable broadcaster-country filtering, managed sport + live event channels, `/sports live-status`, and public sports lookup commands.
+- `apps/sports-worker`: separate-token Discord worker for daily sports TV listings with shared UK+USA broadcaster coverage, managed sport + live event channels, `/sports live-status`, and public sports lookup commands.
 - `apps/channel-copy-worker`: separate-token Discord worker for one-time channel backfills, including message text, embeds, and attachment/media reposting across servers.
 - `packages/core`: shared domain/config/security/services/repositories.
 - `drizzle/migrations`: SQL migrations.
@@ -111,17 +111,17 @@ Copy `.env.example` to `.env` and fill values.
 - Highlights can post automatically inside managed live event channels when available, and the same highlight data can also be requested on demand.
 - Uses TheSportsDB for sport, event, broadcaster, and image data. A paid API key is required for full daily coverage because the public `123` key is heavily truncated.
 - Daily sport channels stay persistent. When a sport has no events that day, its channel is cleared and left empty instead of being deleted.
-- `/sports setup [category_name] [broadcast_country] [live_category_name]` creates or refreshes the managed sports category, optionally updates the broadcaster-country filter, optionally configures the dedicated live-event category, and publishes the current day’s listings immediately.
+- `/sports setup [category_name] [live_category_name]` creates or refreshes the shared managed sports category, keeps the default shared UK+USA broadcaster coverage, optionally configures the dedicated live-event category, and publishes the current day’s listings immediately.
 - `/sports sync [category_name] [broadcast_country] [live_category_name]` creates missing sport channels, optionally updates the broadcaster-country filter, optionally configures the dedicated live-event category, and refreshes the saved channel bindings without republishing.
 - `/sports refresh` clears the managed sport channels and republishes today’s listings on demand.
 - `/sports status` shows activation state, managed category, live event category, channel count, and the next scheduled run.
 - `/sports live-status` shows tracked live events, pending cleanup counts, and current live-sync health.
-- Listings and `/search` use the server’s configured timezone and broadcaster-country filter. If a server never overrides it, the worker falls back to the environment defaults.
+- Listings and lookup commands use the server’s configured timezone plus its shared broadcaster-country list. By default the worker tracks both United Kingdom and United States coverage together; if a server never overrides it, the worker falls back to the environment default primary country.
 - New live-event channels are only created when a dedicated live event category has been configured. Until then, live-event channel creation is intentionally disabled.
-- `/search query:"Rangers v Celtic"` or `/search query:"New York Rangers"` returns upcoming televised matches from today through the next 7 days, including configured-timezone kickoff times, channels, and artwork.
-- `/live [sport] [league]` returns current live televised events, with optional sport/league filters.
+- `/search query:"Rangers v Celtic"` or `/search query:"New York Rangers"` returns upcoming televised matches from today through the next 7 days, including configured-timezone kickoff times, channels, and artwork from the shared broadcaster coverage.
+- `/live [sport] [league]` returns current live televised events aggregated across the server’s shared broadcaster countries, with optional sport/league filters.
 - `/highlights query:"Rangers v Celtic"` returns on-demand highlights for a finished or matching event when a video is available.
-- `/match query:"Rangers v Celtic"` returns a richer match-centre view for a team or event, including highlights when available.
+- `/match query:"Rangers v Celtic"` returns a richer match-centre view for a team or event, including highlights when available, while using the same shared setup context as the other lookup commands.
 - `/standings league:"Scottish Premiership"` returns current league standings.
 - `/fixtures query:"Rangers"` returns upcoming fixtures for a team or league.
 - `/results query:"Rangers"` returns recent results for a team or league.

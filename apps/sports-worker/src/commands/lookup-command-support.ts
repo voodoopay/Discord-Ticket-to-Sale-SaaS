@@ -29,6 +29,16 @@ function isSuperAdminUser(discordUserId: string): boolean {
   return getEnv().superAdminDiscordIds.includes(discordUserId);
 }
 
+function normalizeBroadcastCountries(
+  broadcastCountries: readonly (string | null | undefined)[],
+): string[] {
+  const normalized = broadcastCountries
+    .map((country) => country?.trim() ?? '')
+    .filter((country) => country.length > 0);
+
+  return normalized.length > 0 ? [...new Set(normalized)] : [getEnv().SPORTS_BROADCAST_COUNTRY];
+}
+
 export async function deferEphemeralReply(
   interaction: ChatInputCommandInteraction,
 ): Promise<void> {
@@ -88,7 +98,12 @@ export async function resolveLookupContext(input: {
   interaction: ChatInputCommandInteraction;
   commandName: string;
 }): Promise<
-  | { guildId: string; timezone: string; broadcastCountry: string }
+  | {
+      guildId: string;
+      timezone: string;
+      broadcastCountries: string[];
+      primaryBroadcastCountry: string;
+    }
   | { error: string }
 > {
   const { interaction, commandName } = input;
@@ -115,10 +130,17 @@ export async function resolveLookupContext(input: {
   }
 
   const env = getEnv();
+  const broadcastCountries = normalizeBroadcastCountries(
+    configResult.value?.broadcastCountries?.length
+      ? configResult.value.broadcastCountries
+      : [configResult.value?.broadcastCountry, env.SPORTS_BROADCAST_COUNTRY],
+  );
+
   return {
     guildId: interaction.guildId,
     timezone: configResult.value?.timezone ?? env.SPORTS_DEFAULT_TIMEZONE,
-    broadcastCountry: configResult.value?.broadcastCountry ?? env.SPORTS_BROADCAST_COUNTRY,
+    broadcastCountries,
+    primaryBroadcastCountry: broadcastCountries[0] ?? env.SPORTS_BROADCAST_COUNTRY,
   };
 }
 

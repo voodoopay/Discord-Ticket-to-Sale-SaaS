@@ -43,16 +43,16 @@ export const liveCommand = {
 
       const sportFilter = interaction.options.getString('sport')?.trim() || null;
       const leagueFilter = interaction.options.getString('league')?.trim() || null;
-      const liveResult = await sportsDataService.listLiveEvents({
+      const liveResult = await sportsDataService.listLiveEventsAcrossCountries({
         timezone: context.timezone,
-        broadcastCountry: context.broadcastCountry,
+        broadcastCountries: context.broadcastCountries,
       });
       if (liveResult.isErr()) {
         await sendEphemeralReply(interaction, mapSportsError(liveResult.error));
         return;
       }
 
-      const visibleEvents = liveResult.value
+      const visibleEvents = liveResult.value.data
         .filter((event) => event.broadcasters.length > 0)
         .filter(
           (event) =>

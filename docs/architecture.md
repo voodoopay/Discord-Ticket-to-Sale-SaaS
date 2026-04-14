@@ -28,7 +28,7 @@
 
 5. `sports-worker`
 - Runs as a separate Discord application/token for daily sports listings, live event channels, `/sports live-status`, and public sports lookup commands.
-- Maintains managed sport channels for sports with events that day, republishes the UK TV schedule daily, creates temporary live event channels, auto-posts highlights when available, and resolves event/team/player lookups from TheSportsDB.
+- Maintains managed sport channels for sports with events that day, republishes the shared UK+USA TV schedule daily, creates temporary live event channels, auto-posts highlights when available, and resolves event/team/player lookups from TheSportsDB using the guild’s shared broadcaster-country setup.
 
 6. `telegram-worker`
 - Handles Telegram workspace linking, sales handoff, points, referrals, and paid-order callbacks.
@@ -45,7 +45,7 @@
 - Sales-history visibility state is persisted in:
   - `guild_configs` cutoff + auto-clear schedule columns for per-server dashboard history retention
 - Sports worker state is persisted in:
-  - `sports_guild_configs` for per-server schedule, timezone, broadcaster country, and managed category
+  - `sports_guild_configs` for per-server schedule, timezone, primary broadcaster country, shared broadcaster-country list, and managed category
   - `sports_channel_bindings` for the one-channel-per-sport mapping inside each server
   - `sports_live_event_channels` for temporary event-channel lifecycle state, cleanup timing, and highlight delivery tracking
   - `sports_authorized_users` for server-specific activation and `/sports` management access

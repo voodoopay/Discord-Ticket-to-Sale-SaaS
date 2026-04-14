@@ -129,6 +129,7 @@ describe('match command', () => {
       createOkResult({
         timezone: 'Europe/London',
         broadcastCountry: 'United Kingdom',
+        broadcastCountries: ['United Kingdom', 'United States'],
       }) as Awaited<ReturnType<SportsService['getGuildConfig']>>,
     );
     vi.spyOn(SportsDataService.prototype, 'searchEvents').mockResolvedValue(
@@ -146,7 +147,7 @@ describe('match command', () => {
     vi.spyOn(SportsDataService.prototype, 'getResults').mockResolvedValue(
       createOkResult([]) as Awaited<ReturnType<SportsDataService['getResults']>>,
     );
-    vi.spyOn(SportsDataService.prototype, 'getEventDetails').mockResolvedValue(
+    const getEventDetails = vi.spyOn(SportsDataService.prototype, 'getEventDetails').mockResolvedValue(
       createOkResult({
         eventId: 'evt-1',
         eventName: 'Rangers vs Celtic',
@@ -180,6 +181,11 @@ describe('match command', () => {
       content: expect.stringContaining('Match centre for'),
       embeds: [expect.any(Object)],
     });
+    expect(getEventDetails).toHaveBeenCalledWith({
+      eventId: 'evt-1',
+      timezone: 'Europe/London',
+      broadcastCountry: 'United Kingdom',
+    });
   });
 
   it('labels fallback responses as recent results when details are unavailable', async () => {
@@ -193,6 +199,7 @@ describe('match command', () => {
       createOkResult({
         timezone: 'Europe/London',
         broadcastCountry: 'United Kingdom',
+        broadcastCountries: ['United Kingdom', 'United States'],
       }) as Awaited<ReturnType<SportsService['getGuildConfig']>>,
     );
     vi.spyOn(SportsDataService.prototype, 'searchEvents').mockResolvedValue(
@@ -257,6 +264,7 @@ describe('match command', () => {
       createOkResult({
         timezone: 'Europe/London',
         broadcastCountry: 'United Kingdom',
+        broadcastCountries: ['United Kingdom', 'United States'],
       }) as Awaited<ReturnType<SportsService['getGuildConfig']>>,
     );
     vi.spyOn(SportsDataService.prototype, 'searchEvents').mockResolvedValue(

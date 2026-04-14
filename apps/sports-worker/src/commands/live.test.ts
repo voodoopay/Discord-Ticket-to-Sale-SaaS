@@ -12,6 +12,10 @@ vi.mock('@voodoo/core', () => {
     public async listLiveEvents(): Promise<never> {
       throw new Error('Mock listLiveEvents not implemented');
     }
+
+    public async listLiveEventsAcrossCountries(): Promise<never> {
+      throw new Error('Mock listLiveEventsAcrossCountries not implemented');
+    }
   }
 
   class SportsService {
@@ -141,7 +145,7 @@ describe('live command', () => {
     });
   });
 
-  it('returns filtered live televised events with embeds', async () => {
+  it('uses the guild shared-country config for live lookups', async () => {
     vi.spyOn(SportsAccessService.prototype, 'getGuildActivationState').mockResolvedValue(
       createOkResult({
         activated: true,
@@ -149,34 +153,45 @@ describe('live command', () => {
       }) as Awaited<ReturnType<SportsAccessService['getGuildActivationState']>>,
     );
     vi.spyOn(SportsService.prototype, 'getGuildConfig').mockResolvedValue(
-      createOkResult(null) as Awaited<ReturnType<SportsService['getGuildConfig']>>,
+      createOkResult({
+        timezone: 'America/New_York',
+        broadcastCountry: 'United Kingdom',
+        broadcastCountries: ['United Kingdom', 'United States'],
+      }) as Awaited<ReturnType<SportsService['getGuildConfig']>>,
     );
-    vi.spyOn(SportsDataService.prototype, 'listLiveEvents').mockResolvedValue(
-      createOkResult([
-        {
-          eventId: 'evt-1',
-          eventName: 'Rangers vs Celtic',
-          sportName: 'Soccer',
-          leagueName: 'Scottish Premiership',
-          statusLabel: 'Live',
-          scoreLabel: '2-1',
-          startTimeUkLabel: '12:30',
-          imageUrl: null,
-          broadcasters: [{ channelId: 'chan-1', channelName: 'Sky Sports', country: 'United Kingdom', logoUrl: null }],
-        },
-        {
-          eventId: 'evt-2',
-          eventName: 'Lakers vs Celtics',
-          sportName: 'Basketball',
-          leagueName: 'NBA',
-          statusLabel: 'Live',
-          scoreLabel: '95-90',
-          startTimeUkLabel: '01:00',
-          imageUrl: null,
-          broadcasters: [{ channelId: 'chan-2', channelName: 'TNT Sports', country: 'United Kingdom', logoUrl: null }],
-        },
-      ]) as Awaited<ReturnType<SportsDataService['listLiveEvents']>>,
-    );
+    const listLiveEventsAcrossCountries = vi
+      .spyOn(SportsDataService.prototype, 'listLiveEventsAcrossCountries')
+      .mockResolvedValue(
+        createOkResult({
+          data: [
+          {
+            eventId: 'evt-1',
+            eventName: 'Rangers vs Celtic',
+            sportName: 'Soccer',
+            leagueName: 'Scottish Premiership',
+            statusLabel: 'Live',
+            scoreLabel: '2-1',
+            startTimeUkLabel: '12:30',
+            imageUrl: null,
+            broadcasters: [{ channelId: 'chan-1', channelName: 'Sky Sports', country: 'United Kingdom', logoUrl: null }],
+          },
+          {
+            eventId: 'evt-2',
+            eventName: 'Lakers vs Celtics',
+            sportName: 'Basketball',
+            leagueName: 'NBA',
+            statusLabel: 'Live',
+            scoreLabel: '95-90',
+            startTimeUkLabel: '01:00',
+            imageUrl: null,
+            broadcasters: [{ channelId: 'chan-2', channelName: 'TNT Sports', country: 'United States', logoUrl: null }],
+          },
+          ],
+          degraded: false,
+          failedCountries: [],
+          successfulCountries: ['United Kingdom', 'United States'],
+        }) as Awaited<ReturnType<SportsDataService['listLiveEventsAcrossCountries']>>,
+      );
 
     const { interaction, editReply } = createInteractionMock({
       sport: 'Soccer',
@@ -185,6 +200,10 @@ describe('live command', () => {
 
     await liveCommand.execute(interaction);
 
+    expect(listLiveEventsAcrossCountries).toHaveBeenCalledWith({
+      timezone: 'America/New_York',
+      broadcastCountries: ['United Kingdom', 'United States'],
+    });
     expect(editReply).toHaveBeenCalledWith({
       content: expect.stringContaining('Found 1 live televised event'),
       embeds: [expect.any(Object)],

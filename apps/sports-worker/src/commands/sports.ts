@@ -19,6 +19,7 @@ import {
   publishSportsForGuild,
   syncSportsGuildChannels,
 } from '../sports-runtime.js';
+import { formatBroadcastCountriesLabel } from '../ui/sports-embeds.js';
 
 const sportsAccessService = new SportsAccessService();
 const sportsLiveEventService = new SportsLiveEventService();
@@ -137,7 +138,7 @@ function buildSportsStatusMessage(input: {
       `Managed channels: ${input.channelCount}`,
       `Publish time: ${input.config.localTimeHhMm}`,
       `Timezone: ${input.config.timezone}`,
-    `Broadcaster country: ${input.config.broadcastCountry}`,
+    `Broadcast countries: ${formatBroadcastCountriesLabel(input.config.broadcastCountries)}`,
     `Next run (UTC): ${input.config.nextRunAtUtc}`,
     `Last run (UTC): ${input.config.lastRunAtUtc ?? 'Never'}`,
     `Last local run date: ${input.config.lastLocalRunDate ?? 'Never'}`,
@@ -237,12 +238,6 @@ export const sportsCommand = {
             .setName('category_name')
             .setDescription('Optional category name for the managed sport channels')
             .setMaxLength(90),
-        )
-        .addStringOption((option) =>
-          option
-            .setName('broadcast_country')
-            .setDescription('Optional broadcaster country filter, for example United States')
-            .setMaxLength(120),
         )
         .addStringOption((option) =>
           option
@@ -414,7 +409,6 @@ export const sportsCommand = {
 
       if (subcommand === 'setup') {
         const categoryName = interaction.options.getString('category_name');
-        const broadcastCountry = interaction.options.getString('broadcast_country');
         const liveCategoryName = interaction.options.getString('live_category_name');
         const [activationStateResult, syncResult] = await Promise.all([
           sportsAccessService.getGuildActivationState({ guildId }),
@@ -422,7 +416,6 @@ export const sportsCommand = {
             guild: interaction.guild,
             actorDiscordUserId: interaction.user.id,
             categoryName,
-            broadcastCountry,
             liveCategoryName,
           }),
         ]);

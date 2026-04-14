@@ -64,7 +64,7 @@ export const matchCommand = {
         sportsDataService.getEventDetails({
           eventId: eventMatch.match.event.eventId,
           timezone: context.timezone,
-          broadcastCountry: context.broadcastCountry,
+          broadcastCountry: context.primaryBroadcastCountry,
         }),
         sportsDataService.getEventHighlights({
           eventId: eventMatch.match.event.eventId,

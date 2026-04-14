@@ -40,6 +40,10 @@ vi.mock('@voodoo/core', () => {
     public async listDailyListingsForLocalDate(): Promise<never> {
       throw new Error('Mock listDailyListingsForLocalDate not implemented');
     }
+
+    public async listDailyListingsForLocalDateAcrossCountries(): Promise<never> {
+      throw new Error('Mock listDailyListingsForLocalDateAcrossCountries not implemented');
+    }
   }
 
   class SportsLiveEventService {
@@ -84,6 +88,7 @@ vi.mock('../sports-runtime.js', () => ({
       localTimeHhMm: '01:00',
       timezone: 'Europe/London',
       broadcastCountry: 'United Kingdom',
+      broadcastCountries: ['United Kingdom', 'United States'],
       nextRunAtUtc: '2026-03-21T01:00:00.000Z',
       lastRunAtUtc: null,
       lastLocalRunDate: null,
@@ -415,14 +420,15 @@ describe('sports command', () => {
       createOkResult({
         configId: 'cfg-1',
         guildId: 'guild-1',
-        enabled: true,
-        managedCategoryChannelId: 'category-1',
-        localTimeHhMm: '01:00',
-        timezone: 'Europe/London',
-        broadcastCountry: 'United Kingdom',
-        nextRunAtUtc: '2026-03-21T01:00:00.000Z',
-        lastRunAtUtc: null,
-        lastLocalRunDate: null,
+      enabled: true,
+      managedCategoryChannelId: 'category-1',
+      localTimeHhMm: '01:00',
+      timezone: 'Europe/London',
+      broadcastCountry: 'United Kingdom',
+      broadcastCountries: ['United Kingdom', 'United States'],
+      nextRunAtUtc: '2026-03-21T01:00:00.000Z',
+      lastRunAtUtc: null,
+      lastLocalRunDate: null,
       }) as Awaited<ReturnType<SportsService['getGuildConfig']>>,
     );
     vi.spyOn(SportsService.prototype, 'listChannelBindings').mockResolvedValue(
@@ -449,35 +455,43 @@ describe('sports command', () => {
         },
       ]) as unknown as Awaited<ReturnType<SportsService['listChannelBindings']>>,
     );
-    vi.spyOn(SportsDataService.prototype, 'listDailyListingsForLocalDate').mockResolvedValue(
-      createOkResult([
-        {
-          sportName: 'Soccer',
-          listings: [
-            {
-              eventId: 'evt-1',
-              eventName: 'Rangers vs Celtic',
-              sportName: 'Soccer',
-              startTimeUkLabel: '15:00',
-              imageUrl: null,
-              eventCountry: null,
-              season: null,
-              broadcasters: [
-                {
-                  channelId: 'chan-1',
-                  channelName: 'Sky Sports Main Event',
-                  country: 'United Kingdom',
-                  logoUrl: null,
-                },
-              ],
-            },
-          ],
-        },
-        {
-          sportName: 'Rugby Union',
-          listings: [],
-        },
-      ]) as Awaited<ReturnType<SportsDataService['listDailyListingsForLocalDate']>>,
+    vi.spyOn(
+      SportsDataService.prototype,
+      'listDailyListingsForLocalDateAcrossCountries',
+    ).mockResolvedValue(
+      createOkResult({
+        data: [
+          {
+            sportName: 'Soccer',
+            listings: [
+              {
+                eventId: 'evt-1',
+                eventName: 'Rangers vs Celtic',
+                sportName: 'Soccer',
+                startTimeUkLabel: '15:00',
+                imageUrl: null,
+                eventCountry: null,
+                season: null,
+                broadcasters: [
+                  {
+                    channelId: 'chan-1',
+                    channelName: 'Sky Sports Main Event',
+                    country: 'United Kingdom',
+                    logoUrl: null,
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            sportName: 'Rugby Union',
+            listings: [],
+          },
+        ],
+        degraded: false,
+        failedCountries: [],
+        successfulCountries: ['United Kingdom', 'United States'],
+      }) as unknown as Awaited<ReturnType<SportsDataService['listDailyListingsForLocalDateAcrossCountries']>>,
     );
 
     const soccerChannel = createManagedTextChannel('sport-1', 'soccer');
@@ -520,19 +534,19 @@ describe('sports command', () => {
     expect(soccerChannel.send).toHaveBeenCalled();
   });
 
-  it('exposes broadcaster-country options on setup and sync', () => {
+  it('does not expose broadcaster-country on setup and keeps live category controls', () => {
     const commandJson = sportsCommand.data.toJSON();
     const topLevelOptions = (commandJson.options ?? []) as APIApplicationCommandSubcommandOption[];
     const setup = topLevelOptions.find((option) => option.name === 'setup');
     const sync = topLevelOptions.find((option) => option.name === 'sync');
 
-    expect((setup?.options ?? []).some((option: APIApplicationCommandBasicOption) => option.name === 'broadcast_country')).toBe(true);
+    expect((setup?.options ?? []).some((option: APIApplicationCommandBasicOption) => option.name === 'broadcast_country')).toBe(false);
     expect((sync?.options ?? []).some((option: APIApplicationCommandBasicOption) => option.name === 'broadcast_country')).toBe(true);
     expect((setup?.options ?? []).some((option: APIApplicationCommandBasicOption) => option.name === 'live_category_name')).toBe(true);
     expect((sync?.options ?? []).some((option: APIApplicationCommandBasicOption) => option.name === 'live_category_name')).toBe(true);
   });
 
-  it('passes the selected broadcaster country and live category into setup sync', async () => {
+  it('passes shared setup inputs without a broadcaster-country override', async () => {
     process.env.SUPER_ADMIN_DISCORD_IDS = 'owner-1';
     resetEnvForTests();
 
@@ -548,7 +562,6 @@ describe('sports command', () => {
       userId: 'owner-1',
       subcommand: 'setup',
       categoryName: 'Sports Listings',
-      broadcastCountry: 'United States',
       liveCategoryName: 'Live Sports',
     });
 
@@ -559,7 +572,6 @@ describe('sports command', () => {
         guild: interaction.guild,
         actorDiscordUserId: 'owner-1',
         categoryName: 'Sports Listings',
-        broadcastCountry: 'United States',
         liveCategoryName: 'Live Sports',
       }),
     );
