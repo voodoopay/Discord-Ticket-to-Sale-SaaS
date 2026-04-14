@@ -134,6 +134,162 @@ function mergeLiveEventBroadcasters(event: SportsLiveEvent): SportsLiveEvent['br
   return [...broadcasters.values()];
 }
 
+function getLiveEventStatusRank(statusLabel: string | null | undefined): number {
+  const normalizedStatus = statusLabel?.trim().toLowerCase() ?? '';
+
+  if (
+    normalizedStatus.includes('pen') ||
+    normalizedStatus.includes('shootout') ||
+    normalizedStatus.includes('extra time')
+  ) {
+    return 6;
+  }
+  if (
+    normalizedStatus === 'ft' ||
+    normalizedStatus.includes('full time') ||
+    normalizedStatus.includes('finished')
+  ) {
+    return 5;
+  }
+  if (
+    normalizedStatus.includes('2nd') ||
+    normalizedStatus.includes('second half') ||
+    normalizedStatus.includes('h2')
+  ) {
+    return 4;
+  }
+  if (normalizedStatus === 'ht' || normalizedStatus.includes('half-time')) {
+    return 3;
+  }
+  if (
+    normalizedStatus.includes('1st') ||
+    normalizedStatus.includes('first half') ||
+    normalizedStatus.includes('h1')
+  ) {
+    return 2;
+  }
+  if (normalizedStatus.length > 0) {
+    return 1;
+  }
+
+  return 0;
+}
+
+function parseScoreTotal(scoreLabel: string | null | undefined): number {
+  if (!scoreLabel) {
+    return -1;
+  }
+
+  const scoreParts = scoreLabel.match(/\d+/g);
+  if (!scoreParts || scoreParts.length < 2) {
+    return -1;
+  }
+
+  return scoreParts
+    .slice(0, 2)
+    .map((scorePart) => Number.parseInt(scorePart, 10))
+    .filter((scorePart) => Number.isFinite(scorePart))
+    .reduce((total, scorePart) => total + scorePart, 0);
+}
+
+function parseUtcTimeValue(value: string | null | undefined): number {
+  if (!value) {
+    return Number.NEGATIVE_INFINITY;
+  }
+
+  const parsedValue = Date.parse(value);
+  return Number.isNaN(parsedValue) ? Number.NEGATIVE_INFINITY : parsedValue;
+}
+
+function countLiveEventDetails(event: SportsLiveEvent): number {
+  let detailCount = 0;
+
+  if (typeof event.eventName === 'string' && event.eventName.trim().length > 0) {
+    detailCount += 1;
+  }
+  if (typeof event.sportName === 'string' && event.sportName.trim().length > 0) {
+    detailCount += 1;
+  }
+  if (typeof event.leagueName === 'string' && event.leagueName.trim().length > 0) {
+    detailCount += 1;
+  }
+  if (typeof event.statusLabel === 'string' && event.statusLabel.trim().length > 0) {
+    detailCount += 1;
+  }
+  if (typeof event.scoreLabel === 'string' && event.scoreLabel.trim().length > 0) {
+    detailCount += 1;
+  }
+  if (typeof event.startTimeUtc === 'string' && event.startTimeUtc.trim().length > 0) {
+    detailCount += 1;
+  }
+  if (typeof event.startTimeUkLabel === 'string' && event.startTimeUkLabel.trim().length > 0) {
+    detailCount += 1;
+  }
+  if (typeof event.imageUrl === 'string' && event.imageUrl.trim().length > 0) {
+    detailCount += 1;
+  }
+
+  detailCount += event.broadcasters.length;
+
+  return detailCount;
+}
+
+function compareLiveEventFreshness(left: SportsLiveEvent, right: SportsLiveEvent): number {
+  const statusRankDelta = getLiveEventStatusRank(left.statusLabel) - getLiveEventStatusRank(right.statusLabel);
+  if (statusRankDelta !== 0) {
+    return statusRankDelta;
+  }
+
+  const scoreTotalDelta = parseScoreTotal(left.scoreLabel) - parseScoreTotal(right.scoreLabel);
+  if (scoreTotalDelta !== 0) {
+    return scoreTotalDelta;
+  }
+
+  const startTimeDelta = parseUtcTimeValue(left.startTimeUtc) - parseUtcTimeValue(right.startTimeUtc);
+  if (startTimeDelta !== 0) {
+    return startTimeDelta;
+  }
+
+  const detailDelta = countLiveEventDetails(left) - countLiveEventDetails(right);
+  if (detailDelta !== 0) {
+    return detailDelta;
+  }
+
+  return JSON.stringify(left).localeCompare(JSON.stringify(right));
+}
+
+function getPreferredLiveEventPair(
+  left: SportsLiveEvent,
+  right: SportsLiveEvent,
+): [preferred: SportsLiveEvent, secondary: SportsLiveEvent] {
+  return compareLiveEventFreshness(left, right) >= 0 ? [left, right] : [right, left];
+}
+
+function pickPreferredLiveEventTime(
+  left: SportsLiveEvent,
+  right: SportsLiveEvent,
+): Pick<SportsLiveEvent, 'startTimeUtc' | 'startTimeUkLabel'> {
+  const [preferred] = getPreferredLiveEventPair(
+    {
+      ...left,
+      statusLabel: '',
+      scoreLabel: null,
+      broadcasters: [],
+    },
+    {
+      ...right,
+      statusLabel: '',
+      scoreLabel: null,
+      broadcasters: [],
+    },
+  );
+
+  return {
+    startTimeUtc: preferred.startTimeUtc,
+    startTimeUkLabel: preferred.startTimeUkLabel,
+  };
+}
+
 function mergeDuplicateLiveEvents(events: SportsLiveEvent[]): SportsLiveEvent[] {
   const mergedEvents = new Map<string, SportsLiveEvent>();
 
@@ -147,26 +303,77 @@ function mergeDuplicateLiveEvents(events: SportsLiveEvent[]): SportsLiveEvent[] 
       continue;
     }
 
+    const [preferredEvent, secondaryEvent] = getPreferredLiveEventPair(existingEvent, event);
+    const preferredTimes = pickPreferredLiveEventTime(existingEvent, event);
+
     mergedEvents.set(event.eventId, {
-      ...existingEvent,
+      ...preferredEvent,
       eventName:
-        firstNonEmptyString(existingEvent.eventName, event.eventName) ?? existingEvent.eventName,
-      sportName: firstNonEmptyString(existingEvent.sportName, event.sportName),
-      leagueName: firstNonEmptyString(existingEvent.leagueName, event.leagueName),
+        firstNonEmptyString(preferredEvent.eventName, secondaryEvent.eventName) ??
+        preferredEvent.eventName,
+      sportName: firstNonEmptyString(preferredEvent.sportName, secondaryEvent.sportName),
+      leagueName: firstNonEmptyString(preferredEvent.leagueName, secondaryEvent.leagueName),
       statusLabel:
-        firstNonEmptyString(existingEvent.statusLabel, event.statusLabel) ?? existingEvent.statusLabel,
-      scoreLabel: firstNonEmptyString(existingEvent.scoreLabel, event.scoreLabel),
-      startTimeUtc: firstNonEmptyString(existingEvent.startTimeUtc, event.startTimeUtc),
-      startTimeUkLabel: firstNonEmptyString(existingEvent.startTimeUkLabel, event.startTimeUkLabel),
-      imageUrl: firstNonEmptyString(existingEvent.imageUrl, event.imageUrl),
+        firstNonEmptyString(preferredEvent.statusLabel, secondaryEvent.statusLabel) ??
+        preferredEvent.statusLabel,
+      scoreLabel: firstNonEmptyString(preferredEvent.scoreLabel, secondaryEvent.scoreLabel),
+      startTimeUtc: preferredTimes.startTimeUtc,
+      startTimeUkLabel: preferredTimes.startTimeUkLabel,
+      imageUrl: firstNonEmptyString(preferredEvent.imageUrl, secondaryEvent.imageUrl),
       broadcasters: mergeLiveEventBroadcasters({
-        ...existingEvent,
+        ...preferredEvent,
         broadcasters: [...existingEvent.broadcasters, ...event.broadcasters],
       }),
     });
   }
 
   return [...mergedEvents.values()];
+}
+
+function getMostRecentChannelMessage(
+  messages: unknown,
+): { id: string; createdTimestamp: number; edit: (input: unknown) => Promise<unknown> } | null {
+  if (typeof messages !== 'object' || messages === null || !('values' in messages)) {
+    return null;
+  }
+
+  const values = messages.values;
+  if (typeof values !== 'function') {
+    return null;
+  }
+
+  let mostRecentMessage: {
+    id: string;
+    createdTimestamp: number;
+    edit: (input: unknown) => Promise<unknown>;
+  } | null = null;
+
+  for (const message of values.call(messages) as Iterable<unknown>) {
+    if (
+      typeof message !== 'object' ||
+      message === null ||
+      !('id' in message) ||
+      !('createdTimestamp' in message) ||
+      !('edit' in message)
+    ) {
+      continue;
+    }
+
+    const typedMessage = message as {
+      id: string;
+      createdTimestamp: number;
+      edit: (input: unknown) => Promise<unknown>;
+    };
+
+    if (
+      mostRecentMessage === null ||
+      typedMessage.createdTimestamp > mostRecentMessage.createdTimestamp
+    ) {
+      mostRecentMessage = typedMessage;
+    }
+  }
+
+  return mostRecentMessage;
 }
 
 function areSnapshotsEqual(
@@ -340,6 +547,23 @@ async function renderActiveLiveEventChannel(input: {
         if (!isUnknownMessageError(error)) {
           throw error;
         }
+      }
+    }
+
+    if (!input.scoreMessageId && !input.shouldSendHeader) {
+      const recentMessages = await input.channel.messages.fetch({ limit: 10 });
+      const recoveredMessage = getMostRecentChannelMessage(recentMessages);
+
+      if (recoveredMessage) {
+        if (input.allowNoopEdit !== true) {
+          await recoveredMessage.edit({
+            embeds: [buildLiveEventEmbed(input.event)],
+          });
+        }
+
+        return {
+          scoreMessageId: recoveredMessage.id,
+        };
       }
     }
 

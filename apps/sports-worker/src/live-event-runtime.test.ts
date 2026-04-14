@@ -718,6 +718,10 @@ describe('live event runtime', () => {
   it('de-duplicates the same live event when the merged UK and USA feeds both contain it', async () => {
     const { guild, create, liveCategory } = createGuildFixture();
     const duplicateLiveEvent = makeLiveEvent({
+      statusLabel: 'HT',
+      scoreLabel: '1-0',
+      startTimeUtc: '2026-03-20T15:00:00.000Z',
+      startTimeUkLabel: '15:00',
       broadcasters: [
         {
           channelId: 'uk-1',
@@ -766,6 +770,10 @@ describe('live event runtime', () => {
             duplicateLiveEvent,
             {
               ...duplicateLiveEvent,
+              statusLabel: '2nd Half',
+              scoreLabel: '2-1',
+              startTimeUtc: '2026-03-20T15:05:00.000Z',
+              startTimeUkLabel: '15:05',
               broadcasters: [
                 {
                   channelId: 'us-1',
@@ -813,9 +821,136 @@ describe('live event runtime', () => {
       expect.objectContaining({
         eventId: 'evt-1',
         eventChannelId: 'live-1',
+        lastScoreSnapshot: { scoreLabel: '2-1' },
+        lastStateSnapshot: { statusLabel: '2nd Half', broadcasterCount: 2 },
       }),
     );
     expect(create.mock.calls.map(([input]) => input.name)).toEqual(['live-rangers-vs-celtic']);
+  });
+
+  it('rebuilds the legacy live score message in place when the tracked event predates persisted score message ids', async () => {
+    const { guild, channels, create } = createGuildFixture();
+    const existingLiveChannel = createTextChannel({
+      id: 'live-1',
+      name: 'live-rangers-vs-celtic',
+      parentId: 'live-category-1',
+      topic: 'Managed by the sports worker for live event evt-1.',
+    });
+    const legacyHeaderMessage = {
+      id: 'legacy-header-1',
+      createdTimestamp: Date.now() - 10_000,
+      edit: vi.fn(async () => undefined),
+      delete: vi.fn(async () => undefined),
+    };
+    const legacyScoreMessage = {
+      id: 'legacy-score-1',
+      createdTimestamp: Date.now() - 5_000,
+      edit: vi.fn(async () => undefined),
+      delete: vi.fn(async () => undefined),
+    };
+    (
+      existingLiveChannel as unknown as {
+        __storedMessages: Map<
+          string,
+          { id: string; createdTimestamp: number; edit: Mock; delete: Mock }
+        >;
+      }
+    ).__storedMessages.set(legacyHeaderMessage.id, legacyHeaderMessage);
+    (
+      existingLiveChannel as unknown as {
+        __storedMessages: Map<
+          string,
+          { id: string; createdTimestamp: number; edit: Mock; delete: Mock }
+        >;
+      }
+    ).__storedMessages.set(legacyScoreMessage.id, legacyScoreMessage);
+    channels.set(existingLiveChannel.id, existingLiveChannel);
+
+    vi.spyOn(SportsService.prototype, 'getGuildConfig').mockResolvedValue(
+      createOkResult({
+        configId: 'cfg-1',
+        guildId: 'guild-1',
+        enabled: true,
+        managedCategoryChannelId: 'category-1',
+        liveCategoryChannelId: 'live-category-1',
+        localTimeHhMm: '01:00',
+        timezone: 'Europe/London',
+        broadcastCountry: 'United Kingdom',
+        nextRunAtUtc: '2026-03-21T01:00:00.000Z',
+        lastRunAtUtc: null,
+        lastLocalRunDate: null,
+      }) as Awaited<ReturnType<SportsService['getGuildConfig']>>,
+    );
+    vi.spyOn(SportsService.prototype, 'listChannelBindings').mockResolvedValue(
+      createOkResult([
+        {
+          bindingId: 'binding-1',
+          guildId: 'guild-1',
+          sportId: 'soccer',
+          sportName: 'Soccer',
+          sportSlug: 'soccer',
+          channelId: 'sport-1',
+          createdAt: new Date('2026-03-20T12:00:00.000Z'),
+          updatedAt: new Date('2026-03-20T12:00:00.000Z'),
+        },
+      ]) as unknown as Awaited<ReturnType<SportsService['listChannelBindings']>>,
+    );
+    vi.spyOn(SportsDataService.prototype, 'listLiveEvents').mockResolvedValue(
+      createOkResult([
+        makeLiveEvent({
+          scoreLabel: '3-1',
+        }),
+      ]) as Awaited<ReturnType<SportsDataService['listLiveEvents']>>,
+    );
+    vi.spyOn(SportsLiveEventService.prototype, 'listTrackedEvents').mockResolvedValue(
+      createOkResult([
+        makeTrackedEvent({
+          eventChannelId: 'live-1',
+          scoreMessageId: null,
+          status: 'live',
+          lastScoreSnapshot: { scoreLabel: '2-1' },
+          lastStateSnapshot: { statusLabel: 'Live', broadcasterCount: 1 },
+        }),
+      ]) as Awaited<ReturnType<SportsLiveEventService['listTrackedEvents']>>,
+    );
+    const upsertTrackedEvent = vi
+      .spyOn(SportsLiveEventService.prototype, 'upsertTrackedEvent')
+      .mockResolvedValue(
+        createOkResult(
+          makeTrackedEvent({
+            eventChannelId: 'live-1',
+            scoreMessageId: 'legacy-score-1',
+            status: 'live',
+            lastScoreSnapshot: { scoreLabel: '3-1' },
+            lastStateSnapshot: { statusLabel: 'Live', broadcasterCount: 1 },
+          }),
+        ) as Awaited<ReturnType<SportsLiveEventService['upsertTrackedEvent']>>,
+      );
+
+    const result = await reconcileLiveEventsForGuild({
+      guild,
+      timezone: 'Europe/London',
+      broadcastCountry: 'United Kingdom',
+      now: new Date('2026-03-20T15:07:00.000Z'),
+    });
+
+    expect(result.createdChannelCount).toBe(0);
+    expect(create).not.toHaveBeenCalled();
+    expect(existingLiveChannel.send).not.toHaveBeenCalled();
+    expect(existingLiveChannel.messages.fetch).toHaveBeenCalledWith({ limit: 10 });
+    expect(legacyScoreMessage.edit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        embeds: [expect.anything()],
+      }),
+    );
+    expect(legacyHeaderMessage.edit).not.toHaveBeenCalled();
+    expect(upsertTrackedEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventId: 'evt-1',
+        eventChannelId: 'live-1',
+        scoreMessageId: 'legacy-score-1',
+      }),
+    );
   });
 
   it('edits the persisted score message instead of clearing and reposting the live channel', async () => {

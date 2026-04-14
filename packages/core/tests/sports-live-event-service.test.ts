@@ -393,6 +393,47 @@ describe('SportsLiveEventService', () => {
     expect(rows[0]?.scoreMessageId).toBe('msg-score-2');
   });
 
+  it('backfills the stored score message id when a legacy tracked row starts with null', async () => {
+    const rows: SportsLiveEventRow[] = [
+      makeRow({
+        id: '01J0SPORTSLIVE000000000005',
+        guildId: 'guild-1',
+        eventId: 'evt-1',
+        eventName: 'Rangers vs Celtic',
+        eventChannelId: 'event-channel-1',
+        scoreMessageId: null,
+        status: 'live',
+      }),
+    ];
+    const mockDb = createStatefulMockDb(rows);
+    const service = new SportsLiveEventService(createRepositoryWithMockDb(mockDb));
+
+    const result = await service.upsertTrackedEvent({
+      guildId: 'guild-1',
+      sportName: 'Soccer',
+      eventId: 'evt-1',
+      eventName: 'Rangers vs Celtic',
+      sportChannelId: 'sport-1',
+      kickoffAtUtc: new Date('2026-03-20T12:30:00.000Z'),
+      eventChannelId: 'event-channel-1',
+      scoreMessageId: 'msg-score-legacy',
+      status: 'live',
+      lastScoreSnapshot: { home: 3, away: 1 },
+      lastStateSnapshot: { phase: 'FT' },
+      lastSyncedAtUtc: new Date('2026-03-20T13:05:00.000Z'),
+      finishedAtUtc: null,
+      deleteAfterUtc: null,
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) {
+      return;
+    }
+
+    expect(result.value.scoreMessageId).toBe('msg-score-legacy');
+    expect(rows[0]?.scoreMessageId).toBe('msg-score-legacy');
+  });
+
   it('marks finished events for cleanup three hours later', async () => {
     const repository = new SportsLiveEventRepository();
     const markFinishedSpy = vi.spyOn(repository, 'markFinished').mockResolvedValue(
