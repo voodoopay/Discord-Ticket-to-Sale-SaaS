@@ -10,6 +10,7 @@ import {
   type SportsEventDetails,
   SportsService,
   getEnv,
+  normalizeBroadcastCountries,
   pickBestSportsSearchResult,
   type SportsSearchResult,
 } from '@voodoo/core';
@@ -35,16 +36,6 @@ export type LookupContext = {
 
 function isSuperAdminUser(discordUserId: string): boolean {
   return getEnv().superAdminDiscordIds.includes(discordUserId);
-}
-
-function normalizeBroadcastCountries(
-  broadcastCountries: readonly (string | null | undefined)[],
-): string[] {
-  const normalized = broadcastCountries
-    .map((country) => country?.trim() ?? '')
-    .filter((country) => country.length > 0);
-
-  return normalized.length > 0 ? [...new Set(normalized)] : [getEnv().SPORTS_BROADCAST_COUNTRY];
 }
 
 export async function deferEphemeralReply(
@@ -133,10 +124,13 @@ export async function resolveLookupContext(input: {
   }
 
   const env = getEnv();
+  const fallbackBroadcastCountries = configResult.value?.broadcastCountry
+    ? [configResult.value.broadcastCountry]
+    : [];
   const broadcastCountries = normalizeBroadcastCountries(
     configResult.value?.broadcastCountries?.length
       ? configResult.value.broadcastCountries
-      : [configResult.value?.broadcastCountry, env.SPORTS_BROADCAST_COUNTRY],
+      : fallbackBroadcastCountries,
   );
 
   return {

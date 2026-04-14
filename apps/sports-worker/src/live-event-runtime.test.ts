@@ -106,6 +106,17 @@ vi.mock('@voodoo/core', () => {
     SportsAccessService,
     SportsLiveEventService,
     SportsService,
+    normalizeBroadcastCountries: (input: readonly string[] | null | undefined) => {
+      const normalized = [
+        ...new Set(
+          (input ?? [])
+            .map((value) => value?.trim?.() ?? '')
+            .filter((value) => value.length > 0),
+        ),
+      ];
+
+      return normalized.length > 0 ? normalized : ['United Kingdom', 'United States'];
+    },
     logger: {
       info: vi.fn(),
       warn: vi.fn(),
@@ -390,6 +401,7 @@ describe('live event runtime', () => {
         localTimeHhMm: '01:00',
         timezone: 'Europe/London',
         broadcastCountry: 'United Kingdom',
+        broadcastCountries: ['United Kingdom', 'United States'],
         nextRunAtUtc: '2026-03-21T01:00:00.000Z',
         lastRunAtUtc: null,
         lastLocalRunDate: null,
@@ -949,6 +961,72 @@ describe('live event runtime', () => {
         eventId: 'evt-1',
         eventChannelId: 'live-1',
         scoreMessageId: 'legacy-score-1',
+      }),
+    );
+  });
+
+  it('creates managed sport channels with the shared-country topic language when a binding is missing', async () => {
+    const { guild, create, category, liveCategory } = createGuildFixture();
+
+    vi.spyOn(SportsService.prototype, 'getGuildConfig').mockResolvedValue(
+      createOkResult({
+        configId: 'cfg-1',
+        guildId: 'guild-1',
+        enabled: true,
+        managedCategoryChannelId: category.id,
+        liveCategoryChannelId: liveCategory.id,
+        localTimeHhMm: '01:00',
+        timezone: 'Europe/London',
+        broadcastCountry: 'United Kingdom',
+        broadcastCountries: ['United Kingdom', 'United States'],
+        nextRunAtUtc: '2026-03-21T01:00:00.000Z',
+        lastRunAtUtc: null,
+        lastLocalRunDate: null,
+      }) as Awaited<ReturnType<SportsService['getGuildConfig']>>,
+    );
+    vi.spyOn(SportsService.prototype, 'listChannelBindings').mockResolvedValue(
+      createOkResult([]) as unknown as Awaited<ReturnType<SportsService['listChannelBindings']>>,
+    );
+    vi.spyOn(SportsDataService.prototype, 'listLiveEvents').mockResolvedValue(
+      createOkResult([makeLiveEvent()]) as Awaited<ReturnType<SportsDataService['listLiveEvents']>>,
+    );
+    vi.spyOn(SportsLiveEventService.prototype, 'listTrackedEvents').mockResolvedValue(
+      createOkResult([]) as unknown as Awaited<ReturnType<SportsLiveEventService['listTrackedEvents']>>,
+    );
+    vi.spyOn(SportsService.prototype, 'upsertChannelBinding').mockResolvedValue(
+      createOkResult({
+        bindingId: 'binding-1',
+        guildId: 'guild-1',
+        sportId: null,
+        sportName: 'Soccer',
+        sportSlug: 'soccer',
+        channelId: 'sport-1',
+        createdAt: new Date('2026-03-20T12:00:00.000Z'),
+        updatedAt: new Date('2026-03-20T12:00:00.000Z'),
+      }) as unknown as Awaited<ReturnType<SportsService['upsertChannelBinding']>>,
+    );
+    vi.spyOn(SportsLiveEventService.prototype, 'upsertTrackedEvent').mockResolvedValue(
+      createOkResult(
+        makeTrackedEvent({
+          sportChannelId: 'sport-1',
+          eventChannelId: 'live-1',
+        }),
+      ) as Awaited<ReturnType<SportsLiveEventService['upsertTrackedEvent']>>,
+    );
+
+    const result = await reconcileLiveEventsForGuild({
+      guild,
+      timezone: 'Europe/London',
+      broadcastCountry: 'United Kingdom',
+      now: new Date('2026-03-20T15:05:00.000Z'),
+    });
+
+    expect(result.createdChannelCount).toBe(1);
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parent: category.id,
+        topic:
+          'Managed by the sports worker. Daily TV listings for tracked broadcasters in United Kingdom and United States refresh automatically at 01:00 (Europe/London).',
       }),
     );
   });

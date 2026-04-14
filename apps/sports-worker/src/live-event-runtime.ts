@@ -13,6 +13,7 @@ import {
   SportsLiveEventService,
   SportsService,
   logger,
+  normalizeBroadcastCountries,
   type SportsChannelBindingSummary,
   type SportsGuildConfigSummary,
   type SportsLiveEvent,
@@ -23,6 +24,7 @@ import {
   buildFinishedLiveEventEmbed,
   buildLiveEventEmbed,
   buildLiveEventHeaderMessage,
+  formatBroadcastCountriesLabel,
 } from './ui/sports-embeds.js';
 
 const sportsAccessService = new SportsAccessService();
@@ -82,9 +84,21 @@ function reserveUniqueChannelName(input: {
 function buildManagedChannelTopic(input: {
   timezone: string;
   publishTime: string;
-  broadcastCountry: string;
+  broadcastCountries: string[];
+  degraded?: boolean;
+  failedCountries?: string[];
 }): string {
-  return `Managed by the sports worker. Daily ${input.broadcastCountry} TV listings refresh automatically at ${input.publishTime} (${input.timezone}).`;
+  const countriesLabel = formatBroadcastCountriesLabel(input.broadcastCountries);
+  const failedCountriesLabel =
+    input.degraded && input.failedCountries && input.failedCountries.length > 0
+      ? formatBroadcastCountriesLabel(input.failedCountries)
+      : null;
+
+  if (failedCountriesLabel) {
+    return `Managed by the sports worker. Daily TV listings currently reflect tracked broadcasters in ${countriesLabel}. Coverage is degraded because data is unavailable for ${failedCountriesLabel}. Refreshes automatically at ${input.publishTime} (${input.timezone}).`;
+  }
+
+  return `Managed by the sports worker. Daily TV listings for tracked broadcasters in ${countriesLabel} refresh automatically at ${input.publishTime} (${input.timezone}).`;
 }
 
 function buildLiveEventChannelName(eventName: string): string {
@@ -502,7 +516,7 @@ async function ensureSportChannelForLiveEvent(input: {
       topic: buildManagedChannelTopic({
         timezone: input.config.timezone,
         publishTime: input.config.localTimeHhMm,
-        broadcastCountry: input.config.broadcastCountry,
+        broadcastCountries: normalizeBroadcastCountries(input.config.broadcastCountries),
       }),
       reason: `Create the managed ${input.sportName} sport channel for live event publishing.`,
     }),
