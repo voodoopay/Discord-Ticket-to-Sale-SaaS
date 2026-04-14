@@ -738,6 +738,32 @@ function buildSportsListingKey(listing: Pick<SportsListing, 'eventId' | 'sportNa
   return `${listing.eventId}:${listing.sportName.toLowerCase()}`;
 }
 
+function buildSportsListingFallbackKey(
+  listing: Pick<SportsListing, 'sportName' | 'eventName' | 'startTimeUtc'>,
+): string {
+  return [
+    normalizeForSearch(listing.sportName),
+    normalizeForSearch(listing.eventName),
+    listing.startTimeUtc.trim(),
+  ].join('|');
+}
+
+function buildSportsLiveEventFallbackKey(
+  event: Pick<SportsLiveEvent, 'sportName' | 'eventName' | 'startTimeUkLabel'>,
+): string | null {
+  const sportName = firstNonEmpty(event.sportName);
+  const startTime = firstNonEmpty(event.startTimeUkLabel);
+  if (!sportName || !startTime) {
+    return null;
+  }
+
+  return [
+    normalizeForSearch(sportName),
+    normalizeForSearch(event.eventName),
+    startTime,
+  ].join('|');
+}
+
 function pickDeterministicPair<T>(
   left: T,
   right: T,
@@ -783,21 +809,30 @@ function mergeSportsListingsBySport(
   listingsBySport: readonly SportsListingsBySport[][],
 ): SportsListingsBySport[] {
   const mergedListings = new Map<string, SportsListing>();
+  const listingFallbackIndex = new Map<string, string>();
 
   for (const countryListings of listingsBySport) {
     for (const sportListings of countryListings) {
       for (const listing of sportListings.listings) {
-        const key = buildSportsListingKey(listing);
-        const existing = mergedListings.get(key);
-        mergedListings.set(
-          key,
+        const exactKey = buildSportsListingKey(listing);
+        const fallbackKey = buildSportsListingFallbackKey(listing);
+        const canonicalKey = listingFallbackIndex.get(fallbackKey) ?? exactKey;
+        const existing = mergedListings.get(canonicalKey) ?? mergedListings.get(exactKey);
+        const mergedListing =
           existing
             ? mergeSportsListing(existing, listing)
             : {
                 ...listing,
                 broadcasters: mergeSportsBroadcasts(listing.broadcasters),
-              },
-        );
+              };
+
+        if (canonicalKey !== exactKey) {
+          mergedListings.delete(exactKey);
+        }
+
+        mergedListings.set(canonicalKey, mergedListing);
+        listingFallbackIndex.set(fallbackKey, canonicalKey);
+        listingFallbackIndex.set(buildSportsListingFallbackKey(mergedListing), canonicalKey);
       }
     }
   }
@@ -846,19 +881,35 @@ function mergeSportsLiveEvent(
 
 function mergeSportsLiveEvents(eventsByCountry: readonly SportsLiveEvent[][]): SportsLiveEvent[] {
   const mergedEvents = new Map<string, SportsLiveEvent>();
+  const liveEventFallbackIndex = new Map<string, string>();
 
   for (const countryEvents of eventsByCountry) {
     for (const event of countryEvents) {
-      const existing = mergedEvents.get(event.eventId);
-      mergedEvents.set(
-        event.eventId,
+      const fallbackKey = buildSportsLiveEventFallbackKey(event);
+      const canonicalKey = fallbackKey ? (liveEventFallbackIndex.get(fallbackKey) ?? event.eventId) : event.eventId;
+      const existing = mergedEvents.get(canonicalKey) ?? mergedEvents.get(event.eventId);
+      const mergedEvent =
         existing
           ? mergeSportsLiveEvent(existing, event)
           : {
               ...event,
               broadcasters: mergeSportsBroadcasts(event.broadcasters),
-            },
-      );
+            };
+
+      if (canonicalKey !== event.eventId) {
+        mergedEvents.delete(event.eventId);
+      }
+
+      mergedEvents.set(canonicalKey, mergedEvent);
+
+      if (fallbackKey) {
+        liveEventFallbackIndex.set(fallbackKey, canonicalKey);
+      }
+
+      const mergedFallbackKey = buildSportsLiveEventFallbackKey(mergedEvent);
+      if (mergedFallbackKey) {
+        liveEventFallbackIndex.set(mergedFallbackKey, canonicalKey);
+      }
     }
   }
 

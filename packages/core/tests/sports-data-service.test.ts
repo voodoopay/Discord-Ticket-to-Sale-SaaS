@@ -282,6 +282,105 @@ describe('pickBestSportsSearchResult', () => {
     ]);
   });
 
+  it('merges daily listings when countries return different event ids for the same kickoff', async () => {
+    process.env.SPORTS_API_KEY = 'premium-key';
+    process.env.SPORTS_API_BASE_URL = 'https://example.com/api/v2/json';
+    process.env.SPORTS_API_V1_BASE_URL = 'https://example.com/api/v1/json';
+    resetEnvForTests();
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(createJsonResponse({ filter: [] }))
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          filter: [
+            {
+              idEvent: 'evt-uk',
+              strSport: 'Soccer',
+              strEvent: 'Rangers vs Celtic',
+              strEventThumb: 'https://img.test/shared-thumb.jpg',
+              idChannel: 'uk-1',
+              strCountry: 'United Kingdom',
+              strChannel: 'Sky Sports Main Event',
+              strSeason: '2025-2026',
+              dateEvent: '2026-03-20',
+              strTime: '15:00:00',
+              strTimeStamp: '2026-03-20T15:00:00+00:00',
+              strEventCountry: 'Scotland',
+              strLogo: 'https://img.test/sky-logo.png',
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(createJsonResponse({ filter: [] }))
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          filter: [
+            {
+              idEvent: 'evt-us',
+              strSport: ' soccer ',
+              strEvent: 'Rangers v Celtic',
+              strEventThumb: 'https://img.test/shared-thumb.jpg',
+              idChannel: 'us-1',
+              strCountry: 'United States',
+              strChannel: 'ESPN Deportes',
+              strSeason: '2025-2026',
+              dateEvent: '2026-03-20',
+              strTime: '15:00:00',
+              strTimeStamp: '2026-03-20T15:00:00+00:00',
+              strEventCountry: 'Scotland',
+              strLogo: 'https://img.test/espn-logo.png',
+            },
+          ],
+        }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new SportsDataService();
+    const result = await service.listDailyListingsForLocalDateAcrossCountries({
+      localDate: '2026-03-20',
+      timezone: 'Europe/London',
+      broadcastCountries: ['United Kingdom', 'United States'],
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) {
+      throw result.error;
+    }
+
+    expect(result.value).toEqual([
+      {
+        sportName: 'Soccer',
+        listings: [
+          {
+            eventId: 'evt-uk',
+            sportName: 'Soccer',
+            eventName: 'Rangers vs Celtic',
+            season: '2025-2026',
+            eventCountry: 'Scotland',
+            startTimeUtc: '2026-03-20T15:00:00.000Z',
+            startTimeUkLabel: '15:00',
+            imageUrl: 'https://img.test/shared-thumb.jpg',
+            broadcasters: [
+              {
+                channelId: 'us-1',
+                channelName: 'ESPN Deportes',
+                country: 'United States',
+                logoUrl: 'https://img.test/espn-logo.png',
+              },
+              {
+                channelId: 'uk-1',
+                channelName: 'Sky Sports Main Event',
+                country: 'United Kingdom',
+                logoUrl: 'https://img.test/sky-logo.png',
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+  });
+
   it('reads event broadcasters from tvevent lookup responses', async () => {
     process.env.SPORTS_API_KEY = 'premium-key';
     process.env.SPORTS_API_BASE_URL = 'https://example.com/api/v2/json';
@@ -792,6 +891,121 @@ describe('pickBestSportsSearchResult', () => {
     expect(result.value).toEqual([
       {
         eventId: 'evt-1',
+        eventName: 'Rangers vs Celtic',
+        sportName: 'Soccer',
+        leagueName: 'Scottish Premiership',
+        statusLabel: 'Live',
+        scoreLabel: '2-1',
+        startTimeUkLabel: '15:00',
+        imageUrl: 'https://img.test/live-event.jpg',
+        broadcasters: [
+          {
+            channelId: 'us-1',
+            channelName: 'ESPN Deportes',
+            country: 'United States',
+            logoUrl: 'https://img.test/espn-logo.png',
+          },
+          {
+            channelId: 'uk-1',
+            channelName: 'Sky Sports Main Event',
+            country: 'United Kingdom',
+            logoUrl: 'https://img.test/sky-logo.png',
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('merges live events when countries return different event ids for the same kickoff', async () => {
+    process.env.SPORTS_API_KEY = 'premium-key';
+    process.env.SPORTS_API_BASE_URL = 'https://example.com/api/v2/json';
+    process.env.SPORTS_API_V1_BASE_URL = 'https://example.com/api/v1/json';
+    resetEnvForTests();
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          events: [
+            {
+              idEvent: 'evt-uk',
+              strEvent: 'Rangers vs Celtic',
+              strSport: 'Soccer',
+              strLeague: 'Scottish Premiership',
+              strStatus: 'Live',
+              intHomeScore: '2',
+              intAwayScore: '1',
+              strHomeTeam: 'Rangers',
+              strAwayTeam: 'Celtic',
+              dateEvent: '2026-03-20',
+              strTime: '15:00:00',
+              strTimestamp: '2026-03-20T15:00:00+00:00',
+              strThumb: 'https://img.test/live-event.jpg',
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          tvshows: [
+            {
+              idChannel: 'uk-1',
+              strTvChannel: 'Sky Sports Main Event',
+              strCountry: 'United Kingdom',
+              strLogo: 'https://img.test/sky-logo.png',
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          events: [
+            {
+              idEvent: 'evt-us',
+              strEvent: 'Rangers v Celtic',
+              strSport: ' soccer ',
+              strLeague: 'Scottish Premiership',
+              strStatus: 'Live',
+              intHomeScore: '2',
+              intAwayScore: '1',
+              strHomeTeam: 'Rangers',
+              strAwayTeam: 'Celtic',
+              dateEvent: '2026-03-20',
+              strTime: '15:00:00',
+              strTimestamp: '2026-03-20T15:00:00+00:00',
+              strThumb: 'https://img.test/live-event.jpg',
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          tvshows: [
+            {
+              idChannel: 'us-1',
+              strTvChannel: 'ESPN Deportes',
+              strCountry: 'United States',
+              strLogo: 'https://img.test/espn-logo.png',
+            },
+          ],
+        }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const service = new SportsDataService();
+    const result = await service.listLiveEventsAcrossCountries({
+      timezone: 'Europe/London',
+      broadcastCountries: ['United Kingdom', 'United States'],
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) {
+      throw result.error;
+    }
+
+    expect(result.value).toEqual([
+      {
+        eventId: 'evt-uk',
         eventName: 'Rangers vs Celtic',
         sportName: 'Soccer',
         leagueName: 'Scottish Premiership',
