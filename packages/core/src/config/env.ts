@@ -3,6 +3,15 @@ import { resolve } from 'node:path';
 import { z } from 'zod';
 
 const envSchema = z.object({
+  AI_DISCORD_TOKEN: z.string().default(''),
+  AI_DISCORD_CLIENT_ID: z.string().default(''),
+  AI_WEB_PUBLIC_URL: z.string().url().default('http://localhost:3100'),
+  AI_DISCORD_REDIRECT_URI: z
+    .string()
+    .url()
+    .default('http://localhost:3100/api/auth/discord/callback'),
+  OPENAI_API_KEY: z.string().default(''),
+  OPENAI_MODEL: z.string().default('gpt-4o-mini'),
   DISCORD_TOKEN: z.string().min(1).default('MISSING_DISCORD_TOKEN'),
   DISCORD_CLIENT_ID: z.string().min(1).default('MISSING_DISCORD_CLIENT_ID'),
   JOIN_GATE_DISCORD_TOKEN: z.string().default(''),

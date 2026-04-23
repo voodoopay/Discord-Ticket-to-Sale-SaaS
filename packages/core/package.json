@@ -12,7 +12,9 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -23,6 +25,7 @@
     "drizzle-orm": "0.44.7",
     "mysql2": "3.15.2",
     "neverthrow": "8.2.0",
+    "openai": "^6.34.0",
     "p-queue": "8.1.1",
     "p-retry": "7.1.0",
     "pino": "10.1.0",

@@ -825,6 +825,135 @@ export const channelCopyAuthorizedUsers = mysqlTable(
   }),
 );
 
+export const aiAuthorizedUsers = mysqlTable(
+  'ai_authorized_users',
+  {
+    id: varchar('id', { length: 26 }).primaryKey(),
+    guildId: varchar('guild_id', { length: 32 }).notNull(),
+    discordUserId: varchar('discord_user_id', { length: 32 }).notNull(),
+    grantedByDiscordUserId: varchar('granted_by_discord_user_id', { length: 32 }),
+    createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
+  },
+  (table) => ({
+    guildUserUnique: uniqueIndex('ai_authorized_users_guild_user_uq').on(table.guildId, table.discordUserId),
+    guildIdx: index('ai_authorized_users_guild_idx').on(table.guildId),
+  }),
+);
+
+export const aiGuildConfigs = mysqlTable(
+  'ai_guild_configs',
+  {
+    id: varchar('id', { length: 26 }).primaryKey(),
+    guildId: varchar('guild_id', { length: 32 }).notNull(),
+    enabled: boolean('enabled').notNull().default(true),
+    tonePreset: mysqlEnum('tone_preset', ['professional', 'standard', 'witty', 'cheeky'])
+      .notNull()
+      .default('standard'),
+    toneInstructions: text('tone_instructions').notNull().default(''),
+    roleMode: mysqlEnum('role_mode', ['allowlist', 'blocklist']).notNull().default('allowlist'),
+    defaultReplyMode: mysqlEnum('default_reply_mode', ['inline', 'thread'])
+      .notNull()
+      .default('inline'),
+    createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
+  },
+  (table) => ({
+    guildUnique: uniqueIndex('ai_guild_configs_guild_uq').on(table.guildId),
+  }),
+);
+
+export const aiReplyChannels = mysqlTable(
+  'ai_reply_channels',
+  {
+    id: varchar('id', { length: 26 }).primaryKey(),
+    guildId: varchar('guild_id', { length: 32 }).notNull(),
+    channelId: varchar('channel_id', { length: 32 }).notNull(),
+    replyMode: mysqlEnum('reply_mode', ['inline', 'thread']).notNull().default('inline'),
+    createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
+  },
+  (table) => ({
+    guildChannelUnique: uniqueIndex('ai_reply_channels_guild_channel_uq').on(table.guildId, table.channelId),
+    guildIdx: index('ai_reply_channels_guild_idx').on(table.guildId),
+  }),
+);
+
+export const aiRoleRules = mysqlTable(
+  'ai_role_rules',
+  {
+    id: varchar('id', { length: 26 }).primaryKey(),
+    guildId: varchar('guild_id', { length: 32 }).notNull(),
+    roleId: varchar('role_id', { length: 32 }).notNull(),
+    createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
+  },
+  (table) => ({
+    guildRoleUnique: uniqueIndex('ai_role_rules_guild_role_uq').on(table.guildId, table.roleId),
+    guildIdx: index('ai_role_rules_guild_idx').on(table.guildId),
+  }),
+);
+
+export const aiWebsiteSources = mysqlTable(
+  'ai_website_sources',
+  {
+    id: varchar('id', { length: 26 }).primaryKey(),
+    guildId: varchar('guild_id', { length: 32 }).notNull(),
+    url: varchar('url', { length: 512 }).notNull(),
+    status: mysqlEnum('status', ['pending', 'syncing', 'ready', 'failed']).notNull().default('pending'),
+    lastSyncedAt: timestamp('last_synced_at', { mode: 'date' }),
+    lastSyncStartedAt: timestamp('last_sync_started_at', { mode: 'date' }),
+    lastSyncError: text('last_sync_error'),
+    httpStatus: int('http_status'),
+    contentHash: varchar('content_hash', { length: 64 }),
+    pageTitle: varchar('page_title', { length: 255 }),
+    createdByDiscordUserId: varchar('created_by_discord_user_id', { length: 32 }),
+    updatedByDiscordUserId: varchar('updated_by_discord_user_id', { length: 32 }),
+    createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
+  },
+  (table) => ({
+    guildUrlUnique: uniqueIndex('ai_website_sources_guild_url_uq').on(table.guildId, table.url),
+    guildStatusIdx: index('ai_website_sources_guild_status_idx').on(table.guildId, table.status),
+  }),
+);
+
+export const aiKnowledgeDocuments = mysqlTable(
+  'ai_knowledge_documents',
+  {
+    id: varchar('id', { length: 26 }).primaryKey(),
+    guildId: varchar('guild_id', { length: 32 }).notNull(),
+    sourceId: varchar('source_id', { length: 26 }).notNull(),
+    documentType: varchar('document_type', { length: 80 }).notNull().default('website_page'),
+    contentText: text('content_text').notNull(),
+    contentHash: varchar('content_hash', { length: 64 }).notNull(),
+    metadataJson: json('metadata_json').$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
+  },
+  (table) => ({
+    guildIdx: index('ai_knowledge_documents_guild_idx').on(table.guildId),
+    sourceIdx: index('ai_knowledge_documents_source_idx').on(table.sourceId),
+  }),
+);
+
+export const aiCustomQas = mysqlTable(
+  'ai_custom_qas',
+  {
+    id: varchar('id', { length: 26 }).primaryKey(),
+    guildId: varchar('guild_id', { length: 32 }).notNull(),
+    question: text('question').notNull(),
+    answer: text('answer').notNull(),
+    createdByDiscordUserId: varchar('created_by_discord_user_id', { length: 32 }),
+    updatedByDiscordUserId: varchar('updated_by_discord_user_id', { length: 32 }),
+    createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
+  },
+  (table) => ({
+    guildIdx: index('ai_custom_qas_guild_idx').on(table.guildId),
+  }),
+);
+
 export const channelCopyJobs = mysqlTable(
   'channel_copy_jobs',
   {

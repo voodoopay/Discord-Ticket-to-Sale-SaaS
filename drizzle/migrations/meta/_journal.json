@@ -204,6 +204,13 @@
       "when": 1776369600000,
       "tag": "0028_repair_sports_channel_bindings",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "5",
+      "when": 1776949326887,
+      "tag": "0029_ai_bot_foundation",
+      "breakpoints": true
     }
   ]
 }

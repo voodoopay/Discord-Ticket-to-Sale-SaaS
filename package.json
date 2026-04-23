@@ -7,19 +7,20 @@
     "node": "24.13.1"
   },
   "scripts": {
-    "dev": "concurrently -n web,bot,telegram,nuke,joingate,sports,copy -c cyan,magenta,green,yellow,blue,red,white \"pnpm --filter @voodoo/web-app dev\" \"pnpm --filter @voodoo/bot-worker dev\" \"pnpm --filter @voodoo/telegram-worker dev\" \"pnpm --filter @voodoo/nuke-worker dev\" \"pnpm --filter @voodoo/join-gate-worker dev\" \"pnpm --filter @voodoo/sports-worker dev\" \"pnpm --filter @voodoo/channel-copy-worker dev\"",
+    "dev": "concurrently -n web,bot,telegram,nuke,joingate,sports,copy,ai-web,ai-worker -c cyan,magenta,green,yellow,blue,red,white,brightBlue,brightMagenta \"pnpm --filter @voodoo/web-app dev\" \"pnpm --filter @voodoo/bot-worker dev\" \"pnpm --filter @voodoo/telegram-worker dev\" \"pnpm --filter @voodoo/nuke-worker dev\" \"pnpm --filter @voodoo/join-gate-worker dev\" \"pnpm --filter @voodoo/sports-worker dev\" \"pnpm --filter @voodoo/channel-copy-worker dev\" \"pnpm --filter @voodoo/ai-web-app dev\" \"pnpm --filter @voodoo/ai-worker dev\"",
     "lint": "eslint . --ext .ts,.tsx --max-warnings=0",
     "typecheck": "pnpm -r run typecheck",
     "test": "node --disable-warning=DEP0040 ./node_modules/vitest/vitest.mjs run",
-    "build": "pnpm --filter @voodoo/core build && pnpm --filter @voodoo/bot-worker build && pnpm --filter @voodoo/telegram-worker build && pnpm --filter @voodoo/nuke-worker build && pnpm --filter @voodoo/join-gate-worker build && pnpm --filter @voodoo/sports-worker build && pnpm --filter @voodoo/channel-copy-worker build && pnpm --filter @voodoo/web-app build",
+    "build": "pnpm --filter @voodoo/core build && pnpm --filter @voodoo/bot-worker build && pnpm --filter @voodoo/telegram-worker build && pnpm --filter @voodoo/nuke-worker build && pnpm --filter @voodoo/join-gate-worker build && pnpm --filter @voodoo/sports-worker build && pnpm --filter @voodoo/channel-copy-worker build && pnpm --filter @voodoo/ai-worker build && pnpm --filter @voodoo/web-app build && pnpm --filter @voodoo/ai-web-app build",
     "migrate": "drizzle-kit migrate --config=drizzle.config.ts",
     "setup": "pnpm migrate && pnpm deploy:commands",
-    "deploy:commands": "pnpm deploy:commands:bot && pnpm deploy:commands:join-gate && pnpm deploy:commands:nuke && pnpm deploy:commands:sports && pnpm deploy:commands:channel-copy",
+    "deploy:commands": "pnpm deploy:commands:bot && pnpm deploy:commands:join-gate && pnpm deploy:commands:nuke && pnpm deploy:commands:sports && pnpm deploy:commands:channel-copy && pnpm deploy:commands:ai",
     "deploy:commands:bot": "pnpm --filter @voodoo/bot-worker deploy:commands",
     "deploy:commands:join-gate": "pnpm --filter @voodoo/join-gate-worker deploy:commands",
     "deploy:commands:nuke": "pnpm --filter @voodoo/nuke-worker deploy:commands",
     "deploy:commands:sports": "pnpm --filter @voodoo/sports-worker deploy:commands",
     "deploy:commands:channel-copy": "pnpm --filter @voodoo/channel-copy-worker deploy:commands",
+    "deploy:commands:ai": "pnpm --filter @voodoo/ai-worker deploy:commands",
     "deploy:commands:all": "pnpm deploy:commands"
   },
   "devDependencies": {
