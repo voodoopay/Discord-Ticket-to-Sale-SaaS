@@ -140,7 +140,11 @@ function resolveReplyMode(input: {
 function mapAnswerToReply(input: {
   replyMode: AiReplyMode;
   answer: AiAnswerResult;
-}): AiRuntimeReply {
+}): AiRuntimeReply | { kind: 'ignored' } {
+  if (input.answer.kind === 'refusal') {
+    return { kind: 'ignored' };
+  }
+
   return {
     kind: 'reply',
     replyMode: input.replyMode,

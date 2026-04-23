@@ -7,12 +7,14 @@ const {
   getGuildDiagnostics,
   listWebsiteSources,
   listCustomQas,
+  listChannelSources,
 } = vi.hoisted(() => ({
   getGuildActivationState: vi.fn(),
   getGuildSettingsSnapshot: vi.fn(),
   getGuildDiagnostics: vi.fn(),
   listWebsiteSources: vi.fn(),
   listCustomQas: vi.fn(),
+  listChannelSources: vi.fn(),
 }));
 
 const requireAiGuildAccess = vi.hoisted(() => vi.fn());
@@ -33,6 +35,9 @@ vi.mock('@voodoo/core', async (importOriginal) => {
     AiKnowledgeManagementService: class {
       public listWebsiteSources = listWebsiteSources;
       public listCustomQas = listCustomQas;
+    },
+    AiDiscordChannelSyncService: class {
+      public listChannelSources = listChannelSources;
     },
   };
 });
@@ -108,6 +113,10 @@ describe('ai guild snapshot route', () => {
       isErr: () => false,
       value: [{ customQaId: 'qa-1', question: 'What is the refund policy?', answer: '7 days.' }],
     });
+    listChannelSources.mockResolvedValue({
+      isErr: () => false,
+      value: [{ sourceId: 'discord-source-1', channelId: 'channel-2', status: 'ready' }],
+    });
   });
 
   it('returns the aggregated panel snapshot for an accessible guild', async () => {
@@ -122,12 +131,14 @@ describe('ai guild snapshot route', () => {
       activation: { activated: boolean };
       settings: { tonePreset: string };
       websiteSources: Array<{ sourceId: string }>;
+      discordChannelSources: Array<{ sourceId: string }>;
       customQas: Array<{ customQaId: string }>;
     };
     expect(payload.guild.id).toBe('guild-1');
     expect(payload.activation.activated).toBe(true);
     expect(payload.settings.tonePreset).toBe('professional');
     expect(payload.websiteSources[0]?.sourceId).toBe('source-1');
+    expect(payload.discordChannelSources[0]?.sourceId).toBe('discord-source-1');
     expect(payload.customQas[0]?.customQaId).toBe('qa-1');
   });
 });

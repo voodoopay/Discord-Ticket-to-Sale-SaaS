@@ -20,7 +20,7 @@ Multi-tenant Discord + Telegram bot stack with a web dashboard for ticket-based 
 - `apps/sports-worker`: separate-token Discord worker for daily sports TV listings with shared UK+USA broadcaster coverage, managed sport + live event channels, `/sports live-status`, and public sports lookup commands.
 - `apps/channel-copy-worker`: separate-token Discord worker for one-time channel backfills, including message text, embeds, and attachment/media reposting across servers.
 - `apps/ai-web-app`: standalone Next.js control plane for the AI bot, with separate Discord OAuth, guild-scoped settings, website/custom-Q&A management, and diagnostics.
-- `apps/ai-worker`: separate-token Discord worker for AI bot activation plus passive grounded replies in configured channels.
+- `apps/ai-worker`: separate-token Discord worker for AI bot activation, passive grounded replies in configured channels, and scheduled AI knowledge refresh.
 - `packages/core`: shared domain/config/security/services/repositories.
 - `drizzle/migrations`: SQL migrations.
 
@@ -67,6 +67,12 @@ Recommended for production:
 - `SPORTS_BROADCAST_COUNTRY`
 
 Copy `.env.example` to `.env` and fill values.
+
+## AI Knowledge Sources
+
+Voodoo AI separates where the bot replies from what the bot can use as evidence. Reply channels control where the bot answers. Website sources, custom Q&A, and Discord knowledge channels control what the bot can cite when generating answers.
+
+Discord knowledge channels are intended for read-only or announcement channels. Selecting one backfills the latest 500 messages, stores them as grounding material, refreshes selected channels four times per day, and removes deleted messages from stored knowledge when Discord emits a delete event. Website sources are also refreshed four times per day so updated docs or blogs are picked up automatically. If the AI cannot ground an answer in approved evidence, it stays silent instead of posting a fallback refusal.
 
 ## Commands
 

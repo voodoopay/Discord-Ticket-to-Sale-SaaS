@@ -123,6 +123,28 @@ export class AiKnowledgeManagementService {
     }
   }
 
+  public async listAllWebsiteSources(): Promise<
+    Result<
+      Array<ReturnType<typeof mapWebsiteSourceSummary>>,
+      AppError
+    >
+  > {
+    try {
+      const sources = await this.repository.listWebsiteSources({});
+      return ok(sources.map(mapWebsiteSourceSummary));
+    } catch (error) {
+      return err(
+        error instanceof AppError
+          ? error
+          : new AppError(
+              'AI_WEBSITE_SOURCES_READ_FAILED',
+              'Website sources could not be loaded due to an internal error.',
+              500,
+            ),
+      );
+    }
+  }
+
   public async createWebsiteSource(input: {
     guildId: string;
     url: string;
@@ -183,7 +205,7 @@ export class AiKnowledgeManagementService {
   public async syncWebsiteSource(input: {
     guildId: string;
     sourceId: string;
-    actorDiscordUserId: string;
+    actorDiscordUserId?: string | null;
   }): Promise<Result<AiWebsiteSyncResult, AppError>> {
     try {
       const source = await this.repository.getWebsiteSource({
@@ -200,7 +222,7 @@ export class AiKnowledgeManagementService {
         guildId: input.guildId,
         sourceId: source.id,
         url: source.url,
-        updatedByDiscordUserId: input.actorDiscordUserId,
+        updatedByDiscordUserId: input.actorDiscordUserId ?? null,
       });
     } catch (error) {
       return err(

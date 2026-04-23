@@ -86,6 +86,18 @@ type SnapshotPayload = {
     createdAt: string;
     updatedAt: string;
   }>;
+  discordChannelSources: Array<{
+    sourceId: string;
+    channelId: string;
+    status: 'pending' | 'syncing' | 'ready' | 'failed';
+    lastSyncedAt: string | null;
+    lastSyncStartedAt: string | null;
+    lastSyncError: string | null;
+    lastMessageId: string | null;
+    messageCount: number;
+    createdAt: string;
+    updatedAt: string;
+  }>;
   customQas: Array<{
     customQaId: string;
     question: string;
@@ -441,6 +453,74 @@ export function AiControlPlane({
       }
 
       setStatusMessage({ kind: 'success', text: 'Website source removed.' });
+      await loadGuildPanel(selectedGuildId);
+    });
+  }
+
+  function addDiscordChannelSource(channelId: string) {
+    if (!selectedGuildId) {
+      return;
+    }
+
+    runMutation(async () => {
+      setStatusMessage(null);
+
+      const response = await fetch(`/api/guilds/${selectedGuildId}/discord-channel-sources`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ channelId }),
+      });
+
+      if (!response.ok) {
+        setStatusMessage({ kind: 'error', text: await readApiError(response) });
+        return;
+      }
+
+      setStatusMessage({ kind: 'success', text: 'Discord channel backfilled for knowledge.' });
+      await loadGuildPanel(selectedGuildId);
+    });
+  }
+
+  function syncDiscordChannelSource(sourceId: string) {
+    if (!selectedGuildId) {
+      return;
+    }
+
+    runMutation(async () => {
+      const response = await fetch(
+        `/api/guilds/${selectedGuildId}/discord-channel-sources/${sourceId}/sync`,
+        { method: 'POST' },
+      );
+
+      if (!response.ok) {
+        setStatusMessage({ kind: 'error', text: await readApiError(response) });
+        return;
+      }
+
+      setStatusMessage({ kind: 'success', text: 'Discord channel knowledge refreshed.' });
+      await loadGuildPanel(selectedGuildId);
+    });
+  }
+
+  function deleteDiscordChannelSource(sourceId: string) {
+    if (!selectedGuildId) {
+      return;
+    }
+
+    runMutation(async () => {
+      const response = await fetch(
+        `/api/guilds/${selectedGuildId}/discord-channel-sources/${sourceId}`,
+        { method: 'DELETE' },
+      );
+
+      if (!response.ok) {
+        setStatusMessage({ kind: 'error', text: await readApiError(response) });
+        return;
+      }
+
+      setStatusMessage({ kind: 'success', text: 'Discord channel knowledge removed.' });
       await loadGuildPanel(selectedGuildId);
     });
   }
@@ -921,7 +1001,7 @@ export function AiControlPlane({
             icon={Waypoints}
             eyebrow="Knowledge"
             title="Approved sources and custom answers"
-            detail="Website learning is manual and explicit in v1. Every source added here syncs on save, and custom Q&A entries remain first-class grounded material."
+            detail="Websites and Discord knowledge channels are approved explicitly, then refreshed automatically four times per day. Custom Q&A entries remain first-class grounded material."
           />
 
           <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
@@ -933,7 +1013,7 @@ export function AiControlPlane({
                       Website source
                     </p>
                     <p className="mt-2 text-sm text-muted-foreground">
-                      Paste one exact URL. The panel will ingest it immediately and keep it available for manual re-sync.
+                      Paste one exact URL. The panel ingests it immediately and refreshes it automatically four times per day.
                     </p>
                   </div>
                   <Globe className="mt-1 size-5 text-primary" />
@@ -1020,6 +1100,99 @@ export function AiControlPlane({
                     No websites have been approved yet. Add the first exact page URL above to start grounding answers.
                   </article>
                 ) : null}
+              </div>
+
+              <div className="rounded-md border border-border/80 bg-card px-4 py-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[0.66rem] uppercase text-muted-foreground">
+                      Discord knowledge channels
+                    </p>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Backfills the latest 500 messages from selected read-only or announcement channels. These channels do not become reply channels unless enabled above.
+                    </p>
+                  </div>
+                  <MessagesSquare className="mt-1 size-5 text-primary" />
+                </div>
+
+                <div className="mt-4 grid gap-3">
+                  {(resources?.channels ?? []).map((channel) => {
+                    const source = snapshot?.discordChannelSources.find(
+                      (channelSource) => channelSource.channelId === channel.id,
+                    );
+
+                    return (
+                      <article key={channel.id} className="rounded-md bg-muted px-4 py-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="text-sm font-semibold text-foreground">#{channel.name}</p>
+                            <p className="mt-1 text-[0.66rem] uppercase text-muted-foreground">
+                              {source
+                                ? `${source.messageCount} synced messages`
+                                : 'Not used for knowledge'}
+                            </p>
+                          </div>
+
+                          {source ? (
+                            <div className="flex flex-wrap gap-2">
+                              <StatusPill
+                                status={
+                                  source.status === 'ready'
+                                    ? 'good'
+                                    : source.status === 'failed'
+                                      ? 'bad'
+                                      : 'warn'
+                                }
+                              >
+                                {source.status}
+                              </StatusPill>
+                              <button
+                                type="button"
+                                onClick={() => syncDiscordChannelSource(source.sourceId)}
+                                disabled={isMutating}
+                                className="inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-md bg-card px-3 text-xs font-semibold uppercase text-foreground transition hover:bg-background focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                <RefreshCcw className="size-4" />
+                                Sync
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => deleteDiscordChannelSource(source.sourceId)}
+                                disabled={isMutating}
+                                className="inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-md bg-card px-3 text-xs font-semibold uppercase text-destructive transition hover:bg-background focus-visible:outline-2 focus-visible:outline-destructive disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                <Trash2 className="size-4" />
+                                Remove
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => addDiscordChannelSource(channel.id)}
+                              disabled={isMutating}
+                              className="inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-md bg-card px-3 text-xs font-semibold uppercase text-foreground transition hover:bg-background focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              <Plus className="size-4" />
+                              Add
+                            </button>
+                          )}
+                        </div>
+
+                        {source ? (
+                          <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                            <span>Last sync {formatDateTime(source.lastSyncedAt)}</span>
+                            <span>Newest message {source.lastMessageId ?? 'n/a'}</span>
+                          </div>
+                        ) : null}
+                        {source?.lastSyncError ? (
+                          <p className="mt-3 rounded-md bg-card px-3 py-2 text-xs text-destructive">
+                            {source.lastSyncError}
+                          </p>
+                        ) : null}
+                      </article>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 

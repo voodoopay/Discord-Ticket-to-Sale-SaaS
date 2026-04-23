@@ -20,6 +20,8 @@ export type AiAnswerEvidenceSummary = {
   title: string | null;
   url: string | null;
   question: string | null;
+  channelId: string | null;
+  messageId: string | null;
 };
 
 export type AiAnswerResult =
@@ -51,6 +53,17 @@ function formatEvidence(evidence: AiRetrievedEvidence[]): string {
           `Evidence ${index + 1} [Approved Q&A]`,
           `Question: ${item.question ?? ''}`,
           `Answer: ${item.answer ?? ''}`,
+        ]
+          .filter(Boolean)
+          .join('\n');
+      }
+
+      if (item.sourceType === 'discord_channel_message') {
+        return [
+          `Evidence ${index + 1} [Discord channel]`,
+          item.channelId ? `Channel ID: ${item.channelId}` : null,
+          item.messageId ? `Message ID: ${item.messageId}` : null,
+          item.content,
         ]
           .filter(Boolean)
           .join('\n');
@@ -92,6 +105,8 @@ function mapEvidenceSummary(evidence: AiRetrievedEvidence[]): AiAnswerEvidenceSu
     title: item.title,
     url: item.url,
     question: item.question,
+    channelId: item.channelId,
+    messageId: item.messageId,
   }));
 }
 

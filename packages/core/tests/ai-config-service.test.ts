@@ -10,6 +10,8 @@ import {
   aiWebsiteSources,
   aiKnowledgeDocuments,
   aiCustomQas,
+  aiDiscordChannelSources,
+  aiDiscordChannelMessages,
 } from '../src/index.js';
 
 const ORIGINAL_VOODOO_ENV_FILE = process.env.VOODOO_ENV_FILE;
@@ -72,6 +74,8 @@ describe('AI env and schema foundation', () => {
     expect(aiWebsiteSources).toBeDefined();
     expect(aiKnowledgeDocuments).toBeDefined();
     expect(aiCustomQas).toBeDefined();
+    expect(aiDiscordChannelSources).toBeDefined();
+    expect(aiDiscordChannelMessages).toBeDefined();
   });
 
   it('enforces website source linkage and source-content deduplication for knowledge documents', () => {

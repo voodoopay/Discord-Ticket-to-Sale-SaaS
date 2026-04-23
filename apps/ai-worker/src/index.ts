@@ -6,9 +6,10 @@ import {
   type ChatInputCommandInteraction,
   type Interaction,
 } from 'discord.js';
-import { getEnv, logger } from '@voodoo/core';
+import { AiDiscordChannelSyncService, getEnv, logger } from '@voodoo/core';
 
 import { activationCommand } from './commands/activation.js';
+import { createAiKnowledgeRefreshScheduler } from './knowledge-refresh.js';
 import {
   createAiClientOptions,
   mapAiWorkerError,
@@ -31,6 +32,8 @@ function resolveAiWorkerToken(): string {
 }
 
 const client = new Client(createAiClientOptions());
+const channelSyncService = new AiDiscordChannelSyncService();
+const knowledgeRefreshScheduler = createAiKnowledgeRefreshScheduler();
 
 const commands = new Collection<string, Command>();
 commands.set(activationCommand.data.name, activationCommand as unknown as Command);
@@ -72,6 +75,7 @@ async function handleInteraction(interaction: Interaction): Promise<void> {
 
 client.once(Events.ClientReady, () => {
   logger.info({ botUser: client.user?.tag }, 'ai-worker ready');
+  knowledgeRefreshScheduler.start();
 });
 
 client.on(Events.InteractionCreate, (interaction: Interaction) => {
@@ -80,6 +84,18 @@ client.on(Events.InteractionCreate, (interaction: Interaction) => {
 
 client.on(Events.MessageCreate, (message) => {
   void processIncomingMessage(client, message);
+});
+
+client.on(Events.MessageDelete, (message) => {
+  if (!message.guildId) {
+    return;
+  }
+
+  void channelSyncService.deleteSyncedMessage({
+    guildId: message.guildId,
+    channelId: message.channelId,
+    messageId: message.id,
+  });
 });
 
 void client.login(resolveAiWorkerToken());

@@ -2,6 +2,7 @@ import {
   AiAccessService,
   AiConfigService,
   AiDiagnosticsService,
+  AiDiscordChannelSyncService,
   AiKnowledgeManagementService,
 } from '@voodoo/core';
 import type { NextRequest } from 'next/server';
@@ -14,6 +15,7 @@ const accessService = new AiAccessService();
 const configService = new AiConfigService();
 const diagnosticsService = new AiDiagnosticsService();
 const knowledgeManagementService = new AiKnowledgeManagementService();
+const discordChannelSyncService = new AiDiscordChannelSyncService();
 
 export async function GET(
   request: NextRequest,
@@ -26,12 +28,13 @@ export async function GET(
       return access.response;
     }
 
-    const [activation, settings, diagnostics, websiteSources, customQas] = await Promise.all([
+    const [activation, settings, diagnostics, websiteSources, customQas, discordChannelSources] = await Promise.all([
       accessService.getGuildActivationState({ guildId }),
       configService.getGuildSettingsSnapshot({ guildId }),
       diagnosticsService.getGuildDiagnostics({ guildId }),
       knowledgeManagementService.listWebsiteSources({ guildId }),
       knowledgeManagementService.listCustomQas({ guildId }),
+      discordChannelSyncService.listChannelSources({ guildId }),
     ]);
 
     if (activation.isErr()) {
@@ -64,6 +67,12 @@ export async function GET(
         { status: customQas.error.statusCode },
       );
     }
+    if (discordChannelSources.isErr()) {
+      return NextResponse.json(
+        { error: discordChannelSources.error.message, code: discordChannelSources.error.code },
+        { status: discordChannelSources.error.statusCode },
+      );
+    }
 
     return NextResponse.json({
       guild: access.value.guild,
@@ -72,6 +81,7 @@ export async function GET(
       diagnostics: diagnostics.value,
       websiteSources: websiteSources.value,
       customQas: customQas.value,
+      discordChannelSources: discordChannelSources.value,
     });
   } catch (error) {
     return jsonError(error);

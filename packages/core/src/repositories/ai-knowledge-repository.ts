@@ -3,6 +3,8 @@ import { ulid } from 'ulid';
 
 import { getDb } from '../infra/db/client.js';
 import {
+  aiDiscordChannelMessages,
+  aiDiscordChannelSources,
   aiCustomQas,
   aiKnowledgeDocuments,
   aiWebsiteSources,
@@ -10,6 +12,7 @@ import {
 import { isMysqlDuplicateEntryError } from '../utils/mysql-errors.js';
 
 export type AiWebsiteSourceStatus = 'pending' | 'syncing' | 'ready' | 'failed';
+export type AiDiscordChannelSourceStatus = 'pending' | 'syncing' | 'ready' | 'failed';
 
 export type AiWebsiteSourceRecord = {
   id: string;
@@ -51,6 +54,38 @@ export type AiCustomQaRecord = {
   updatedAt: Date;
 };
 
+export type AiDiscordChannelSourceRecord = {
+  id: string;
+  guildId: string;
+  channelId: string;
+  status: AiDiscordChannelSourceStatus;
+  lastSyncedAt: Date | null;
+  lastSyncStartedAt: Date | null;
+  lastSyncError: string | null;
+  lastMessageId: string | null;
+  messageCount: number;
+  createdByDiscordUserId: string | null;
+  updatedByDiscordUserId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type AiDiscordChannelMessageRecord = {
+  id: string;
+  guildId: string;
+  sourceId: string;
+  channelId: string;
+  messageId: string;
+  authorId: string | null;
+  contentText: string;
+  contentHash: string;
+  messageCreatedAt: Date | null;
+  messageEditedAt: Date | null;
+  metadataJson: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 export type AiSyncDocumentInput = {
   documentType: string;
   contentText: string;
@@ -58,14 +93,27 @@ export type AiSyncDocumentInput = {
   metadataJson: Record<string, unknown>;
 };
 
+export type AiSyncDiscordChannelMessageInput = {
+  messageId: string;
+  channelId: string;
+  authorId: string | null;
+  contentText: string;
+  contentHash: string;
+  messageCreatedAt: Date | null;
+  messageEditedAt: Date | null;
+  metadataJson: Record<string, unknown>;
+};
+
 export type AiRetrievedEvidence = {
-  sourceType: 'website_document' | 'custom_qa';
+  sourceType: 'website_document' | 'custom_qa' | 'discord_channel_message';
   sourceId: string;
   content: string;
   title: string | null;
   url: string | null;
   question: string | null;
   answer: string | null;
+  channelId: string | null;
+  messageId: string | null;
   score: number;
 };
 
@@ -145,6 +193,46 @@ function mapCustomQaRow(row: typeof aiCustomQas.$inferSelect): AiCustomQaRecord 
   };
 }
 
+function mapDiscordChannelSourceRow(
+  row: typeof aiDiscordChannelSources.$inferSelect,
+): AiDiscordChannelSourceRecord {
+  return {
+    id: row.id,
+    guildId: row.guildId,
+    channelId: row.channelId,
+    status: row.status,
+    lastSyncedAt: row.lastSyncedAt ?? null,
+    lastSyncStartedAt: row.lastSyncStartedAt ?? null,
+    lastSyncError: row.lastSyncError ?? null,
+    lastMessageId: row.lastMessageId ?? null,
+    messageCount: row.messageCount,
+    createdByDiscordUserId: row.createdByDiscordUserId ?? null,
+    updatedByDiscordUserId: row.updatedByDiscordUserId ?? null,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function mapDiscordChannelMessageRow(
+  row: typeof aiDiscordChannelMessages.$inferSelect,
+): AiDiscordChannelMessageRecord {
+  return {
+    id: row.id,
+    guildId: row.guildId,
+    sourceId: row.sourceId,
+    channelId: row.channelId,
+    messageId: row.messageId,
+    authorId: row.authorId ?? null,
+    contentText: row.contentText,
+    contentHash: row.contentHash,
+    messageCreatedAt: row.messageCreatedAt ?? null,
+    messageEditedAt: row.messageEditedAt ?? null,
+    metadataJson: row.metadataJson,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
 function tokenize(value: string): string[] {
   const tokens = value
     .toLowerCase()
@@ -189,10 +277,15 @@ export class AiKnowledgeRepository {
     return row ? mapWebsiteSourceRow(row) : null;
   }
 
-  public async listWebsiteSources(input: { guildId: string }): Promise<AiWebsiteSourceRecord[]> {
+  public async listWebsiteSources(input: { guildId?: string } = {}): Promise<AiWebsiteSourceRecord[]> {
     const rows = await this.db.query.aiWebsiteSources.findMany({
-      where: eq(aiWebsiteSources.guildId, input.guildId),
-      orderBy: (table, { desc, asc }) => [desc(table.updatedAt), asc(table.url), asc(table.id)],
+      where: input.guildId ? eq(aiWebsiteSources.guildId, input.guildId) : undefined,
+      orderBy: (table, { desc, asc }) => [
+        desc(table.updatedAt),
+        asc(table.guildId),
+        asc(table.url),
+        asc(table.id),
+      ],
     });
 
     return rows.map(mapWebsiteSourceRow);
@@ -403,6 +496,259 @@ export class AiKnowledgeRepository {
     return true;
   }
 
+  public async getDiscordChannelSource(input: {
+    guildId: string;
+    sourceId: string;
+  }): Promise<AiDiscordChannelSourceRecord | null> {
+    const row = await this.db.query.aiDiscordChannelSources.findFirst({
+      where: and(
+        eq(aiDiscordChannelSources.guildId, input.guildId),
+        eq(aiDiscordChannelSources.id, input.sourceId),
+      ),
+    });
+
+    return row ? mapDiscordChannelSourceRow(row) : null;
+  }
+
+  public async listDiscordChannelSources(input: {
+    guildId?: string;
+  } = {}): Promise<AiDiscordChannelSourceRecord[]> {
+    const rows = await this.db.query.aiDiscordChannelSources.findMany({
+      where: input.guildId ? eq(aiDiscordChannelSources.guildId, input.guildId) : undefined,
+      orderBy: (table, { desc, asc }) => [
+        desc(table.updatedAt),
+        asc(table.guildId),
+        asc(table.channelId),
+      ],
+    });
+
+    return rows.map(mapDiscordChannelSourceRow);
+  }
+
+  public async createDiscordChannelSource(input: {
+    guildId: string;
+    channelId: string;
+    createdByDiscordUserId?: string | null;
+  }): Promise<{ created: boolean; record: AiDiscordChannelSourceRecord }> {
+    const existing = await this.db.query.aiDiscordChannelSources.findFirst({
+      where: and(
+        eq(aiDiscordChannelSources.guildId, input.guildId),
+        eq(aiDiscordChannelSources.channelId, input.channelId),
+      ),
+    });
+
+    if (existing) {
+      return { created: false, record: mapDiscordChannelSourceRow(existing) };
+    }
+
+    const now = new Date();
+    const sourceId = ulid();
+    await this.db.insert(aiDiscordChannelSources).values({
+      id: sourceId,
+      guildId: input.guildId,
+      channelId: input.channelId,
+      status: 'pending',
+      messageCount: 0,
+      createdByDiscordUserId: input.createdByDiscordUserId ?? null,
+      updatedByDiscordUserId: input.createdByDiscordUserId ?? null,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const created = await this.getDiscordChannelSource({ guildId: input.guildId, sourceId });
+    if (!created) {
+      throw new Error('Failed to create AI Discord channel source');
+    }
+
+    return { created: true, record: created };
+  }
+
+  public async deleteDiscordChannelSource(input: {
+    guildId: string;
+    sourceId: string;
+  }): Promise<boolean> {
+    const existing = await this.getDiscordChannelSource(input);
+    if (!existing) {
+      return false;
+    }
+
+    await this.db
+      .delete(aiDiscordChannelSources)
+      .where(
+        and(
+          eq(aiDiscordChannelSources.guildId, input.guildId),
+          eq(aiDiscordChannelSources.id, input.sourceId),
+        ),
+      );
+
+    return true;
+  }
+
+  public async markDiscordChannelSyncStarted(input: {
+    guildId: string;
+    sourceId: string;
+    startedAt?: Date;
+    updatedByDiscordUserId?: string | null;
+  }): Promise<void> {
+    const startedAt = input.startedAt ?? new Date();
+
+    await this.db
+      .update(aiDiscordChannelSources)
+      .set({
+        status: 'syncing',
+        lastSyncStartedAt: startedAt,
+        lastSyncError: null,
+        updatedByDiscordUserId: input.updatedByDiscordUserId ?? null,
+        updatedAt: startedAt,
+      })
+      .where(
+        and(
+          eq(aiDiscordChannelSources.guildId, input.guildId),
+          eq(aiDiscordChannelSources.id, input.sourceId),
+        ),
+      );
+  }
+
+  public async replaceDiscordChannelMessages(input: {
+    guildId: string;
+    sourceId: string;
+    channelId: string;
+    messages: AiSyncDiscordChannelMessageInput[];
+  }): Promise<AiDiscordChannelMessageRecord[]> {
+    const now = new Date();
+
+    return this.db.transaction(async (tx) => {
+      await tx
+        .delete(aiDiscordChannelMessages)
+        .where(
+          and(
+            eq(aiDiscordChannelMessages.guildId, input.guildId),
+            eq(aiDiscordChannelMessages.sourceId, input.sourceId),
+          ),
+        );
+
+      if (input.messages.length > 0) {
+        await tx.insert(aiDiscordChannelMessages).values(
+          input.messages.map((message) => ({
+            id: ulid(),
+            guildId: input.guildId,
+            sourceId: input.sourceId,
+            channelId: input.channelId,
+            messageId: message.messageId,
+            authorId: message.authorId,
+            contentText: message.contentText,
+            contentHash: message.contentHash,
+            messageCreatedAt: message.messageCreatedAt,
+            messageEditedAt: message.messageEditedAt,
+            metadataJson: message.metadataJson,
+            createdAt: now,
+            updatedAt: now,
+          })),
+        );
+      }
+
+      const rows = await tx.query.aiDiscordChannelMessages.findMany({
+        where: and(
+          eq(aiDiscordChannelMessages.guildId, input.guildId),
+          eq(aiDiscordChannelMessages.sourceId, input.sourceId),
+        ),
+        orderBy: (table, { desc }) => [desc(table.messageCreatedAt), desc(table.messageId)],
+      });
+
+      return rows.map(mapDiscordChannelMessageRow);
+    });
+  }
+
+  public async listDiscordChannelMessages(input: {
+    guildId: string;
+    sourceId?: string;
+  }): Promise<AiDiscordChannelMessageRecord[]> {
+    const rows = await this.db.query.aiDiscordChannelMessages.findMany({
+      where:
+        input.sourceId == null
+          ? eq(aiDiscordChannelMessages.guildId, input.guildId)
+          : and(
+              eq(aiDiscordChannelMessages.guildId, input.guildId),
+              eq(aiDiscordChannelMessages.sourceId, input.sourceId),
+            ),
+      orderBy: (table, { desc }) => [desc(table.messageCreatedAt), desc(table.messageId)],
+    });
+
+    return rows.map(mapDiscordChannelMessageRow);
+  }
+
+  public async deleteDiscordChannelMessage(input: {
+    guildId: string;
+    channelId: string;
+    messageId: string;
+  }): Promise<boolean> {
+    const rows = await this.db
+      .delete(aiDiscordChannelMessages)
+      .where(
+        and(
+          eq(aiDiscordChannelMessages.guildId, input.guildId),
+          eq(aiDiscordChannelMessages.channelId, input.channelId),
+          eq(aiDiscordChannelMessages.messageId, input.messageId),
+        ),
+      );
+
+    return Number(rows[0]?.affectedRows ?? 0) > 0;
+  }
+
+  public async markDiscordChannelSyncCompleted(input: {
+    guildId: string;
+    sourceId: string;
+    messageCount: number;
+    lastMessageId: string | null;
+    syncedAt?: Date;
+    updatedByDiscordUserId?: string | null;
+  }): Promise<void> {
+    const syncedAt = input.syncedAt ?? new Date();
+
+    await this.db
+      .update(aiDiscordChannelSources)
+      .set({
+        status: 'ready',
+        lastSyncedAt: syncedAt,
+        lastSyncError: null,
+        lastMessageId: input.lastMessageId,
+        messageCount: input.messageCount,
+        updatedByDiscordUserId: input.updatedByDiscordUserId ?? null,
+        updatedAt: syncedAt,
+      })
+      .where(
+        and(
+          eq(aiDiscordChannelSources.guildId, input.guildId),
+          eq(aiDiscordChannelSources.id, input.sourceId),
+        ),
+      );
+  }
+
+  public async markDiscordChannelSyncFailed(input: {
+    guildId: string;
+    sourceId: string;
+    errorMessage: string;
+    failedAt?: Date;
+    updatedByDiscordUserId?: string | null;
+  }): Promise<void> {
+    const failedAt = input.failedAt ?? new Date();
+
+    await this.db
+      .update(aiDiscordChannelSources)
+      .set({
+        status: 'failed',
+        lastSyncError: input.errorMessage,
+        updatedByDiscordUserId: input.updatedByDiscordUserId ?? null,
+        updatedAt: failedAt,
+      })
+      .where(
+        and(
+          eq(aiDiscordChannelSources.guildId, input.guildId),
+          eq(aiDiscordChannelSources.id, input.sourceId),
+        ),
+      );
+  }
+
   public async markSourceSyncStarted(input: {
     guildId: string;
     sourceId: string;
@@ -536,10 +882,11 @@ export class AiKnowledgeRepository {
       return [];
     }
 
-    const [documents, customQas, websiteSources] = await Promise.all([
+    const [documents, customQas, websiteSources, discordMessages] = await Promise.all([
       this.listKnowledgeDocuments({ guildId: input.guildId }),
       this.listCustomQas({ guildId: input.guildId }),
       this.listWebsiteSources({ guildId: input.guildId }),
+      this.listDiscordChannelMessages({ guildId: input.guildId }),
     ]);
 
     const sourceById = new Map(websiteSources.map((source) => [source.id, source]));
@@ -567,6 +914,33 @@ export class AiKnowledgeRepository {
         url,
         question: null,
         answer: null,
+        channelId: null,
+        messageId: null,
+        score,
+      });
+    }
+
+    for (const message of discordMessages) {
+      const searchable = normalizeSearchText(message.contentText);
+      const score =
+        countTokenMatches(queryTokens, searchable) +
+        (searchable.includes(normalizedQuestion) ? 4 : 0) +
+        1;
+
+      if (score <= 0) {
+        continue;
+      }
+
+      candidates.push({
+        sourceType: 'discord_channel_message',
+        sourceId: message.sourceId,
+        content: message.contentText,
+        title: `#${message.channelId}`,
+        url: null,
+        question: null,
+        answer: null,
+        channelId: message.channelId,
+        messageId: message.messageId,
         score,
       });
     }
@@ -591,6 +965,8 @@ export class AiKnowledgeRepository {
         url: null,
         question: customQa.question,
         answer: customQa.answer,
+        channelId: null,
+        messageId: null,
         score,
       });
     }
@@ -603,10 +979,12 @@ export class AiKnowledgeRepository {
   public async getGuildDiagnostics(input: {
     guildId: string;
   }): Promise<AiGuildDiagnosticsSnapshot> {
-    const [sources, documents, customQas] = await Promise.all([
+    const [sources, documents, customQas, discordSources, discordMessages] = await Promise.all([
       this.listWebsiteSources({ guildId: input.guildId }),
       this.listKnowledgeDocuments({ guildId: input.guildId }),
       this.listCustomQas({ guildId: input.guildId }),
+      this.listDiscordChannelSources({ guildId: input.guildId }),
+      this.listDiscordChannelMessages({ guildId: input.guildId }),
     ]);
 
     const documentCountBySourceId = new Map<string, number>();
@@ -616,7 +994,7 @@ export class AiKnowledgeRepository {
     }
 
     const lastSyncedAtDate =
-      sources
+      [...sources, ...discordSources]
         .map((source) => source.lastSyncedAt)
         .filter((value): value is Date => value instanceof Date)
         .sort((left, right) => right.getTime() - left.getTime())[0] ?? null;
@@ -624,12 +1002,20 @@ export class AiKnowledgeRepository {
     return {
       guildId: input.guildId,
       totals: {
-        sourceCount: sources.length,
-        readySourceCount: sources.filter((source) => source.status === 'ready').length,
-        failedSourceCount: sources.filter((source) => source.status === 'failed').length,
-        syncingSourceCount: sources.filter((source) => source.status === 'syncing').length,
-        pendingSourceCount: sources.filter((source) => source.status === 'pending').length,
-        documentCount: documents.length,
+        sourceCount: sources.length + discordSources.length,
+        readySourceCount:
+          sources.filter((source) => source.status === 'ready').length +
+          discordSources.filter((source) => source.status === 'ready').length,
+        failedSourceCount:
+          sources.filter((source) => source.status === 'failed').length +
+          discordSources.filter((source) => source.status === 'failed').length,
+        syncingSourceCount:
+          sources.filter((source) => source.status === 'syncing').length +
+          discordSources.filter((source) => source.status === 'syncing').length,
+        pendingSourceCount:
+          sources.filter((source) => source.status === 'pending').length +
+          discordSources.filter((source) => source.status === 'pending').length,
+        documentCount: documents.length + discordMessages.length,
         customQaCount: customQas.length,
       },
       lastSyncedAt: lastSyncedAtDate?.toISOString() ?? null,

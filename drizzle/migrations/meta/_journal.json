@@ -211,6 +211,13 @@
       "when": 1776949326887,
       "tag": "0029_ai_bot_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "5",
+      "when": 1776988800000,
+      "tag": "0030_ai_discord_channel_sources",
+      "breakpoints": true
     }
   ]
 }

@@ -966,6 +966,70 @@ export const aiCustomQas = mysqlTable(
   }),
 );
 
+export const aiDiscordChannelSources = mysqlTable(
+  'ai_discord_channel_sources',
+  {
+    id: varchar('id', { length: 26 }).primaryKey(),
+    guildId: varchar('guild_id', { length: 32 }).notNull(),
+    channelId: varchar('channel_id', { length: 32 }).notNull(),
+    status: mysqlEnum('status', ['pending', 'syncing', 'ready', 'failed']).notNull().default('pending'),
+    lastSyncedAt: timestamp('last_synced_at', { mode: 'date' }),
+    lastSyncStartedAt: timestamp('last_sync_started_at', { mode: 'date' }),
+    lastSyncError: text('last_sync_error'),
+    lastMessageId: varchar('last_message_id', { length: 32 }),
+    messageCount: int('message_count').notNull().default(0),
+    createdByDiscordUserId: varchar('created_by_discord_user_id', { length: 32 }),
+    updatedByDiscordUserId: varchar('updated_by_discord_user_id', { length: 32 }),
+    createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
+  },
+  (table) => ({
+    guildChannelUnique: uniqueIndex('ai_discord_channel_sources_guild_channel_uq').on(
+      table.guildId,
+      table.channelId,
+    ),
+    guildStatusIdx: index('ai_discord_channel_sources_guild_status_idx').on(
+      table.guildId,
+      table.status,
+    ),
+  }),
+);
+
+export const aiDiscordChannelMessages = mysqlTable(
+  'ai_discord_channel_messages',
+  {
+    id: varchar('id', { length: 26 }).primaryKey(),
+    guildId: varchar('guild_id', { length: 32 }).notNull(),
+    sourceId: varchar('source_id', { length: 26 }).notNull(),
+    channelId: varchar('channel_id', { length: 32 }).notNull(),
+    messageId: varchar('message_id', { length: 32 }).notNull(),
+    authorId: varchar('author_id', { length: 32 }),
+    contentText: text('content_text').notNull(),
+    contentHash: varchar('content_hash', { length: 64 }).notNull(),
+    messageCreatedAt: timestamp('message_created_at', { mode: 'date' }),
+    messageEditedAt: timestamp('message_edited_at', { mode: 'date' }),
+    metadataJson: json('metadata_json').$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
+  },
+  (table) => ({
+    guildChannelMessageUnique: uniqueIndex('ai_discord_channel_messages_guild_channel_message_uq').on(
+      table.guildId,
+      table.channelId,
+      table.messageId,
+    ),
+    guildIdx: index('ai_discord_channel_messages_guild_idx').on(table.guildId),
+    sourceIdx: index('ai_discord_channel_messages_source_idx').on(table.sourceId),
+    sourceFk: foreignKey({
+      columns: [table.sourceId],
+      foreignColumns: [aiDiscordChannelSources.id],
+      name: 'ai_discord_channel_messages_source_fk',
+    })
+      .onDelete('cascade')
+      .onUpdate('cascade'),
+  }),
+);
+
 export const channelCopyJobs = mysqlTable(
   'channel_copy_jobs',
   {

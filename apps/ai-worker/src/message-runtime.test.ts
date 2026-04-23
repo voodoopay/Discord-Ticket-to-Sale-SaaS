@@ -296,6 +296,30 @@ describe('AI message runtime', () => {
     });
   });
 
+  it('does not reply when grounded answering returns a refusal', async () => {
+    const dependencies = createDependencies({
+      answerResult: createOkResult({
+        kind: 'refusal',
+        content: 'I do not have enough approved information to answer that yet.',
+        evidenceCount: 0,
+      }),
+    });
+
+    const result = await handleAiMessage(
+      {
+        id: 'msg-1',
+        guildId: 'guild-1',
+        channelId: 'allowed-channel',
+        author: { bot: false, id: 'user-1' },
+        content: 'unknown question?',
+        memberRoleIds: ['role-1'],
+      },
+      dependencies,
+    );
+
+    expect(result).toEqual({ kind: 'ignored' });
+  });
+
   it('replies inline in the source channel when inline mode is configured', async () => {
     const dependencies = createDependencies();
     const { message, reply, startThread } = createMessage();
