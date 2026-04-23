@@ -502,7 +502,19 @@ The signed-in panel should retain the same family resemblance but become more op
 
 The panel should still feel premium, but it must optimize for control and scanning rather than pure spectacle.
 
-The signed-in product should not become a data-dense generic dashboard. The worker settings and diagnostics can be information-rich, but the UI should preserve soft spacing, rounded structure, and a calm visual cadence instead of collapsing into KPI-card sprawl.
+The approved `ui-ux-pro-max` direction for the signed-in product is:
+
+- pattern: `Data-Dense + Drill-Down`
+- style: `Data-Dense Dashboard`
+
+That means the panel should deliberately support:
+
+- higher information density in overview and diagnostics
+- strong drill-down paths from summary to detail
+- grid-based operational layout
+- KPI/status visibility above the fold
+
+The implementation should still keep the premium light-surface family resemblance from the public site, but the signed-in product no longer needs to avoid a data-dense dashboard posture. The goal is an expensive-looking operational workspace rather than a soft editorial control surface.
 
 ### Design System Guardrails
 
@@ -514,12 +526,12 @@ Recommended visual rules, informed by `ui-ux-pro-max`:
   - fallback implementation can use `DM Sans` if licensing or delivery constraints require a Google-font alternative
 - Color posture:
   - very light background base
-  - cool primary family in blue-indigo space
-  - restrained accent color for CTA states only
-  - avoid default purple-heavy SaaS palettes as the dominant brand signal
+  - primary family can stay in the cool blue-indigo range approved by the skill
+  - restrained CTA contrast color for action emphasis
+  - neutral operational text colors for dense scanning
 - Surface system:
   - use frosted/glass panels selectively for nav, previews, and elevated controls
-  - keep dense forms and diagnostics on cleaner, more opaque surfaces for readability
+  - keep dense forms, tables, and diagnostics on cleaner, more opaque surfaces for readability
 - Motion:
   - smooth 150-300ms operational transitions for panel interactions
   - slower atmospheric motion on the public site only
@@ -539,6 +551,7 @@ The AI web app should follow these UI implementation constraints:
 - avoid hover transforms that cause layout shift
 - test key layouts at `375px`, `768px`, `1024px`, and `1440px`
 - avoid fixed-dimension responsive imagery in Next.js; use fill/object-fit patterns where appropriate
+- support the approved data-dense operational layout with readable table/filter/state patterns instead of over-indexing on oversized empty-space sections
 
 ### Stitch Deliverables
 
