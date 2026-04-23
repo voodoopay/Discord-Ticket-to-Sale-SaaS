@@ -1,0 +1,23 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "allowJs": false,
+    "incremental": true,
+    "jsx": "preserve",
+    "plugins": [{ "name": "next" }],
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"],
+      "next": ["../web-app/node_modules/next"],
+      "next/*": ["../web-app/node_modules/next/*"],
+      "lucide-react": ["../web-app/node_modules/lucide-react"],
+      "react": ["../../node_modules/@types/react/index.d.ts"],
+      "react/*": ["../../node_modules/@types/react/*"],
+      "react-dom": ["../../node_modules/@types/react-dom/index.d.ts"],
+      "react-dom/*": ["../../node_modules/@types/react-dom/*"]
+    }
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules"]
+}
