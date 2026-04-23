@@ -1,0 +1,133 @@
+import { NextRequest } from 'next/server';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const {
+  getGuildActivationState,
+  getGuildSettingsSnapshot,
+  getGuildDiagnostics,
+  listWebsiteSources,
+  listCustomQas,
+} = vi.hoisted(() => ({
+  getGuildActivationState: vi.fn(),
+  getGuildSettingsSnapshot: vi.fn(),
+  getGuildDiagnostics: vi.fn(),
+  listWebsiteSources: vi.fn(),
+  listCustomQas: vi.fn(),
+}));
+
+const requireAiGuildAccess = vi.hoisted(() => vi.fn());
+
+vi.mock('@voodoo/core', async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return {
+    ...actual,
+    AiAccessService: class {
+      public getGuildActivationState = getGuildActivationState;
+    },
+    AiConfigService: class {
+      public getGuildSettingsSnapshot = getGuildSettingsSnapshot;
+    },
+    AiDiagnosticsService: class {
+      public getGuildDiagnostics = getGuildDiagnostics;
+    },
+    AiKnowledgeManagementService: class {
+      public listWebsiteSources = listWebsiteSources;
+      public listCustomQas = listCustomQas;
+    },
+  };
+});
+
+vi.mock('@/lib/ai-guild-access', () => ({
+  requireAiGuildAccess,
+}));
+
+import { GET } from './route';
+
+describe('ai guild snapshot route', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    requireAiGuildAccess.mockResolvedValue({
+      ok: true,
+      value: {
+        session: {
+          discordUserId: 'discord-user-1',
+        },
+        guild: {
+          id: 'guild-1',
+          name: 'Guild One',
+          iconUrl: null,
+          owner: true,
+          permissions: '8',
+        },
+      },
+    });
+    getGuildActivationState.mockResolvedValue({
+      isErr: () => false,
+      value: {
+        activated: true,
+        authorizedUserCount: 1,
+      },
+    });
+    getGuildSettingsSnapshot.mockResolvedValue({
+      isErr: () => false,
+      value: {
+        guildId: 'guild-1',
+        enabled: true,
+        tonePreset: 'professional',
+        toneInstructions: 'Stay concise.',
+        roleMode: 'allowlist',
+        defaultReplyMode: 'inline',
+        replyChannels: [{ channelId: 'channel-1', replyMode: 'thread' }],
+        roleIds: ['role-1'],
+        createdAt: '2026-04-23T10:00:00.000Z',
+        updatedAt: '2026-04-23T10:10:00.000Z',
+      },
+    });
+    getGuildDiagnostics.mockResolvedValue({
+      isErr: () => false,
+      value: {
+        guildId: 'guild-1',
+        totals: {
+          sourceCount: 1,
+          readySourceCount: 1,
+          failedSourceCount: 0,
+          syncingSourceCount: 0,
+          pendingSourceCount: 0,
+          documentCount: 1,
+          customQaCount: 1,
+        },
+        lastSyncedAt: '2026-04-23T10:10:00.000Z',
+        sources: [],
+      },
+    });
+    listWebsiteSources.mockResolvedValue({
+      isErr: () => false,
+      value: [{ sourceId: 'source-1', url: 'https://docs.example.com/faq', status: 'ready' }],
+    });
+    listCustomQas.mockResolvedValue({
+      isErr: () => false,
+      value: [{ customQaId: 'qa-1', question: 'What is the refund policy?', answer: '7 days.' }],
+    });
+  });
+
+  it('returns the aggregated panel snapshot for an accessible guild', async () => {
+    const response = await GET(new NextRequest('https://ai.example.com/api/guilds/guild-1/snapshot'), {
+      params: Promise.resolve({ guildId: 'guild-1' }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(requireAiGuildAccess).toHaveBeenCalled();
+    const payload = (await response.json()) as {
+      guild: { id: string };
+      activation: { activated: boolean };
+      settings: { tonePreset: string };
+      websiteSources: Array<{ sourceId: string }>;
+      customQas: Array<{ customQaId: string }>;
+    };
+    expect(payload.guild.id).toBe('guild-1');
+    expect(payload.activation.activated).toBe(true);
+    expect(payload.settings.tonePreset).toBe('professional');
+    expect(payload.websiteSources[0]?.sourceId).toBe('source-1');
+    expect(payload.customQas[0]?.customQaId).toBe('qa-1');
+  });
+});

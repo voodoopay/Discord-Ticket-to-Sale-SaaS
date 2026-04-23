@@ -40,6 +40,7 @@ export * from './services/ai-access-service.js';
 export * from './services/ai-answer-service.js';
 export * from './services/ai-config-service.js';
 export * from './services/ai-diagnostics-service.js';
+export * from './services/ai-knowledge-management-service.js';
 export * from './services/ai-website-sync-service.js';
 export * from './services/auth-service.js';
 export * from './services/authorization-service.js';

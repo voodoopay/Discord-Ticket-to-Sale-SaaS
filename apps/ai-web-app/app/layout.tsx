@@ -1,19 +1,21 @@
 import type { Metadata } from 'next';
-import { Inter, Manrope } from 'next/font/google';
+import { Space_Mono, Syncopate } from 'next/font/google';
 import type { ReactNode } from 'react';
 
 import { AI_APP_BRAND } from '@/lib/ai-design-tokens';
 
 import './globals.css';
 
-const bodyFont = Inter({
+const bodyFont = Space_Mono({
   subsets: ['latin'],
   variable: '--font-sans',
+  weight: ['400', '700'],
 });
 
-const displayFont = Manrope({
+const displayFont = Syncopate({
   subsets: ['latin'],
   variable: '--font-display',
+  weight: ['400', '700'],
 });
 
 export const metadata: Metadata = {

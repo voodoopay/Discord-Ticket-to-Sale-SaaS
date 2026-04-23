@@ -7,6 +7,7 @@ import {
   aiKnowledgeDocuments,
   aiWebsiteSources,
 } from '../infra/db/schema/index.js';
+import { isMysqlDuplicateEntryError } from '../utils/mysql-errors.js';
 
 export type AiWebsiteSourceStatus = 'pending' | 'syncing' | 'ready' | 'failed';
 
@@ -35,6 +36,17 @@ export type AiKnowledgeDocumentRecord = {
   contentText: string;
   contentHash: string;
   metadataJson: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type AiCustomQaRecord = {
+  id: string;
+  guildId: string;
+  question: string;
+  answer: string;
+  createdByDiscordUserId: string | null;
+  updatedByDiscordUserId: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -120,6 +132,19 @@ function mapKnowledgeDocumentRow(
   };
 }
 
+function mapCustomQaRow(row: typeof aiCustomQas.$inferSelect): AiCustomQaRecord {
+  return {
+    id: row.id,
+    guildId: row.guildId,
+    question: row.question,
+    answer: row.answer,
+    createdByDiscordUserId: row.createdByDiscordUserId ?? null,
+    updatedByDiscordUserId: row.updatedByDiscordUserId ?? null,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
 function tokenize(value: string): string[] {
   const tokens = value
     .toLowerCase()
@@ -150,6 +175,20 @@ function countTokenMatches(tokens: string[], haystack: string): number {
 export class AiKnowledgeRepository {
   private readonly db = getDb();
 
+  public async getWebsiteSource(input: {
+    guildId: string;
+    sourceId: string;
+  }): Promise<AiWebsiteSourceRecord | null> {
+    const row = await this.db.query.aiWebsiteSources.findFirst({
+      where: and(
+        eq(aiWebsiteSources.guildId, input.guildId),
+        eq(aiWebsiteSources.id, input.sourceId),
+      ),
+    });
+
+    return row ? mapWebsiteSourceRow(row) : null;
+  }
+
   public async listWebsiteSources(input: { guildId: string }): Promise<AiWebsiteSourceRecord[]> {
     const rows = await this.db.query.aiWebsiteSources.findMany({
       where: eq(aiWebsiteSources.guildId, input.guildId),
@@ -157,6 +196,94 @@ export class AiKnowledgeRepository {
     });
 
     return rows.map(mapWebsiteSourceRow);
+  }
+
+  public async createWebsiteSource(input: {
+    guildId: string;
+    url: string;
+    createdByDiscordUserId?: string | null;
+  }): Promise<{ created: boolean; record: AiWebsiteSourceRecord }> {
+    const existing = await this.db.query.aiWebsiteSources.findFirst({
+      where: and(
+        eq(aiWebsiteSources.guildId, input.guildId),
+        eq(aiWebsiteSources.url, input.url),
+      ),
+    });
+
+    if (existing) {
+      return {
+        created: false,
+        record: mapWebsiteSourceRow(existing),
+      };
+    }
+
+    const now = new Date();
+    const sourceId = ulid();
+
+    try {
+      await this.db.insert(aiWebsiteSources).values({
+        id: sourceId,
+        guildId: input.guildId,
+        url: input.url,
+        status: 'pending',
+        createdByDiscordUserId: input.createdByDiscordUserId ?? null,
+        updatedByDiscordUserId: input.createdByDiscordUserId ?? null,
+        createdAt: now,
+        updatedAt: now,
+      });
+    } catch (error) {
+      if (!isMysqlDuplicateEntryError(error)) {
+        throw error;
+      }
+
+      const duplicate = await this.db.query.aiWebsiteSources.findFirst({
+        where: and(
+          eq(aiWebsiteSources.guildId, input.guildId),
+          eq(aiWebsiteSources.url, input.url),
+        ),
+      });
+
+      if (!duplicate) {
+        throw error;
+      }
+
+      return {
+        created: false,
+        record: mapWebsiteSourceRow(duplicate),
+      };
+    }
+
+    const created = await this.getWebsiteSource({
+      guildId: input.guildId,
+      sourceId,
+    });
+
+    if (!created) {
+      throw new Error('Failed to create AI website source');
+    }
+
+    return {
+      created: true,
+      record: created,
+    };
+  }
+
+  public async deleteWebsiteSource(input: {
+    guildId: string;
+    sourceId: string;
+  }): Promise<boolean> {
+    const existing = await this.getWebsiteSource(input);
+    if (!existing) {
+      return false;
+    }
+
+    await this.db
+      .delete(aiWebsiteSources)
+      .where(
+        and(eq(aiWebsiteSources.guildId, input.guildId), eq(aiWebsiteSources.id, input.sourceId)),
+      );
+
+    return true;
   }
 
   public async listKnowledgeDocuments(input: {
@@ -175,6 +302,105 @@ export class AiKnowledgeRepository {
     });
 
     return rows.map(mapKnowledgeDocumentRow);
+  }
+
+  public async getCustomQa(input: {
+    guildId: string;
+    customQaId: string;
+  }): Promise<AiCustomQaRecord | null> {
+    const row = await this.db.query.aiCustomQas.findFirst({
+      where: and(eq(aiCustomQas.guildId, input.guildId), eq(aiCustomQas.id, input.customQaId)),
+    });
+
+    return row ? mapCustomQaRow(row) : null;
+  }
+
+  public async listCustomQas(input: { guildId: string }): Promise<AiCustomQaRecord[]> {
+    const rows = await this.db.query.aiCustomQas.findMany({
+      where: eq(aiCustomQas.guildId, input.guildId),
+      orderBy: (table, { desc, asc }) => [desc(table.updatedAt), asc(table.id)],
+    });
+
+    return rows.map(mapCustomQaRow);
+  }
+
+  public async createCustomQa(input: {
+    guildId: string;
+    question: string;
+    answer: string;
+    createdByDiscordUserId?: string | null;
+  }): Promise<AiCustomQaRecord> {
+    const now = new Date();
+    const customQaId = ulid();
+
+    await this.db.insert(aiCustomQas).values({
+      id: customQaId,
+      guildId: input.guildId,
+      question: input.question,
+      answer: input.answer,
+      createdByDiscordUserId: input.createdByDiscordUserId ?? null,
+      updatedByDiscordUserId: input.createdByDiscordUserId ?? null,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const created = await this.getCustomQa({
+      guildId: input.guildId,
+      customQaId,
+    });
+    if (!created) {
+      throw new Error('Failed to create AI custom Q&A');
+    }
+
+    return created;
+  }
+
+  public async updateCustomQa(input: {
+    guildId: string;
+    customQaId: string;
+    question: string;
+    answer: string;
+    updatedByDiscordUserId?: string | null;
+  }): Promise<AiCustomQaRecord | null> {
+    const existing = await this.getCustomQa({
+      guildId: input.guildId,
+      customQaId: input.customQaId,
+    });
+    if (!existing) {
+      return null;
+    }
+
+    const now = new Date();
+    await this.db
+      .update(aiCustomQas)
+      .set({
+        question: input.question,
+        answer: input.answer,
+        updatedByDiscordUserId: input.updatedByDiscordUserId ?? null,
+        updatedAt: now,
+      })
+      .where(and(eq(aiCustomQas.guildId, input.guildId), eq(aiCustomQas.id, input.customQaId)));
+
+    return this.getCustomQa({
+      guildId: input.guildId,
+      customQaId: input.customQaId,
+    });
+  }
+
+  public async deleteCustomQa(input: {
+    guildId: string;
+    customQaId: string;
+  }): Promise<boolean> {
+    const existing = await this.getCustomQa(input);
+    if (!existing) {
+      return false;
+    }
+
+    await this.db
+      .delete(aiCustomQas)
+      .where(and(eq(aiCustomQas.guildId, input.guildId), eq(aiCustomQas.id, input.customQaId)));
+
+    return true;
   }
 
   public async markSourceSyncStarted(input: {
@@ -312,10 +538,7 @@ export class AiKnowledgeRepository {
 
     const [documents, customQas, websiteSources] = await Promise.all([
       this.listKnowledgeDocuments({ guildId: input.guildId }),
-      this.db.query.aiCustomQas.findMany({
-        where: eq(aiCustomQas.guildId, input.guildId),
-        orderBy: (table, { desc, asc }) => [desc(table.updatedAt), asc(table.id)],
-      }),
+      this.listCustomQas({ guildId: input.guildId }),
       this.listWebsiteSources({ guildId: input.guildId }),
     ]);
 
@@ -383,9 +606,7 @@ export class AiKnowledgeRepository {
     const [sources, documents, customQas] = await Promise.all([
       this.listWebsiteSources({ guildId: input.guildId }),
       this.listKnowledgeDocuments({ guildId: input.guildId }),
-      this.db.query.aiCustomQas.findMany({
-        where: eq(aiCustomQas.guildId, input.guildId),
-      }),
+      this.listCustomQas({ guildId: input.guildId }),
     ]);
 
     const documentCountBySourceId = new Map<string, number>();

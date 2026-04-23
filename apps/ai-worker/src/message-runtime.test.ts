@@ -45,18 +45,6 @@ function createOkResult<T>(value: T): { isErr: () => false; isOk: () => true; va
   };
 }
 
-function createErrResult(message: string): {
-  isErr: () => true;
-  isOk: () => false;
-  error: Error;
-} {
-  return {
-    isErr: () => true,
-    isOk: () => false,
-    error: new Error(message),
-  };
-}
-
 function createGuildState(overrides?: Partial<Awaited<ReturnType<AiMessageRuntimeDependencies['loadGuildState']>>>) {
   return {
     activated: true,
@@ -73,7 +61,13 @@ function createGuildState(overrides?: Partial<Awaited<ReturnType<AiMessageRuntim
 
 function createDependencies(input?: {
   state?: Awaited<ReturnType<AiMessageRuntimeDependencies['loadGuildState']>>;
-  answerResult?: ReturnType<typeof createOkResult> | ReturnType<typeof createErrResult>;
+  answerResult?:
+    | ReturnType<typeof createOkResult>
+    | {
+        isErr: () => true;
+        isOk: () => false;
+        error: Error;
+      };
 }): AiMessageRuntimeDependencies & {
   loadGuildState: ReturnType<typeof vi.fn>;
   answerMessage: ReturnType<typeof vi.fn>;

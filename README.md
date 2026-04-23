@@ -19,6 +19,8 @@ Multi-tenant Discord + Telegram bot stack with a web dashboard for ticket-based 
 - `apps/nuke-worker`: separate-token Discord worker for `/nuke` scheduling and channel nukes.
 - `apps/sports-worker`: separate-token Discord worker for daily sports TV listings with shared UK+USA broadcaster coverage, managed sport + live event channels, `/sports live-status`, and public sports lookup commands.
 - `apps/channel-copy-worker`: separate-token Discord worker for one-time channel backfills, including message text, embeds, and attachment/media reposting across servers.
+- `apps/ai-web-app`: standalone Next.js control plane for the AI bot, with separate Discord OAuth, guild-scoped settings, website/custom-Q&A management, and diagnostics.
+- `apps/ai-worker`: separate-token Discord worker for AI bot activation plus passive grounded replies in configured channels.
 - `packages/core`: shared domain/config/security/services/repositories.
 - `drizzle/migrations`: SQL migrations.
 
@@ -28,6 +30,11 @@ Multi-tenant Discord + Telegram bot stack with a web dashboard for ticket-based 
 - `DISCORD_CLIENT_ID`
 - `JOIN_GATE_DISCORD_TOKEN`
 - `JOIN_GATE_DISCORD_CLIENT_ID`
+- `AI_DISCORD_TOKEN`
+- `AI_DISCORD_CLIENT_ID`
+- `AI_WEB_PUBLIC_URL`
+- `AI_DISCORD_REDIRECT_URI`
+- `OPENAI_API_KEY`
 - `SPORTS_DISCORD_TOKEN`
 - `SPORTS_DISCORD_CLIENT_ID`
 - `CHANNEL_COPY_DISCORD_TOKEN`
@@ -40,6 +47,7 @@ Recommended for production:
 
 - `DISCORD_CLIENT_SECRET`
 - `DISCORD_REDIRECT_URI`
+- `OPENAI_MODEL`
 - `TELEGRAM_BOT_USERNAME`
 - `SESSION_SECRET`
 - `ENCRYPTION_KEY`
@@ -70,6 +78,7 @@ Copy `.env.example` to `.env` and fill values.
 - Build: `pnpm build`
 - Migrate: `pnpm migrate`
 - Deploy slash commands: `pnpm deploy:commands`
+- Deploy AI bot slash commands: `pnpm deploy:commands:ai`
 - Deploy sales bot slash commands only: `pnpm deploy:commands:bot`
 - Deploy join-gate slash commands only: `pnpm deploy:commands:join-gate`
 - Deploy nuke slash commands: `pnpm deploy:commands:nuke`
@@ -200,6 +209,23 @@ Copy `.env.example` to `.env` and fill values.
 - Overview now includes connection controls to disconnect a linked Telegram chat or fully disconnect the current Discord server from the selected merchant workspace with confirmation prompts.
 - Coupons can be created, edited, and deleted per server from dashboard (`code`, fixed discount amount, active flag, optional category/product/variation scope).
 - Dashboard keeps the selected workspace/server context and links the selected server to that workspace automatically.
+
+## AI Bot Panel
+
+- Runs as a fully separate product surface:
+  - `apps/ai-web-app` serves the standalone AI admin panel on its own domain.
+  - `apps/ai-worker` runs the separate AI Discord application/token.
+- The only slash-command surface for the AI bot is `/activation`.
+- AI bot activation is isolated from sales, join-gate, nuke, sports, and channel-copy access.
+- `SUPER_ADMIN_DISCORD_IDS` can remotely grant, revoke, and list AI bot activation entries for a target guild without joining that guild.
+- Normal configuration happens only in the AI web app:
+  - reply channels and per-channel inline/thread mode
+  - allowlist/blocklist role rules
+  - tone preset plus custom instructions
+  - manual website sources with sync-on-save and manual re-sync
+  - custom Q&A entries
+  - activation state, bot presence, and diagnostics
+- The AI runtime only answers in configured channels, only for roles allowed by the guild rule set, and only from grounded website/custom-Q&A evidence. If retrieval is weak, it refuses instead of falling back to general model knowledge.
 
 ## Ticket Sale Flow
 

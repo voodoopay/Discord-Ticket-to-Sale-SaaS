@@ -20,6 +20,7 @@ import {
   aiReadinessPillars,
 } from '@/lib/ai-design-tokens';
 import { getAiDashboardSessionData } from '@/lib/ai-session';
+import { AiControlPlane } from '@/components/ai-control-plane';
 
 const sectionIcons = {
   overview: Gauge,
@@ -28,10 +29,6 @@ const sectionIcons = {
   personality: BrainCircuit,
   diagnostics: ShieldCheck,
 } as const;
-
-function cx(...values: Array<string | false | null | undefined>) {
-  return values.filter(Boolean).join(' ');
-}
 
 function GuildAvatar({
   name,
@@ -57,8 +54,11 @@ export default async function AiDashboardEntryPage({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const sessionData = await getAiDashboardSessionData();
-  const authErrorParam = (await searchParams).authError;
+  const resolvedSearchParams = await searchParams;
+  const authErrorParam = resolvedSearchParams.authError;
   const authError = Array.isArray(authErrorParam) ? authErrorParam[0] : authErrorParam;
+  const guildIdParam = resolvedSearchParams.guildId;
+  const initialGuildId = Array.isArray(guildIdParam) ? (guildIdParam[0] ?? null) : (guildIdParam ?? null);
 
   return (
     <main className="relative min-h-screen overflow-x-hidden pb-24 lg:pb-10">
@@ -205,95 +205,10 @@ export default async function AiDashboardEntryPage({
         </section>
 
         {sessionData ? (
-          <section className="grid gap-4 xl:grid-cols-[17rem_minmax(0,1fr)]">
-            <aside className="ai-panel rounded-[2rem] px-4 py-5 sm:px-5">
-              <div className="space-y-4">
-                <div>
-                  <p className="text-[0.68rem] font-semibold uppercase tracking-[0.26em] text-muted-foreground">
-                    Panel map
-                  </p>
-                  <h3 className="mt-2 font-[family-name:var(--font-display)] text-2xl font-extrabold tracking-[-0.05em] text-foreground">
-                    Signed-in shell
-                  </h3>
-                </div>
-                <nav className="grid gap-2">
-                  {aiDashboardSections.map((section, index) => {
-                    const Icon = sectionIcons[section.id];
-
-                    return (
-                      <a
-                        key={section.id}
-                        href={`#${section.id}`}
-                        className={cx(
-                          'group flex min-h-14 cursor-pointer items-center justify-between rounded-[1.2rem] px-4 py-3 transition focus-visible:outline-2',
-                          index === 0
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-white/75 text-muted-foreground hover:bg-primary/[0.07] hover:text-primary',
-                        )}
-                      >
-                        <span className="flex items-center gap-3 text-sm font-semibold">
-                          <Icon className="size-4" />
-                          {section.title}
-                        </span>
-                        <ArrowRight className="size-4 transition group-hover:translate-x-0.5" />
-                      </a>
-                    );
-                  })}
-                </nav>
-              </div>
-            </aside>
-
-            <div className="grid gap-4">
-              <section className="grid gap-4 md:grid-cols-2">
-                {aiDashboardSections.map((section, index) => {
-                  const Icon = sectionIcons[section.id];
-
-                  return (
-                    <article
-                      key={section.id}
-                      id={section.id}
-                      className={cx(
-                        'ai-panel rounded-[2rem] px-5 py-5 sm:px-6 sm:py-6',
-                        index === 0 ? 'md:col-span-2' : '',
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="space-y-3">
-                          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.26em] text-muted-foreground">
-                            {section.eyebrow}
-                          </p>
-                          <div className="space-y-2">
-                            <h3 className="font-[family-name:var(--font-display)] text-2xl font-extrabold tracking-[-0.05em] text-foreground">
-                              {section.title}
-                            </h3>
-                            <p className="max-w-xl text-sm leading-7 text-muted-foreground">
-                              {section.detail}
-                            </p>
-                          </div>
-                        </div>
-
-                        <span className="inline-flex size-12 items-center justify-center rounded-[1.2rem] bg-primary/[0.08] text-primary">
-                          <Icon className="size-5" />
-                        </span>
-                      </div>
-
-                      <div className="mt-6 flex items-end justify-between gap-4">
-                        <div>
-                          <p className="font-[family-name:var(--font-display)] text-4xl font-black tracking-[-0.08em] text-foreground">
-                            {section.metric}
-                          </p>
-                          <p className="mt-2 text-sm text-muted-foreground">Panel section scaffolded</p>
-                        </div>
-                        <span className="rounded-full bg-accent/60 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-accent-foreground">
-                          APIs next
-                        </span>
-                      </div>
-                    </article>
-                  );
-                })}
-              </section>
-            </div>
-          </section>
+          <AiControlPlane
+            guilds={sessionData.discordGuilds}
+            initialGuildId={initialGuildId}
+          />
         ) : (
           <section className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_22rem]">
             <article className="ai-panel rounded-[2rem] px-5 py-5 sm:px-6 sm:py-6">

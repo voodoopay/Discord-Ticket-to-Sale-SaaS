@@ -33,6 +33,16 @@
 6. `telegram-worker`
 - Handles Telegram workspace linking, sales handoff, points, referrals, and paid-order callbacks.
 
+7. `ai-web-app`
+- Runs as a separate Next.js product surface on its own domain.
+- Handles Discord OAuth on the AI panel domain, guild access filtering for owners/admins, and all AI bot configuration flows.
+- Exposes guild-scoped API routes for AI settings, website sources, custom Q&A entries, bot resource discovery, and diagnostics snapshots.
+
+8. `ai-worker`
+- Runs as a separate Discord application/token dedicated to the AI bot.
+- Keeps `/activation` as the only slash-command surface.
+- Processes passive message replies in configured channels, enforces role allowlist/blocklist rules, retrieves grounded evidence, and posts inline or thread replies.
+
 ## Data Layer
 
 - Shared MySQL schema in `packages/core/src/infra/db/schema/tables.ts`.
@@ -49,6 +59,14 @@
   - `sports_channel_bindings` for the one-channel-per-sport mapping inside each server
   - `sports_live_event_channels` for temporary event-channel lifecycle state, cleanup timing, and highlight delivery tracking
   - `sports_authorized_users` for server-specific activation and `/sports` management access
+- AI bot state is persisted in:
+  - `ai_authorized_users` for isolated activation access managed by `SUPER_ADMIN_DISCORD_IDS`
+  - `ai_guild_configs` for tone, enablement, role mode, and default reply behavior
+  - `ai_reply_channels` for active AI reply lanes and per-channel inline/thread mode
+  - `ai_role_rules` for allowlist/blocklist role filtering
+  - `ai_website_sources` for manual approved URLs and sync state
+  - `ai_knowledge_documents` for normalized synced website content
+  - `ai_custom_qas` for admin-authored grounded Q&A pairs
 
 ## Security and Reliability
 
@@ -58,6 +76,7 @@
 - Idempotent processing (`tenant_id + delivery_id`) and duplicate paid-order guard (`order_session_id`).
 - Retry strategy: exponential backoff via `p-retry`, queue control via `p-queue`.
 - Join-gate requires Discord `Server Members Intent` and `Message Content Intent` on its dedicated application to detect new joins and index lookup-channel emails.
+- AI passive replies require Discord `GuildMessages` and `MessageContent` intents on the dedicated AI application, plus the runtime permissions needed to reply inline or create/send in threads.
 
 ## Retention Defaults
 
