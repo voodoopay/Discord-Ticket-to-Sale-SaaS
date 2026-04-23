@@ -175,7 +175,7 @@ importers:
         specifier: 8.2.0
         version: 8.2.0
       openai:
-        specifier: ^6.34.0
+        specifier: ^6.1.0
         version: 6.34.0(ws@8.19.0)(zod@4.1.12)
       p-queue:
         specifier: 8.1.1
