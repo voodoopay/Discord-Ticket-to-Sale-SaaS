@@ -5202,6 +5202,14 @@
           ],
           "isUnique": false
         },
+        "ai_knowledge_documents_source_content_hash_uq": {
+          "name": "ai_knowledge_documents_source_content_hash_uq",
+          "columns": [
+            "source_id",
+            "content_hash"
+          ],
+          "isUnique": true
+        },
         "ai_knowledge_documents_source_idx": {
           "name": "ai_knowledge_documents_source_idx",
           "columns": [
@@ -5210,7 +5218,21 @@
           "isUnique": false
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "ai_knowledge_documents_source_fk": {
+          "name": "ai_knowledge_documents_source_fk",
+          "tableFrom": "ai_knowledge_documents",
+          "columnsFrom": [
+            "source_id"
+          ],
+          "tableTo": "ai_website_sources",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "cascade",
+          "onDelete": "cascade"
+        }
+      },
       "compositePrimaryKeys": {
         "ai_knowledge_documents_id": {
           "name": "ai_knowledge_documents_id",

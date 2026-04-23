@@ -1,5 +1,6 @@
 ﻿import {
   boolean,
+  foreignKey,
   index,
   int,
   json,
@@ -933,7 +934,18 @@ export const aiKnowledgeDocuments = mysqlTable(
   },
   (table) => ({
     guildIdx: index('ai_knowledge_documents_guild_idx').on(table.guildId),
+    sourceContentHashUnique: uniqueIndex('ai_knowledge_documents_source_content_hash_uq').on(
+      table.sourceId,
+      table.contentHash,
+    ),
     sourceIdx: index('ai_knowledge_documents_source_idx').on(table.sourceId),
+    sourceFk: foreignKey({
+      columns: [table.sourceId],
+      foreignColumns: [aiWebsiteSources.id],
+      name: 'ai_knowledge_documents_source_fk',
+    })
+      .onDelete('cascade')
+      .onUpdate('cascade'),
   }),
 );
 

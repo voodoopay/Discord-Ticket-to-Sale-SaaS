@@ -81,7 +81,9 @@ CREATE TABLE `ai_knowledge_documents` (
 	`metadata_json` json NOT NULL DEFAULT ('{}'),
 	`created_at` timestamp NOT NULL DEFAULT (now()),
 	`updated_at` timestamp NOT NULL DEFAULT (now()),
-	CONSTRAINT `ai_knowledge_documents_id` PRIMARY KEY(`id`)
+	CONSTRAINT `ai_knowledge_documents_id` PRIMARY KEY(`id`),
+	CONSTRAINT `ai_knowledge_documents_source_content_hash_uq` UNIQUE(`source_id`,`content_hash`),
+	CONSTRAINT `ai_knowledge_documents_source_fk` FOREIGN KEY (`source_id`) REFERENCES `ai_website_sources`(`id`) ON DELETE cascade ON UPDATE cascade
 );
 --> statement-breakpoint
 CREATE INDEX `ai_knowledge_documents_guild_idx` ON `ai_knowledge_documents` (`guild_id`);

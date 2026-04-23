@@ -1,3 +1,4 @@
+import { getTableConfig } from 'drizzle-orm/mysql-core';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { getEnv, resetEnvForTests } from '../src/config/env.js';
@@ -67,5 +68,36 @@ describe('AI env and schema foundation', () => {
     expect(aiWebsiteSources).toBeDefined();
     expect(aiKnowledgeDocuments).toBeDefined();
     expect(aiCustomQas).toBeDefined();
+  });
+
+  it('enforces website source linkage and source-content deduplication for knowledge documents', () => {
+    const tableConfig = getTableConfig(aiKnowledgeDocuments);
+    const indexSummary = tableConfig.indexes.map((index) => ({
+      columns: index.config.columns.map((column) => column.name),
+      name: index.config.name,
+      unique: index.config.unique,
+    }));
+    const foreignKeySummary = tableConfig.foreignKeys.map((foreignKey) => ({
+      columnsFrom: foreignKey.reference().columns.map((column) => column.name),
+      columnsTo: foreignKey.reference().foreignColumns.map((column) => column.name),
+      name: foreignKey.getName(),
+      onDelete: foreignKey.onDelete,
+      onUpdate: foreignKey.onUpdate,
+      referencesWebsiteSources: foreignKey.reference().foreignTable === aiWebsiteSources,
+    }));
+
+    expect(indexSummary).toContainEqual({
+      columns: ['source_id', 'content_hash'],
+      name: 'ai_knowledge_documents_source_content_hash_uq',
+      unique: true,
+    });
+    expect(foreignKeySummary).toContainEqual({
+      columnsFrom: ['source_id'],
+      columnsTo: ['id'],
+      name: 'ai_knowledge_documents_source_fk',
+      onDelete: 'cascade',
+      onUpdate: 'cascade',
+      referencesWebsiteSources: true,
+    });
   });
 });
