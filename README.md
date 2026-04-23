@@ -107,7 +107,8 @@ Copy `.env.example` to `.env` and fill values.
 - Runs from separate worker/token (`apps/sports-worker`).
 - Creates and manages persistent sport channels under a managed category, but only posts daily listings for sports that actually have televised events that day.
 - Default schedule is `00:01` in `Europe/London`, and the worker clears the previous day’s managed posts before sending the new listings.
-- Televised live events now get temporary event channels with live status updates, optional highlight auto-posting, retention of the final score/state until cleanup, and automatic deletion 3 hours after the event finishes.
+- Televised live events now get temporary event channels with live status updates, optional highlight auto-posting, retention of the final score/state until cleanup, and automatic deletion 30 minutes after the event finishes.
+- Shared TV-lookup requests are now cached briefly across the sports worker so multiple guilds do not hammer TheSportsDB with duplicate `lookuptv.php` traffic during the same poll window.
 - Highlights can post automatically inside managed live event channels when available, and the same highlight data can also be requested on demand.
 - Uses TheSportsDB for sport, event, broadcaster, and image data. A paid API key is required for full daily coverage because the public `123` key is heavily truncated.
 - Daily sport channels stay persistent. When a sport has no events that day, its channel is cleared and left empty instead of being deleted.
@@ -216,7 +217,7 @@ Copy `.env.example` to `.env` and fill values.
 - Points are reserved at checkout creation and only deducted after successful payment confirmation.
 - Paid confirmation message now includes updated points balance.
 - Referral rewards are auto-granted on first paid order for claimed customer emails, using category eligibility + purchased variant reward snapshots.
-- Bot creates `order_session` and posts payment buttons in the ticket (`Pay`, and optionally `Pay with Crypto`).
+- Bot creates `order_session` and posts payment buttons in the ticket (`Pay via Revolut/Visa/Mastercard/Bank`, and optionally `Pay with Crypto`).
 - Checkout amount now reflects basket total minus coupon plus tip.
 - Telegram `/sale` now starts in the linked group and immediately moves the sensitive sale flow into a private DM with the selected customer.
 - Telegram `/sale` can target the customer by reply, `text_mention`, or plain `/sale @username`, and only the matching customer can continue the private DM flow.

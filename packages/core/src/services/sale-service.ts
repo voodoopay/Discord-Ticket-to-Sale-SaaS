@@ -27,6 +27,7 @@ import { PointsService } from './points-service.js';
 const answerSchema = z.record(z.string(), z.string().max(2000));
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const FALLBACK_EMAIL_DOMAIN = 'voodoopaybot.online';
+export const STANDARD_CHECKOUT_OPTION_LABEL = 'Pay via Revolut/Visa/Mastercard/Bank';
 
 type SaleSessionInput = {
   tenantId: string;
@@ -713,7 +714,7 @@ export class SaleService {
       const checkoutOptions: SaleCheckoutOption[] = [
         {
           method: 'pay',
-          label: 'Pay',
+          label: STANDARD_CHECKOUT_OPTION_LABEL,
           url: voodooCheckout.value,
         },
       ];
@@ -775,7 +776,7 @@ export class SaleService {
       checkoutOptions: [
         {
           method: 'pay',
-          label: 'Pay',
+          label: STANDARD_CHECKOUT_OPTION_LABEL,
           url: providerCheckoutUrl,
         },
       ],

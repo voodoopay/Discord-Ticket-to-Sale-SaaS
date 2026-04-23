@@ -6,6 +6,10 @@ import {
   type SportsLiveEventChannelRecord,
 } from '../repositories/sports-live-event-repository.js';
 
+export const SPORTS_LIVE_EVENT_CLEANUP_WINDOW_MINUTES = 30;
+export const SPORTS_LIVE_EVENT_CLEANUP_WINDOW_MS =
+  SPORTS_LIVE_EVENT_CLEANUP_WINDOW_MINUTES * 60 * 1000;
+
 export type SportsLiveEventChannelSummary = {
   id: string;
   guildId: string;
@@ -147,7 +151,7 @@ export class SportsLiveEventService {
     eventId: string;
     finishedAtUtc: Date;
   }): Promise<Result<SportsLiveEventChannelSummary, AppError>> {
-    const deleteAfterUtc = new Date(input.finishedAtUtc.getTime() + 3 * 60 * 60 * 1000);
+    const deleteAfterUtc = new Date(input.finishedAtUtc.getTime() + SPORTS_LIVE_EVENT_CLEANUP_WINDOW_MS);
 
     try {
       const record = await this.repository.markFinished({

@@ -1,3 +1,4 @@
+import PQueue from 'p-queue';
 import pRetry, { AbortError } from 'p-retry';
 import { err, ok, type Result } from 'neverthrow';
 
@@ -378,6 +379,20 @@ const UK_LOCALE = 'en-GB';
 const SPORTS_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const DAILY_LISTINGS_CACHE_TTL_MS = 10 * 60 * 1000;
 const SEARCH_CACHE_TTL_MS = 30 * 1000;
+const TV_LOOKUP_REQUEST_CACHE_TTL_MS = 60 * 1000;
+const SHARED_REQUEST_CACHE = new Map<string, CacheEntry<unknown>>();
+const SHARED_REQUEST_IN_FLIGHT = new Map<string, Promise<unknown>>();
+const TV_LOOKUP_QUEUE = new PQueue({
+  concurrency: 4,
+  intervalCap: 8,
+  interval: 1_000,
+});
+
+export function resetSportsDataCachesForTests(): void {
+  SHARED_REQUEST_CACHE.clear();
+  SHARED_REQUEST_IN_FLIGHT.clear();
+  TV_LOOKUP_QUEUE.clear();
+}
 
 function normalizeWhitespace(value: string): string {
   return value.trim().replace(/\s+/gu, ' ');
@@ -997,6 +1012,20 @@ function sortSportsSearchResults(left: SportsSearchResult, right: SportsSearchRe
   return left.eventName.localeCompare(right.eventName, UK_LOCALE);
 }
 
+function buildSharedRequestCacheKey(input: {
+  url: string;
+  headers?: Record<string, string>;
+}): string {
+  const headerEntries = Object.entries(input.headers ?? {}).sort(([left], [right]) =>
+    left.localeCompare(right, UK_LOCALE),
+  );
+  if (headerEntries.length === 0) {
+    return input.url;
+  }
+
+  return `${input.url}::${headerEntries.map(([key, value]) => `${key}=${value}`).join('&')}`;
+}
+
 export class SportsDataService {
   private readonly env = getEnv();
   private sportsCache: CacheEntry<SportDefinition[]> | null = null;
@@ -1027,34 +1056,89 @@ export class SportsDataService {
   private async requestJson(input: {
     url: string;
     headers?: Record<string, string>;
+    cacheTtlMs?: number;
+    queue?: PQueue;
   }): Promise<unknown> {
-    return pRetry(
-      async () => {
-        const response = await fetch(input.url, {
-          headers: input.headers,
-        });
+    const cacheTtlMs = Math.max(0, Math.floor(input.cacheTtlMs ?? 0));
+    const cacheKey =
+      cacheTtlMs > 0
+        ? buildSharedRequestCacheKey({
+            url: input.url,
+            headers: input.headers,
+          })
+        : null;
 
-        if (response.status === 429) {
-          throw new Error(`Sports API rate limited request to ${input.url}`);
-        }
+    if (cacheKey) {
+      const cached = SHARED_REQUEST_CACHE.get(cacheKey);
+      if (cached && cached.expiresAt > Date.now()) {
+        return cached.value;
+      }
 
-        if (!response.ok) {
-          const bodyText = await response.text();
-          if (response.status >= 500) {
-            throw new Error(`Sports API request failed (${response.status}): ${bodyText}`);
+      const inFlight = SHARED_REQUEST_IN_FLIGHT.get(cacheKey);
+      if (inFlight) {
+        return inFlight;
+      }
+    }
+
+    const executeRequest = async (): Promise<unknown> =>
+      pRetry(
+        async () => {
+          const response = await fetch(input.url, {
+            headers: input.headers,
+          });
+          if (!response || typeof response !== 'object' || !('status' in response)) {
+            throw new Error(`Sports API request returned no response for ${input.url}`);
           }
 
-          throw new AbortError(`Sports API request failed (${response.status}): ${bodyText}`);
-        }
+          if (response.status === 429) {
+            throw new Error(`Sports API rate limited request to ${input.url}`);
+          }
 
-        return response.json();
-      },
-      {
-        retries: 3,
-        minTimeout: 400,
-        factor: 2,
-      },
-    );
+          if (!response.ok) {
+            const bodyText = await response.text();
+            if (response.status >= 500) {
+              throw new Error(`Sports API request failed (${response.status}): ${bodyText}`);
+            }
+
+            throw new AbortError(`Sports API request failed (${response.status}): ${bodyText}`);
+          }
+
+          return response.json();
+        },
+        {
+          retries: 3,
+          minTimeout: 400,
+          factor: 2,
+        },
+      );
+
+    const requestPromise = (async () => {
+      const result =
+        input.queue === undefined ? await executeRequest() : await input.queue.add(() => executeRequest());
+
+      if (cacheKey) {
+        SHARED_REQUEST_CACHE.set(cacheKey, {
+          expiresAt: Date.now() + cacheTtlMs,
+          value: result,
+        });
+      }
+
+      return result;
+    })();
+
+    if (cacheKey) {
+      SHARED_REQUEST_IN_FLIGHT.set(cacheKey, requestPromise);
+      requestPromise.then(
+        () => {
+          SHARED_REQUEST_IN_FLIGHT.delete(cacheKey);
+        },
+        () => {
+          SHARED_REQUEST_IN_FLIGHT.delete(cacheKey);
+        },
+      );
+    }
+
+    return requestPromise;
   }
 
   private async requestV1<T>(input: {
@@ -1070,7 +1154,13 @@ export class SportsDataService {
       url.searchParams.set(key, toApiQueryValue(value));
     }
 
-    return (await this.requestJson({ url: url.toString() })) as T;
+    const isTvLookup = input.endpoint === 'lookuptv.php';
+
+    return (await this.requestJson({
+      url: url.toString(),
+      cacheTtlMs: isTvLookup ? TV_LOOKUP_REQUEST_CACHE_TTL_MS : 0,
+      queue: isTvLookup ? TV_LOOKUP_QUEUE : undefined,
+    })) as T;
   }
 
   private async requestV2<T>(input: {

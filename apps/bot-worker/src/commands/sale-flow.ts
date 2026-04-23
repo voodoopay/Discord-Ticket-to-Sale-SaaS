@@ -9,7 +9,12 @@ import {
   type GuildMember,
   type GuildTextBasedChannel,
 } from 'discord.js';
-import { SaleService, TenantRepository, type SaleCheckoutOption } from '@voodoo/core';
+import {
+  SaleService,
+  STANDARD_CHECKOUT_OPTION_LABEL,
+  TenantRepository,
+  type SaleCheckoutOption,
+} from '@voodoo/core';
 
 import { canStartSale } from '../permissions/sale-permissions.js';
 import { createSaleDraft } from '../flows/sale-draft-store.js';
@@ -270,7 +275,7 @@ export function buildCheckoutLinkLines(input: {
   const checkoutOptions =
     input.checkoutOptions && input.checkoutOptions.length > 0
       ? input.checkoutOptions
-      : [{ method: 'pay' as const, label: 'Pay', url: input.checkoutUrl }];
+      : [{ method: 'pay' as const, label: STANDARD_CHECKOUT_OPTION_LABEL, url: input.checkoutUrl }];
 
   if (checkoutOptions.length === 1 && checkoutOptions[0]?.method === 'pay') {
     return [`${toMaskedLink('Click Here To Pay', checkoutOptions[0].url)}`];

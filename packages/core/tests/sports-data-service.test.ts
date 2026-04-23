@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   pickBestSportsSearchResult,
+  resetSportsDataCachesForTests,
   SportsDataService,
   type SportsSearchResult,
 } from '../src/services/sports-data-service.js';
@@ -23,6 +24,7 @@ function createJsonResponse(payload: unknown): Response {
 
 describe('pickBestSportsSearchResult', () => {
   afterEach(() => {
+    resetSportsDataCachesForTests();
     resetEnvForTests();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
@@ -948,6 +950,12 @@ describe('pickBestSportsSearchResult', () => {
               strCountry: 'United Kingdom',
               strLogo: 'https://img.test/sky-logo.png',
             },
+            {
+              idChannel: 'us-1',
+              strTvChannel: 'ESPN Deportes',
+              strCountry: 'United States',
+              strLogo: 'https://img.test/espn-logo.png',
+            },
           ],
         }),
       )
@@ -971,18 +979,6 @@ describe('pickBestSportsSearchResult', () => {
             },
           ],
         }),
-      )
-      .mockResolvedValueOnce(
-        createJsonResponse({
-          tvshows: [
-            {
-              idChannel: 'us-1',
-              strTvChannel: 'ESPN Deportes',
-              strCountry: 'United States',
-              strLogo: 'https://img.test/espn-logo.png',
-            },
-          ],
-        }),
       );
     vi.stubGlobal('fetch', fetchMock);
 
@@ -996,6 +992,11 @@ describe('pickBestSportsSearchResult', () => {
     if (result.isErr()) {
       throw result.error;
     }
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://example.com/api/v2/json/livescore/all');
+    expect(fetchMock.mock.calls[1]?.[0]).toBe('https://example.com/api/v1/json/premium-key/lookuptv.php?id=evt-1');
+    expect(fetchMock.mock.calls[2]?.[0]).toBe('https://example.com/api/v2/json/livescore/all');
 
     expect(result.value).toEqual({
       data: [
@@ -1029,6 +1030,90 @@ describe('pickBestSportsSearchResult', () => {
       failedCountries: [],
       successfulCountries: ['United Kingdom', 'United States'],
     });
+  });
+
+  it('reuses hot live-score and TV lookups across service instances', async () => {
+    process.env.SPORTS_API_KEY = 'premium-key';
+    process.env.SPORTS_API_BASE_URL = 'https://example.com/api/v2/json';
+    process.env.SPORTS_API_V1_BASE_URL = 'https://example.com/api/v1/json';
+    resetEnvForTests();
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          events: [
+            {
+              idEvent: 'evt-1',
+              strEvent: 'Rangers vs Celtic',
+              strSport: 'Soccer',
+              strLeague: 'Scottish Premiership',
+              strStatus: 'Live',
+              intHomeScore: '2',
+              intAwayScore: '1',
+              strHomeTeam: 'Rangers',
+              strAwayTeam: 'Celtic',
+              dateEvent: '2026-03-20',
+              strTime: '15:00:00',
+              strTimestamp: '2026-03-20T15:00:00+00:00',
+              strThumb: 'https://img.test/live-event.jpg',
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          tvshows: [
+            {
+              idChannel: 'chan-1',
+              strTvChannel: 'Sky Sports Main Event',
+              strCountry: 'United Kingdom',
+              strLogo: 'https://img.test/sky-logo.png',
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          events: [
+            {
+              idEvent: 'evt-1',
+              strEvent: 'Rangers vs Celtic',
+              strSport: 'Soccer',
+              strLeague: 'Scottish Premiership',
+              strStatus: 'Live',
+              intHomeScore: '2',
+              intAwayScore: '1',
+              strHomeTeam: 'Rangers',
+              strAwayTeam: 'Celtic',
+              dateEvent: '2026-03-20',
+              strTime: '15:00:00',
+              strTimestamp: '2026-03-20T15:00:00+00:00',
+              strThumb: 'https://img.test/live-event.jpg',
+            },
+          ],
+        }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const firstService = new SportsDataService();
+    const secondService = new SportsDataService();
+
+    const firstResult = await firstService.listLiveEvents({
+      timezone: 'Europe/London',
+      broadcastCountry: 'United Kingdom',
+    });
+    const secondResult = await secondService.listLiveEvents({
+      timezone: 'Europe/London',
+      broadcastCountry: 'United Kingdom',
+    });
+
+    expect(firstResult.isOk()).toBe(true);
+    expect(secondResult.isOk()).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://example.com/api/v2/json/livescore/all');
+    expect(fetchMock.mock.calls[1]?.[0]).toBe('https://example.com/api/v1/json/premium-key/lookuptv.php?id=evt-1');
+    expect(fetchMock.mock.calls[2]?.[0]).toBe('https://example.com/api/v2/json/livescore/all');
   });
 
   it('merges live events when countries return different event ids for the same kickoff', async () => {
@@ -1676,7 +1761,7 @@ describe('pickBestSportsSearchResult', () => {
           ],
         }),
       )
-      .mockRejectedValueOnce(new Error('tv lookup failed'));
+      .mockRejectedValue(new Error('tv lookup failed'));
     vi.stubGlobal('fetch', fetchMock);
 
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);

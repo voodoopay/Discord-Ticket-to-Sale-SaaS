@@ -1,13 +1,14 @@
 import { EmbedBuilder } from 'discord.js';
-import type {
-  SportsEventDetails,
-  SportsEventHighlight,
-  SportsListing,
-  SportsLiveEvent,
-  SportsPlayerDetails,
-  SportsSearchResult,
-  SportsStandings,
-  SportsTeamDetails,
+import {
+  SPORTS_LIVE_EVENT_CLEANUP_WINDOW_MINUTES,
+  type SportsEventDetails,
+  type SportsEventHighlight,
+  type SportsListing,
+  type SportsLiveEvent,
+  type SportsPlayerDetails,
+  type SportsSearchResult,
+  type SportsStandings,
+  type SportsTeamDetails,
 } from '@voodoo/core';
 
 const SPORTS_COLOR = 0x0f766e;
@@ -183,7 +184,7 @@ export function buildFinishedLiveEventEmbed(input: {
     .setDescription(
       [
         `Sport: **${input.sportName}**`,
-        'This temporary live-event channel is waiting for the cleanup window to expire.',
+        `This temporary live-event channel is waiting for the ${SPORTS_LIVE_EVENT_CLEANUP_WINDOW_MINUTES}-minute cleanup window to expire.`,
         `Scheduled cleanup after (UTC): **${input.deleteAfterUtc}**`,
       ].join('\n'),
     );

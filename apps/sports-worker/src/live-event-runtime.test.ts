@@ -106,6 +106,8 @@ vi.mock('@voodoo/core', () => {
     SportsAccessService,
     SportsLiveEventService,
     SportsService,
+    SPORTS_LIVE_EVENT_CLEANUP_WINDOW_MINUTES: 30,
+    SPORTS_LIVE_EVENT_CLEANUP_WINDOW_MS: 30 * 60 * 1000,
     normalizeBroadcastCountries: (input: readonly string[] | null | undefined) => {
       const normalized = [
         ...new Set(
@@ -2340,7 +2342,7 @@ describe('live event runtime', () => {
     expect(listTrackedEvents).toHaveBeenCalledTimes(4);
   });
 
-  it('deletes finished event channels after the three-hour cleanup window', async () => {
+  it('deletes finished event channels after the 30-minute cleanup window', async () => {
     const { guild, channels } = createGuildFixture();
     const eventChannel = createTextChannel({
       id: 'live-cleanup-1',
@@ -2355,7 +2357,7 @@ describe('live event runtime', () => {
           eventChannelId: 'live-cleanup-1',
           status: 'cleanup_due',
           finishedAtUtc: new Date('2026-03-20T15:00:00.000Z'),
-          deleteAfterUtc: new Date('2026-03-20T18:00:00.000Z'),
+          deleteAfterUtc: new Date('2026-03-20T15:30:00.000Z'),
         }),
       ]) as Awaited<ReturnType<SportsLiveEventService['listTrackedEvents']>>,
     );
@@ -2368,21 +2370,21 @@ describe('live event runtime', () => {
             eventChannelId: 'live-cleanup-1',
             status: 'deleted',
             finishedAtUtc: new Date('2026-03-20T15:00:00.000Z'),
-            deleteAfterUtc: new Date('2026-03-20T18:00:00.000Z'),
+            deleteAfterUtc: new Date('2026-03-20T15:30:00.000Z'),
           }),
         ) as Awaited<ReturnType<SportsLiveEventService['markDeleted']>>,
       );
 
     await runPendingLiveEventCleanup({
       guild,
-      now: new Date('2026-03-20T18:05:00.000Z'),
+      now: new Date('2026-03-20T15:35:00.000Z'),
     });
 
     expect(eventChannel.delete).toHaveBeenCalled();
     expect(markDeleted).toHaveBeenCalledWith({
       guildId: 'guild-1',
       eventId: 'evt-1',
-      deletedAtUtc: new Date('2026-03-20T18:05:00.000Z'),
+      deletedAtUtc: new Date('2026-03-20T15:35:00.000Z'),
     });
   });
 });

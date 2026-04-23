@@ -3,6 +3,7 @@ import {
   CouponRepository,
   ProductRepository,
   SaleService,
+  STANDARD_CHECKOUT_OPTION_LABEL,
   getEnv,
   type SaleCheckoutOption,
   toTelegramScopedId,
@@ -220,7 +221,7 @@ async function sendCheckoutMessage(input: {
   const options =
     input.checkoutOptions.length > 0
       ? input.checkoutOptions
-      : [{ method: 'pay' as const, label: 'Pay', url: input.checkoutUrl }];
+      : [{ method: 'pay' as const, label: STANDARD_CHECKOUT_OPTION_LABEL, url: input.checkoutUrl }];
   await input.api.sendMessage(
     getControlChatId(input.draft),
     [

@@ -10,6 +10,8 @@ import {
 import {
   SportsAccessService,
   SportsDataService,
+  SPORTS_LIVE_EVENT_CLEANUP_WINDOW_MINUTES,
+  SPORTS_LIVE_EVENT_CLEANUP_WINDOW_MS,
   SportsLiveEventService,
   SportsService,
   logger,
@@ -37,7 +39,6 @@ const LIVE_EVENT_QUEUE = new PQueue({
   intervalCap: 4,
   interval: 1_000,
 });
-const LIVE_EVENT_CLEANUP_WINDOW_MS = 3 * 60 * 60 * 1000;
 const DEFAULT_CATEGORY_NAME = 'Sports Listings';
 
 let liveEventSchedulerTimer: NodeJS.Timeout | null = null;
@@ -618,7 +619,7 @@ async function renderFinishedLiveEventChannel(input: {
 }): Promise<void> {
   await LIVE_EVENT_QUEUE.add(async () => {
     await input.channel.send({
-      content: `**${input.eventName}**\nThis televised ${input.sportName} event has finished. This temporary channel will be deleted after the cleanup window ends.`,
+      content: `**${input.eventName}**\nThis televised ${input.sportName} event has finished. This temporary channel will be deleted ${SPORTS_LIVE_EVENT_CLEANUP_WINDOW_MINUTES} minutes after full time.`,
     });
     await input.channel.send({
       embeds: [
@@ -1170,7 +1171,7 @@ export async function reconcileLiveEventsForGuild(input: {
       const eventChannel = await fetchTrackedEventChannel(input.guild, trackedEvent.eventChannelId);
       const deleteAfterUtc =
         finishedResult.value.deleteAfterUtc?.toISOString() ??
-        new Date(now.getTime() + LIVE_EVENT_CLEANUP_WINDOW_MS).toISOString();
+        new Date(now.getTime() + SPORTS_LIVE_EVENT_CLEANUP_WINDOW_MS).toISOString();
 
       if (eventChannel) {
         await renderFinishedLiveEventChannel({

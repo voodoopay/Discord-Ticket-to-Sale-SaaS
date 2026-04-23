@@ -1,3 +1,4 @@
+import { STANDARD_CHECKOUT_OPTION_LABEL } from '@voodoo/core';
 import { describe, expect, it } from 'vitest';
 
 import { buildTelegramCheckoutButtonLabel } from './checkout-links.js';
@@ -6,7 +7,7 @@ describe('telegram checkout links', () => {
   it('uses a clear single-button label for one checkout option', () => {
     expect(
       buildTelegramCheckoutButtonLabel({
-        label: 'Pay',
+        label: STANDARD_CHECKOUT_OPTION_LABEL,
         index: 0,
         total: 1,
       }),

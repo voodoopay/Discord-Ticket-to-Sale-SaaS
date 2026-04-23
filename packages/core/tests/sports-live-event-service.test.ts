@@ -434,7 +434,7 @@ describe('SportsLiveEventService', () => {
     expect(rows[0]?.scoreMessageId).toBe('msg-score-legacy');
   });
 
-  it('marks finished events for cleanup three hours later', async () => {
+  it('marks finished events for cleanup 30 minutes later', async () => {
     const repository = new SportsLiveEventRepository();
     const markFinishedSpy = vi.spyOn(repository, 'markFinished').mockResolvedValue(
       makeRow({
@@ -444,7 +444,7 @@ describe('SportsLiveEventService', () => {
         eventName: 'Rangers vs Celtic',
         status: 'cleanup_due',
         finishedAtUtc: new Date('2026-03-20T15:00:00.000Z'),
-        deleteAfterUtc: new Date('2026-03-20T18:00:00.000Z'),
+        deleteAfterUtc: new Date('2026-03-20T15:30:00.000Z'),
         updatedAt: new Date('2026-03-20T15:00:00.000Z'),
       }),
     );
@@ -467,9 +467,9 @@ describe('SportsLiveEventService', () => {
       guildId: 'guild-1',
       eventId: 'evt-1',
       finishedAtUtc: new Date('2026-03-20T15:00:00.000Z'),
-      deleteAfterUtc: new Date('2026-03-20T18:00:00.000Z'),
+      deleteAfterUtc: new Date('2026-03-20T15:30:00.000Z'),
     });
-    expect(result.value.deleteAfterUtc?.toISOString()).toBe('2026-03-20T18:00:00.000Z');
+    expect(result.value.deleteAfterUtc?.toISOString()).toBe('2026-03-20T15:30:00.000Z');
     expect(result.value.status).toBe('cleanup_due');
   });
 
