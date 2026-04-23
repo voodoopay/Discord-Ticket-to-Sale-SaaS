@@ -39,8 +39,7 @@ export class AiConfigService {
     input: SaveAiGuildSettingsInput,
   ): Promise<Result<AiGuildSettingsSnapshot, AppError>> {
     try {
-      await this.repository.saveGuildSettings(input);
-      return ok(await this.repository.getGuildSettingsSnapshot({ guildId: input.guildId }));
+      return ok(await this.repository.saveGuildSettings(input));
     } catch (error) {
       return err(
         error instanceof AppError

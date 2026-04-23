@@ -3,6 +3,7 @@ import { ulid } from 'ulid';
 
 import { getDb } from '../infra/db/client.js';
 import { aiAuthorizedUsers } from '../infra/db/schema/index.js';
+import { isMysqlDuplicateEntryError } from '../utils/mysql-errors.js';
 
 export type AiAuthorizedUserRecord = {
   id: string;
@@ -28,6 +29,27 @@ function mapAuthorizedUserRow(
 
 export class AiAccessRepository {
   private readonly db = getDb();
+
+  private async updateAuthorizedUserByGuildAndDiscordId(input: {
+    guildId: string;
+    discordUserId: string;
+    grantedByDiscordUserId: string;
+    updatedAt: Date;
+  }): Promise<void> {
+    await this.db
+      .update(aiAuthorizedUsers)
+      .set({
+        guildId: input.guildId,
+        grantedByDiscordUserId: input.grantedByDiscordUserId,
+        updatedAt: input.updatedAt,
+      })
+      .where(
+        and(
+          eq(aiAuthorizedUsers.guildId, input.guildId),
+          eq(aiAuthorizedUsers.discordUserId, input.discordUserId),
+        ),
+      );
+  }
 
   private async getAuthorizedUserByDiscordId(input: {
     guildId: string;
@@ -75,25 +97,38 @@ export class AiAccessRepository {
       discordUserId: input.discordUserId,
     });
     const now = new Date();
+    let created = false;
 
     if (existing) {
-      await this.db
-        .update(aiAuthorizedUsers)
-        .set({
-          guildId: input.guildId,
-          grantedByDiscordUserId: input.grantedByDiscordUserId,
-          updatedAt: now,
-        })
-        .where(eq(aiAuthorizedUsers.id, existing.id));
-    } else {
-      await this.db.insert(aiAuthorizedUsers).values({
-        id: ulid(),
+      await this.updateAuthorizedUserByGuildAndDiscordId({
         guildId: input.guildId,
         discordUserId: input.discordUserId,
         grantedByDiscordUserId: input.grantedByDiscordUserId,
-        createdAt: now,
         updatedAt: now,
       });
+    } else {
+      try {
+        await this.db.insert(aiAuthorizedUsers).values({
+          id: ulid(),
+          guildId: input.guildId,
+          discordUserId: input.discordUserId,
+          grantedByDiscordUserId: input.grantedByDiscordUserId,
+          createdAt: now,
+          updatedAt: now,
+        });
+        created = true;
+      } catch (error) {
+        if (!isMysqlDuplicateEntryError(error)) {
+          throw error;
+        }
+
+        await this.updateAuthorizedUserByGuildAndDiscordId({
+          guildId: input.guildId,
+          discordUserId: input.discordUserId,
+          grantedByDiscordUserId: input.grantedByDiscordUserId,
+          updatedAt: now,
+        });
+      }
     }
 
     const record = await this.getAuthorizedUserByDiscordId({
@@ -105,7 +140,7 @@ export class AiAccessRepository {
     }
 
     return {
-      created: !existing,
+      created,
       record,
     };
   }

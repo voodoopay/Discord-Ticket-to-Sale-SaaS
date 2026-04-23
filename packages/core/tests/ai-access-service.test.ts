@@ -12,20 +12,22 @@ function createAccessRepository() {
 }
 
 function createConfigRepository() {
+  const snapshot = {
+    guildId: 'guild-1',
+    enabled: true,
+    tonePreset: 'professional',
+    toneInstructions: 'Be sharp and concise.',
+    roleMode: 'allowlist',
+    defaultReplyMode: 'inline',
+    replyChannels: [{ channelId: 'chan-1', replyMode: 'thread' }],
+    roleIds: ['role-1'],
+    createdAt: '2026-04-23T10:00:00.000Z',
+    updatedAt: '2026-04-23T10:00:00.000Z',
+  } as const;
+
   return {
-    getGuildSettingsSnapshot: vi.fn().mockResolvedValue({
-      guildId: 'guild-1',
-      enabled: true,
-      tonePreset: 'professional',
-      toneInstructions: 'Be sharp and concise.',
-      roleMode: 'allowlist',
-      defaultReplyMode: 'inline',
-      replyChannels: [{ channelId: 'chan-1', replyMode: 'thread' }],
-      roleIds: ['role-1'],
-      createdAt: '2026-04-23T10:00:00.000Z',
-      updatedAt: '2026-04-23T10:00:00.000Z',
-    }),
-    saveGuildSettings: vi.fn().mockResolvedValue(undefined),
+    getGuildSettingsSnapshot: vi.fn().mockResolvedValue(snapshot),
+    saveGuildSettings: vi.fn().mockResolvedValue(snapshot),
   };
 }
 
@@ -110,7 +112,7 @@ describe('AI access and config services', () => {
       roleIds: ['role-1'],
       updatedByDiscordUserId: 'user-1',
     });
-    expect(repository.getGuildSettingsSnapshot).toHaveBeenCalledWith({ guildId: 'guild-1' });
+    expect(repository.getGuildSettingsSnapshot).not.toHaveBeenCalled();
     expect(result.isOk()).toBe(true);
     if (result.isErr()) {
       return;

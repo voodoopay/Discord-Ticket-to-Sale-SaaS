@@ -194,21 +194,25 @@ export class AiConfigRepository {
     };
   }
 
-  public async saveGuildSettings(input: SaveAiGuildSettingsInput): Promise<void> {
+  public async saveGuildSettings(
+    input: SaveAiGuildSettingsInput,
+  ): Promise<AiGuildSettingsSnapshot> {
     const now = new Date();
     const replyChannels = dedupeReplyChannels(input.replyChannels);
     const roleIds = dedupeRoleIds(input.roleIds);
 
-    await this.db.transaction(async (tx) => {
+    return this.db.transaction(async (tx) => {
       const existing = await tx.query.aiGuildConfigs.findFirst({
         where: eq(aiGuildConfigs.guildId, input.guildId),
       });
+      const enabled = input.enabled ?? true;
+      const createdAt = existing?.createdAt ?? now;
 
       if (existing) {
         await tx
           .update(aiGuildConfigs)
           .set({
-            enabled: input.enabled ?? true,
+            enabled,
             tonePreset: input.tonePreset,
             toneInstructions: input.toneInstructions,
             roleMode: input.roleMode,
@@ -220,7 +224,7 @@ export class AiConfigRepository {
         await tx.insert(aiGuildConfigs).values({
           id: ulid(),
           guildId: input.guildId,
-          enabled: input.enabled ?? true,
+          enabled,
           tonePreset: input.tonePreset,
           toneInstructions: input.toneInstructions,
           roleMode: input.roleMode,
@@ -256,6 +260,22 @@ export class AiConfigRepository {
           })),
         );
       }
+
+      return {
+        guildId: input.guildId,
+        enabled,
+        tonePreset: input.tonePreset,
+        toneInstructions: input.toneInstructions,
+        roleMode: input.roleMode,
+        defaultReplyMode: input.defaultReplyMode,
+        replyChannels: replyChannels.map((replyChannel) => ({
+          channelId: replyChannel.channelId,
+          replyMode: replyChannel.replyMode,
+        })),
+        roleIds,
+        createdAt: createdAt.toISOString(),
+        updatedAt: now.toISOString(),
+      };
     });
   }
 }
