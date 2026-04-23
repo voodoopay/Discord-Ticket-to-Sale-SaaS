@@ -12,3 +12,7 @@ AGENTS.md
 *.log
 *.tsbuildinfo
 .worktrees
+.superpowers/
+output/
+docs/superpowers/plans/*.md
+docs/superpowers/specs/*.md
