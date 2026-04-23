@@ -48,6 +48,15 @@ importers:
         specifier: 4.0.7
         version: 4.0.7(@types/node@24.8.1)(jiti@2.6.1)(lightningcss@1.30.2)(msw@2.12.10(@types/node@24.8.1)(typescript@5.9.3))(tsx@4.20.6)
 
+  apps/ai-worker:
+    dependencies:
+      '@voodoo/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      discord.js:
+        specifier: 14.25.1
+        version: 14.25.1
+
   apps/bot-worker:
     dependencies:
       '@voodoo/core':
