@@ -7,6 +7,7 @@ const configDir = path.dirname(fileURLToPath(import.meta.url));
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   outputFileTracingRoot: path.resolve(configDir, '../..'),
+  transpilePackages: ['three'],
   webpack: (config) => {
     config.resolve ??= {};
     config.resolve.alias ??= {};

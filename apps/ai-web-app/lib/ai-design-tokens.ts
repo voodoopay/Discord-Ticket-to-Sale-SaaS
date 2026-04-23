@@ -1,15 +1,15 @@
 export const AI_APP_BRAND = {
-  name: 'Aetherline',
-  eyebrow: 'Atmospheric Intelligence',
-  tagline: 'Grounded Discord intelligence for server owners and admins.',
+  name: 'Voodoo AI',
+  eyebrow: 'Discord automation',
+  tagline: 'Discord replies grounded in your sources.',
   loginLabel: 'Login with Discord',
-  shellLabel: 'AI Bot Control',
+  shellLabel: 'Voodoo AI Control',
 } as const;
 
 export const aiHeroSignals = [
-  'Owner and administrator guilds only',
-  'Grounded website and custom Q&A control surface',
-  'Separate AI brand on a standalone panel domain',
+  'Command mesh',
+  'Guild access',
+  'Live config',
 ] as const;
 
 export const aiDashboardSections = [
@@ -52,43 +52,43 @@ export const aiDashboardSections = [
 
 export const aiLaunchMetrics = [
   {
-    label: 'Accessible guilds',
+    label: 'Guild scope',
     value: 'Owner/Admin',
   },
   {
-    label: 'Auth model',
+    label: 'Auth',
     value: 'Discord OAuth',
   },
   {
-    label: 'Control surface',
-    value: 'Mobile-first',
+    label: 'Runtime',
+    value: 'Port 3100',
   },
 ] as const;
 
 export const aiReadinessPillars = [
   {
-    title: 'Tonal layering',
-    detail: 'Surfaces define hierarchy through lift and light, not heavy dividing lines.',
+    title: 'Scene first',
+    detail: 'The 3D canvas is the main surface, not a decorative side element.',
   },
   {
-    title: 'Dense without clutter',
-    detail: 'Each card carries one high-signal metric plus the next action the panel will enable.',
+    title: 'Grayscale only',
+    detail: 'No accent palette: just depth, contrast, and state hierarchy.',
   },
   {
-    title: 'Motion restraint',
-    detail: 'Only the status pulse and CTA glow move by default, with reduced-motion respected globally.',
+    title: 'Useful controls',
+    detail: 'Only login, guild access, theme, focus, and live configuration remain.',
   },
 ] as const;
 
 export const aiDesignPalette = {
-  background: '#f7f9fb',
-  surface: '#f2f4f6',
-  surfaceRaised: '#ffffff',
-  primary: '#2346d5',
-  secondary: '#4361ee',
-  tertiary: '#5bd5fc',
-  text: '#191c1e',
-  textMuted: '#444655',
-  outline: 'rgb(196 197 215 / 0.24)',
-  ambientShadow: '0 12px 40px rgb(35 70 213 / 0.08)',
+  background: '#000000',
+  surface: '#080808',
+  surfaceRaised: '#111111',
+  primary: '#ffffff',
+  secondary: '#d4d4d4',
+  tertiary: '#737373',
+  text: '#ffffff',
+  textMuted: '#a3a3a3',
+  outline: 'rgb(255 255 255 / 0.16)',
+  ambientShadow: '0 24px 80px rgb(0 0 0 / 0.32)',
 } as const;

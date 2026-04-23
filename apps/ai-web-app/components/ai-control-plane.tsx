@@ -152,11 +152,11 @@ async function readApiError(response: Response): Promise<string> {
 
 function GuildAvatar({ guild }: { guild: AiDashboardGuild }) {
   if (guild.iconUrl) {
-    return <img src={guild.iconUrl} alt="" className="size-11 rounded-[1.1rem] object-cover" />;
+    return <img src={guild.iconUrl} alt="" className="size-11 rounded-md object-cover" />;
   }
 
   return (
-    <span className="inline-flex size-11 items-center justify-center rounded-[1.1rem] bg-primary/[0.1] font-semibold text-primary">
+    <span className="inline-flex size-11 items-center justify-center rounded-md bg-primary/[0.1] font-semibold text-primary">
       {guild.name.slice(0, 2).toUpperCase()}
     </span>
   );
@@ -176,11 +176,11 @@ function SectionHeading({
   return (
     <div className="flex items-start justify-between gap-4">
       <div className="space-y-2">
-        <p className="text-[0.66rem] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+        <p className="text-[0.66rem] font-semibold uppercase text-muted-foreground">
           {eyebrow}
         </p>
         <div className="space-y-2">
-          <h3 className="font-[family-name:var(--font-display)] text-xl font-bold tracking-[-0.04em] text-foreground sm:text-2xl">
+          <h3 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
             {title}
           </h3>
           <p className="max-w-2xl text-xs leading-6 text-muted-foreground sm:text-sm">
@@ -189,7 +189,7 @@ function SectionHeading({
         </div>
       </div>
 
-      <span className="inline-flex size-11 items-center justify-center rounded-[1.2rem] bg-primary/[0.08] text-primary">
+      <span className="inline-flex size-11 items-center justify-center rounded-md bg-primary/[0.08] text-primary">
         <Icon className="size-5" />
       </span>
     </div>
@@ -205,15 +205,15 @@ function StatusPill({
 }) {
   const toneClass =
     status === 'good'
-      ? 'bg-[rgb(225_255_242_/_0.88)] text-[rgb(0_109_61)]'
+      ? 'bg-primary text-primary-foreground'
       : status === 'warn'
-        ? 'bg-[rgb(255_245_214_/_0.92)] text-[rgb(117_86_0)]'
+        ? 'bg-secondary text-secondary-foreground'
         : status === 'bad'
-          ? 'bg-[rgb(255_218_214_/_0.88)] text-destructive'
-          : 'bg-white text-primary';
+          ? 'bg-muted text-destructive'
+          : 'bg-card text-primary';
 
   return (
-    <span className={cx('rounded-full px-3 py-1.5 text-[0.66rem] font-semibold uppercase tracking-[0.16em]', toneClass)}>
+    <span className={cx('rounded-md px-3 py-1.5 text-[0.66rem] font-semibold uppercase', toneClass)}>
       {children}
     </span>
   );
@@ -523,7 +523,7 @@ export function AiControlPlane({
 
   if (guilds.length === 0) {
     return (
-      <section className="ai-panel rounded-[2rem] px-5 py-6 text-sm leading-7 text-muted-foreground">
+      <section className="ai-panel rounded-md px-5 py-6 text-sm leading-7 text-muted-foreground">
         This account is authenticated, but it does not currently own or administer any Discord servers
         that the panel can manage.
       </section>
@@ -536,13 +536,13 @@ export function AiControlPlane({
 
   return (
     <section className="grid gap-4 xl:grid-cols-[18rem_minmax(0,1fr)]">
-      <aside className="ai-panel rounded-[2rem] px-4 py-5 sm:px-5">
+      <aside className="ai-panel rounded-md px-4 py-5 sm:px-5">
         <div className="space-y-4">
           <div>
-            <p className="text-[0.66rem] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+            <p className="text-[0.66rem] font-semibold uppercase text-muted-foreground">
               Guild focus
             </p>
-            <h3 className="mt-2 font-[family-name:var(--font-display)] text-xl font-bold tracking-[-0.04em] text-foreground">
+            <h3 className="mt-2 text-xl font-bold tracking-tight text-foreground">
               Live workspace
             </h3>
           </div>
@@ -557,10 +557,10 @@ export function AiControlPlane({
                   setStatusMessage(null);
                 }}
                 className={cx(
-                  'flex w-full cursor-pointer items-center gap-3 rounded-[1.4rem] px-3 py-3 text-left transition focus-visible:outline-2 focus-visible:outline-primary',
+                  'flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-3 text-left transition focus-visible:outline-2 focus-visible:outline-primary',
                   guild.id === currentGuild?.id
-                    ? 'bg-primary text-primary-foreground shadow-[0_18px_40px_rgb(35_70_213_/_0.18)]'
-                    : 'bg-white/75 text-foreground hover:bg-primary/[0.08]',
+                    ? 'bg-primary text-primary-foreground shadow-[0_18px_40px_rgb(0_0_0_/_0.18)]'
+                    : 'bg-card text-foreground hover:bg-primary/[0.08]',
                 )}
               >
                 <GuildAvatar guild={guild} />
@@ -568,9 +568,9 @@ export function AiControlPlane({
                   <p className="truncate text-sm font-semibold">{guild.name}</p>
                   <p
                     className={cx(
-                      'mt-1 text-[0.66rem] uppercase tracking-[0.16em]',
+                      'mt-1 text-[0.66rem] uppercase',
                       guild.id === currentGuild?.id
-                        ? 'text-primary-foreground/72'
+                        ? 'text-primary-foreground/75'
                         : 'text-muted-foreground',
                     )}
                   >
@@ -581,7 +581,7 @@ export function AiControlPlane({
             ))}
           </div>
 
-          <div className="ai-soft-surface rounded-[1.5rem] px-4 py-4 text-xs leading-6 text-muted-foreground">
+          <div className="ai-soft-surface rounded-md px-4 py-4 text-xs leading-6 text-muted-foreground">
             {AI_APP_BRAND.name} only exposes servers that this Discord account can actually manage.
           </div>
         </div>
@@ -591,10 +591,10 @@ export function AiControlPlane({
         {statusMessage ? (
           <section
             className={cx(
-              'rounded-[1.4rem] px-4 py-3 text-sm',
+              'rounded-md px-4 py-3 text-sm',
               statusMessage.kind === 'success'
-                ? 'bg-[rgb(225_255_242_/_0.85)] text-[rgb(0_109_61)]'
-                : 'bg-[rgb(255_218_214_/_0.88)] text-destructive',
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted text-destructive',
             )}
           >
             {statusMessage.text}
@@ -602,12 +602,12 @@ export function AiControlPlane({
         ) : null}
 
         {loadError ? (
-          <section className="rounded-[1.4rem] bg-[rgb(255_218_214_/_0.88)] px-4 py-3 text-sm text-destructive">
+          <section className="rounded-md bg-muted px-4 py-3 text-sm text-destructive">
             {loadError}
           </section>
         ) : null}
 
-        <section id="overview" className="ai-panel rounded-[2rem] px-5 py-5 sm:px-6 sm:py-6">
+        <section id="overview" className="ai-panel rounded-md px-5 py-5 sm:px-6 sm:py-6">
           <SectionHeading
             icon={Cpu}
             eyebrow="Overview"
@@ -638,12 +638,12 @@ export function AiControlPlane({
                 accent: 'neutral',
               },
             ].map((metric) => (
-              <article key={metric.label} className="ai-soft-surface rounded-[1.6rem] px-4 py-4">
-                <p className="text-[0.66rem] uppercase tracking-[0.18em] text-muted-foreground">
+              <article key={metric.label} className="ai-soft-surface rounded-md px-4 py-4">
+                <p className="text-[0.66rem] uppercase text-muted-foreground">
                   {metric.label}
                 </p>
                 <div className="mt-3 flex items-center justify-between gap-3">
-                  <p className="font-[family-name:var(--font-display)] text-xl font-bold tracking-[-0.04em] text-foreground">
+                  <p className="text-xl font-bold tracking-tight text-foreground">
                     {metric.value}
                   </p>
                   <StatusPill status={metric.accent as 'neutral' | 'good' | 'warn' | 'bad'}>
@@ -657,7 +657,7 @@ export function AiControlPlane({
           </div>
 
           <div className="mt-6 grid gap-3 lg:grid-cols-[minmax(0,1fr)_19rem]">
-            <div className="rounded-[1.6rem] border border-border/80 bg-white/72 px-4 py-4">
+            <div className="rounded-md border border-border/80 bg-card px-4 py-4">
               <div className="flex flex-wrap items-center gap-2">
                 <StatusPill status={snapshot?.activation.activated ? 'good' : 'warn'}>
                   {snapshot?.activation.activated ? 'Activation granted' : 'Activation pending'}
@@ -681,24 +681,24 @@ export function AiControlPlane({
               </div>
 
               <div className="mt-4 grid gap-3 md:grid-cols-3">
-                <article className="rounded-[1.2rem] bg-muted px-3 py-3">
-                  <p className="text-[0.66rem] uppercase tracking-[0.16em] text-muted-foreground">
+                <article className="rounded-md bg-muted px-3 py-3">
+                  <p className="text-[0.66rem] uppercase text-muted-foreground">
                     Last sync
                   </p>
                   <p className="mt-2 text-sm font-semibold text-foreground">
                     {formatDateTime(snapshot?.diagnostics.lastSyncedAt ?? null)}
                   </p>
                 </article>
-                <article className="rounded-[1.2rem] bg-muted px-3 py-3">
-                  <p className="text-[0.66rem] uppercase tracking-[0.16em] text-muted-foreground">
+                <article className="rounded-md bg-muted px-3 py-3">
+                  <p className="text-[0.66rem] uppercase text-muted-foreground">
                     Reply lanes
                   </p>
                   <p className="mt-2 text-sm font-semibold text-foreground">
                     {snapshot?.settings.replyChannels.length ?? 0} configured
                   </p>
                 </article>
-                <article className="rounded-[1.2rem] bg-muted px-3 py-3">
-                  <p className="text-[0.66rem] uppercase tracking-[0.16em] text-muted-foreground">
+                <article className="rounded-md bg-muted px-3 py-3">
+                  <p className="text-[0.66rem] uppercase text-muted-foreground">
                     Role guardrail
                   </p>
                   <p className="mt-2 text-sm font-semibold text-foreground">
@@ -708,12 +708,12 @@ export function AiControlPlane({
               </div>
             </div>
 
-            <div className="ai-gradient-signal rounded-[1.7rem] px-4 py-4 text-primary-foreground">
+            <div className="ai-gradient-signal rounded-md px-4 py-4 text-primary-foreground">
               <div className="space-y-3">
-                <p className="text-[0.66rem] uppercase tracking-[0.18em] text-primary-foreground/70">
+                <p className="text-[0.66rem] uppercase text-primary-foreground/70">
                   Invite posture
                 </p>
-                <h4 className="font-[family-name:var(--font-display)] text-lg font-bold tracking-[-0.04em]">
+                <h4 className="text-lg font-bold tracking-tight">
                   {resources?.botInGuild ? 'Runtime attached' : 'Bring the AI bot into the server'}
                 </h4>
                 <p className="text-xs leading-6 text-primary-foreground/78">
@@ -726,7 +726,7 @@ export function AiControlPlane({
                     href={resources.inviteUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-full bg-white px-4 text-xs font-semibold uppercase tracking-[0.16em] text-primary transition hover:-translate-y-0.5 hover:brightness-105 focus-visible:outline-2 focus-visible:outline-white"
+                    className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-md bg-card px-4 text-xs font-semibold uppercase text-primary transition hover:brightness-105 focus-visible:outline-2 focus-visible:outline-white"
                   >
                     Invite bot
                   </a>
@@ -736,7 +736,7 @@ export function AiControlPlane({
           </div>
         </section>
 
-        <section id="reply-behavior" className="ai-panel rounded-[2rem] px-5 py-5 sm:px-6 sm:py-6">
+        <section id="reply-behavior" className="ai-panel rounded-md px-5 py-5 sm:px-6 sm:py-6">
           <SectionHeading
             icon={MessagesSquare}
             eyebrow="Reply behavior"
@@ -747,8 +747,8 @@ export function AiControlPlane({
           <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
             <div className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                <label className="rounded-[1.5rem] border border-border/80 bg-white/72 px-4 py-4">
-                  <span className="text-[0.66rem] uppercase tracking-[0.16em] text-muted-foreground">
+                <label className="rounded-md border border-border/80 bg-card px-4 py-4">
+                  <span className="text-[0.66rem] uppercase text-muted-foreground">
                     Bot enabled
                   </span>
                   <div className="mt-3 flex items-center justify-between gap-3">
@@ -766,8 +766,8 @@ export function AiControlPlane({
                   </div>
                 </label>
 
-                <label className="rounded-[1.5rem] border border-border/80 bg-white/72 px-4 py-4">
-                  <span className="text-[0.66rem] uppercase tracking-[0.16em] text-muted-foreground">
+                <label className="rounded-md border border-border/80 bg-card px-4 py-4">
+                  <span className="text-[0.66rem] uppercase text-muted-foreground">
                     Default reply mode
                   </span>
                   <select
@@ -779,15 +779,15 @@ export function AiControlPlane({
                         defaultReplyMode: event.target.value as ReplyMode,
                       })
                     }
-                    className="mt-3 h-11 w-full rounded-[1rem] border border-input bg-white px-3 text-sm text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
+                    className="mt-3 h-11 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
                   >
                     <option value="inline">Inline reply</option>
                     <option value="thread">Thread reply</option>
                   </select>
                 </label>
 
-                <label className="rounded-[1.5rem] border border-border/80 bg-white/72 px-4 py-4">
-                  <span className="text-[0.66rem] uppercase tracking-[0.16em] text-muted-foreground">
+                <label className="rounded-md border border-border/80 bg-card px-4 py-4">
+                  <span className="text-[0.66rem] uppercase text-muted-foreground">
                     Role filter mode
                   </span>
                   <select
@@ -796,7 +796,7 @@ export function AiControlPlane({
                       formState &&
                       setFormState({ ...formState, roleMode: event.target.value as RoleMode })
                     }
-                    className="mt-3 h-11 w-full rounded-[1rem] border border-input bg-white px-3 text-sm text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
+                    className="mt-3 h-11 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
                   >
                     <option value="allowlist">Allowlisted roles only</option>
                     <option value="blocklist">Everyone except blocked roles</option>
@@ -804,10 +804,10 @@ export function AiControlPlane({
                 </label>
               </div>
 
-              <div className="rounded-[1.7rem] border border-border/80 bg-white/72 px-4 py-4">
+              <div className="rounded-md border border-border/80 bg-card px-4 py-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-[0.66rem] uppercase tracking-[0.16em] text-muted-foreground">
+                    <p className="text-[0.66rem] uppercase text-muted-foreground">
                       Reply channels
                     </p>
                     <p className="mt-2 text-sm text-muted-foreground">
@@ -826,11 +826,11 @@ export function AiControlPlane({
                     );
 
                     return (
-                      <article key={channel.id} className="rounded-[1.4rem] bg-muted px-4 py-4">
+                      <article key={channel.id} className="rounded-md bg-muted px-4 py-4">
                         <div className="flex items-center justify-between gap-3">
                           <div>
                             <p className="text-sm font-semibold text-foreground">#{channel.name}</p>
-                            <p className="mt-1 text-[0.66rem] uppercase tracking-[0.16em] text-muted-foreground">
+                            <p className="mt-1 text-[0.66rem] uppercase text-muted-foreground">
                               {selectedChannel ? 'Active' : 'Ignored'}
                             </p>
                           </div>
@@ -848,7 +848,7 @@ export function AiControlPlane({
                             updateReplyChannelMode(channel.id, event.target.value as ReplyMode)
                           }
                           disabled={!selectedChannel}
-                          className="mt-3 h-10 w-full rounded-[1rem] border border-input bg-white px-3 text-sm text-foreground outline-none transition disabled:cursor-not-allowed disabled:opacity-50 focus:border-primary focus:ring-4 focus:ring-primary/10"
+                          className="mt-3 h-10 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground outline-none transition disabled:cursor-not-allowed disabled:opacity-50 focus:border-primary focus:ring-4 focus:ring-primary/10"
                         >
                           <option value="inline">Inline reply</option>
                           <option value="thread">Thread reply</option>
@@ -861,10 +861,10 @@ export function AiControlPlane({
             </div>
 
             <div className="space-y-4">
-              <div className="rounded-[1.7rem] border border-border/80 bg-white/72 px-4 py-4">
+              <div className="rounded-md border border-border/80 bg-card px-4 py-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-[0.66rem] uppercase tracking-[0.16em] text-muted-foreground">
+                    <p className="text-[0.66rem] uppercase text-muted-foreground">
                       Role rules
                     </p>
                     <p className="mt-2 text-sm text-muted-foreground">
@@ -887,7 +887,7 @@ export function AiControlPlane({
                         type="button"
                         onClick={() => toggleRole(role.id)}
                         className={cx(
-                          'cursor-pointer rounded-full px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition focus-visible:outline-2 focus-visible:outline-primary',
+                          'cursor-pointer rounded-md px-3 py-2 text-xs font-semibold uppercase  transition focus-visible:outline-2 focus-visible:outline-primary',
                           selected
                             ? 'bg-primary text-primary-foreground'
                             : 'bg-muted text-muted-foreground hover:bg-primary/[0.08] hover:text-primary',
@@ -904,7 +904,7 @@ export function AiControlPlane({
                 type="button"
                 onClick={saveSettings}
                 disabled={!formState || isMutating}
-                className="inline-flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:-translate-y-0.5 hover:bg-secondary focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:bg-secondary focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isMutating ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}
                 Save reply behavior
@@ -913,7 +913,7 @@ export function AiControlPlane({
           </div>
         </section>
 
-        <section id="knowledge" className="ai-panel rounded-[2rem] px-5 py-5 sm:px-6 sm:py-6">
+        <section id="knowledge" className="ai-panel rounded-md px-5 py-5 sm:px-6 sm:py-6">
           <SectionHeading
             icon={Waypoints}
             eyebrow="Knowledge"
@@ -923,10 +923,10 @@ export function AiControlPlane({
 
           <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
             <div className="space-y-4">
-              <form onSubmit={addWebsiteSource} className="rounded-[1.7rem] border border-border/80 bg-white/72 px-4 py-4">
+              <form onSubmit={addWebsiteSource} className="rounded-md border border-border/80 bg-card px-4 py-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-[0.66rem] uppercase tracking-[0.16em] text-muted-foreground">
+                    <p className="text-[0.66rem] uppercase text-muted-foreground">
                       Website source
                     </p>
                     <p className="mt-2 text-sm text-muted-foreground">
@@ -941,12 +941,12 @@ export function AiControlPlane({
                     value={websiteUrl}
                     onChange={(event) => setWebsiteUrl(event.target.value)}
                     placeholder="https://docs.example.com/faq"
-                    className="h-12 flex-1 rounded-[1rem] border border-input bg-white px-4 text-sm text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
+                    className="h-12 flex-1 rounded-md border border-input bg-card px-4 text-sm text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
                   />
                   <button
                     type="submit"
                     disabled={isMutating}
-                    className="inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-full bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:-translate-y-0.5 hover:bg-secondary focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:bg-secondary focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <Plus className="size-4" />
                     Add and sync
@@ -956,7 +956,7 @@ export function AiControlPlane({
 
               <div className="space-y-3">
                 {(snapshot?.websiteSources ?? []).map((source) => (
-                  <article key={source.sourceId} className="rounded-[1.6rem] border border-border/80 bg-white/72 px-4 py-4">
+                  <article key={source.sourceId} className="rounded-md border border-border/80 bg-card px-4 py-4">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                       <div className="min-w-0 space-y-2">
                         <div className="flex flex-wrap items-center gap-2">
@@ -971,7 +971,7 @@ export function AiControlPlane({
                           >
                             {source.status}
                           </StatusPill>
-                          <span className="text-[0.66rem] uppercase tracking-[0.16em] text-muted-foreground">
+                          <span className="text-[0.66rem] uppercase text-muted-foreground">
                             {source.pageTitle || 'Untitled source'}
                           </span>
                         </div>
@@ -982,7 +982,7 @@ export function AiControlPlane({
                           <span>Updated {formatDateTime(source.updatedAt)}</span>
                         </div>
                         {source.lastSyncError ? (
-                          <p className="rounded-[1rem] bg-[rgb(255_218_214_/_0.88)] px-3 py-2 text-xs text-destructive">
+                          <p className="rounded-md bg-muted px-3 py-2 text-xs text-destructive">
                             {source.lastSyncError}
                           </p>
                         ) : null}
@@ -993,7 +993,7 @@ export function AiControlPlane({
                           type="button"
                           onClick={() => syncWebsiteSource(source.sourceId)}
                           disabled={isMutating}
-                          className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-full bg-muted px-4 text-xs font-semibold uppercase tracking-[0.14em] text-foreground transition hover:bg-white focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-60"
+                          className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-md bg-muted px-4 text-xs font-semibold uppercase  text-foreground transition hover:bg-card focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           <RefreshCcw className="size-4" />
                           Sync
@@ -1002,7 +1002,7 @@ export function AiControlPlane({
                           type="button"
                           onClick={() => deleteWebsiteSource(source.sourceId)}
                           disabled={isMutating}
-                          className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-full bg-[rgb(255_218_214_/_0.88)] px-4 text-xs font-semibold uppercase tracking-[0.14em] text-destructive transition hover:brightness-98 focus-visible:outline-2 focus-visible:outline-destructive disabled:cursor-not-allowed disabled:opacity-60"
+                          className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-md bg-muted px-4 text-xs font-semibold uppercase  text-destructive transition hover:brightness-98 focus-visible:outline-2 focus-visible:outline-destructive disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           <Trash2 className="size-4" />
                           Remove
@@ -1013,7 +1013,7 @@ export function AiControlPlane({
                 ))}
 
                 {!snapshot?.websiteSources.length ? (
-                  <article className="ai-soft-surface rounded-[1.6rem] px-4 py-4 text-sm leading-7 text-muted-foreground">
+                  <article className="ai-soft-surface rounded-md px-4 py-4 text-sm leading-7 text-muted-foreground">
                     No websites have been approved yet. Add the first exact page URL above to start grounding answers.
                   </article>
                 ) : null}
@@ -1021,10 +1021,10 @@ export function AiControlPlane({
             </div>
 
             <div className="space-y-4">
-              <form onSubmit={createCustomQa} className="rounded-[1.7rem] border border-border/80 bg-white/72 px-4 py-4">
+              <form onSubmit={createCustomQa} className="rounded-md border border-border/80 bg-card px-4 py-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-[0.66rem] uppercase tracking-[0.16em] text-muted-foreground">
+                    <p className="text-[0.66rem] uppercase text-muted-foreground">
                       Custom Q&A
                     </p>
                     <p className="mt-2 text-sm text-muted-foreground">
@@ -1039,18 +1039,18 @@ export function AiControlPlane({
                     value={newQaQuestion}
                     onChange={(event) => setNewQaQuestion(event.target.value)}
                     placeholder="What refund window do you offer?"
-                    className="min-h-24 w-full rounded-[1rem] border border-input bg-white px-4 py-3 text-sm text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
+                    className="min-h-24 w-full rounded-md border border-input bg-card px-4 py-3 text-sm text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
                   />
                   <textarea
                     value={newQaAnswer}
                     onChange={(event) => setNewQaAnswer(event.target.value)}
                     placeholder="Refunds are accepted within 14 days of purchase."
-                    className="min-h-28 w-full rounded-[1rem] border border-input bg-white px-4 py-3 text-sm text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
+                    className="min-h-28 w-full rounded-md border border-input bg-card px-4 py-3 text-sm text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
                   />
                   <button
                     type="submit"
                     disabled={isMutating}
-                    className="inline-flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:-translate-y-0.5 hover:bg-secondary focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:bg-secondary focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <Plus className="size-4" />
                     Save custom Q&A
@@ -1060,7 +1060,7 @@ export function AiControlPlane({
 
               <div className="space-y-3">
                 {(snapshot?.customQas ?? []).map((customQa) => (
-                  <article key={customQa.customQaId} className="rounded-[1.6rem] border border-border/80 bg-white/72 px-4 py-4">
+                  <article key={customQa.customQaId} className="rounded-md border border-border/80 bg-card px-4 py-4">
                     <div className="space-y-3">
                       <textarea
                         value={qaDrafts[customQa.customQaId]?.question ?? customQa.question}
@@ -1073,7 +1073,7 @@ export function AiControlPlane({
                             },
                           }))
                         }
-                        className="min-h-20 w-full rounded-[1rem] border border-input bg-white px-4 py-3 text-sm font-semibold text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
+                        className="min-h-20 w-full rounded-md border border-input bg-card px-4 py-3 text-sm font-semibold text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
                       />
                       <textarea
                         value={qaDrafts[customQa.customQaId]?.answer ?? customQa.answer}
@@ -1086,10 +1086,10 @@ export function AiControlPlane({
                             },
                           }))
                         }
-                        className="min-h-24 w-full rounded-[1rem] border border-input bg-white px-4 py-3 text-sm text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
+                        className="min-h-24 w-full rounded-md border border-input bg-card px-4 py-3 text-sm text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
                       />
                       <div className="flex items-center justify-between gap-3">
-                        <span className="text-[0.66rem] uppercase tracking-[0.16em] text-muted-foreground">
+                        <span className="text-[0.66rem] uppercase text-muted-foreground">
                           Updated {formatDateTime(customQa.updatedAt)}
                         </span>
                         <div className="flex gap-2">
@@ -1097,7 +1097,7 @@ export function AiControlPlane({
                             type="button"
                             onClick={() => saveCustomQa(customQa.customQaId)}
                             disabled={isMutating}
-                            className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-full bg-muted px-4 text-xs font-semibold uppercase tracking-[0.14em] text-foreground transition hover:bg-white focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-60"
+                            className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-md bg-muted px-4 text-xs font-semibold uppercase  text-foreground transition hover:bg-card focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             <Save className="size-4" />
                             Save
@@ -1106,7 +1106,7 @@ export function AiControlPlane({
                             type="button"
                             onClick={() => removeCustomQa(customQa.customQaId)}
                             disabled={isMutating}
-                            className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-full bg-[rgb(255_218_214_/_0.88)] px-4 text-xs font-semibold uppercase tracking-[0.14em] text-destructive transition hover:brightness-98 focus-visible:outline-2 focus-visible:outline-destructive disabled:cursor-not-allowed disabled:opacity-60"
+                            className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-md bg-muted px-4 text-xs font-semibold uppercase  text-destructive transition hover:brightness-98 focus-visible:outline-2 focus-visible:outline-destructive disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             <Trash2 className="size-4" />
                             Delete
@@ -1121,7 +1121,7 @@ export function AiControlPlane({
           </div>
         </section>
 
-        <section id="personality" className="ai-panel rounded-[2rem] px-5 py-5 sm:px-6 sm:py-6">
+        <section id="personality" className="ai-panel rounded-md px-5 py-5 sm:px-6 sm:py-6">
           <SectionHeading
             icon={BrainCircuit}
             eyebrow="Personality"
@@ -1130,10 +1130,10 @@ export function AiControlPlane({
           />
 
           <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
-            <div className="rounded-[1.7rem] border border-border/80 bg-white/72 px-4 py-4">
+            <div className="rounded-md border border-border/80 bg-card px-4 py-4">
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="space-y-2">
-                  <span className="text-[0.66rem] uppercase tracking-[0.16em] text-muted-foreground">
+                  <span className="text-[0.66rem] uppercase text-muted-foreground">
                     Tone preset
                   </span>
                   <select
@@ -1145,7 +1145,7 @@ export function AiControlPlane({
                         tonePreset: event.target.value as TonePreset,
                       })
                     }
-                    className="h-11 w-full rounded-[1rem] border border-input bg-white px-3 text-sm text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
+                    className="h-11 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
                   >
                     <option value="professional">Professional</option>
                     <option value="standard">Standard</option>
@@ -1154,8 +1154,8 @@ export function AiControlPlane({
                   </select>
                 </label>
 
-                <div className="rounded-[1.2rem] bg-muted px-4 py-4">
-                  <p className="text-[0.66rem] uppercase tracking-[0.16em] text-muted-foreground">
+                <div className="rounded-md bg-muted px-4 py-4">
+                  <p className="text-[0.66rem] uppercase text-muted-foreground">
                     Preview posture
                   </p>
                   <p className="mt-2 text-sm font-semibold text-foreground">
@@ -1165,7 +1165,7 @@ export function AiControlPlane({
               </div>
 
               <label className="mt-4 block space-y-2">
-                <span className="text-[0.66rem] uppercase tracking-[0.16em] text-muted-foreground">
+                <span className="text-[0.66rem] uppercase text-muted-foreground">
                   Custom instructions
                 </span>
                 <textarea
@@ -1178,7 +1178,7 @@ export function AiControlPlane({
                     })
                   }
                   placeholder="Keep answers crisp, avoid slang, and mention when information is limited."
-                  className="min-h-32 w-full rounded-[1rem] border border-input bg-white px-4 py-3 text-sm text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
+                  className="min-h-32 w-full rounded-md border border-input bg-card px-4 py-3 text-sm text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
                 />
               </label>
 
@@ -1186,23 +1186,23 @@ export function AiControlPlane({
                 type="button"
                 onClick={saveSettings}
                 disabled={!formState || isMutating}
-                className="mt-4 inline-flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:-translate-y-0.5 hover:bg-secondary focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-60"
+                className="mt-4 inline-flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:bg-secondary focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isMutating ? <LoaderCircle className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
                 Save tone profile
               </button>
             </div>
 
-            <div className="ai-gradient-signal rounded-[1.7rem] px-4 py-4 text-primary-foreground">
+            <div className="ai-gradient-signal rounded-md px-4 py-4 text-primary-foreground">
               <div className="space-y-4">
-                <div className="flex items-center gap-2 text-[0.66rem] uppercase tracking-[0.16em] text-primary-foreground/72">
+                <div className="flex items-center gap-2 text-[0.66rem] uppercase text-primary-foreground/75">
                   <BadgeCheck className="size-4" />
                   Grounded preview
                 </div>
-                <p className="font-[family-name:var(--font-display)] text-lg font-bold tracking-[-0.04em]">
+                <p className="text-lg font-bold tracking-tight">
                   Sample answer posture
                 </p>
-                <p className="rounded-[1.4rem] border border-white/12 bg-white/10 px-4 py-4 text-sm leading-7 text-primary-foreground/84">
+                <p className="rounded-md border border-border bg-card/10 px-4 py-4 text-sm leading-7 text-primary-foreground/90">
                   {preview}
                 </p>
               </div>
@@ -1210,7 +1210,7 @@ export function AiControlPlane({
           </div>
         </section>
 
-        <section id="diagnostics" className="ai-panel rounded-[2rem] px-5 py-5 sm:px-6 sm:py-6">
+        <section id="diagnostics" className="ai-panel rounded-md px-5 py-5 sm:px-6 sm:py-6">
           <SectionHeading
             icon={ShieldCheck}
             eyebrow="Diagnostics"
@@ -1221,7 +1221,7 @@ export function AiControlPlane({
           <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
             <div className="space-y-3">
               {(snapshot?.diagnostics.sources ?? []).map((source) => (
-                <article key={source.sourceId} className="rounded-[1.5rem] border border-border/80 bg-white/72 px-4 py-4">
+                <article key={source.sourceId} className="rounded-md border border-border/80 bg-card px-4 py-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
@@ -1248,7 +1248,7 @@ export function AiControlPlane({
                       </div>
                     </div>
                     {source.lastSyncError ? (
-                      <div className="rounded-[1rem] bg-[rgb(255_218_214_/_0.88)] px-3 py-2 text-xs text-destructive">
+                      <div className="rounded-md bg-muted px-3 py-2 text-xs text-destructive">
                         {source.lastSyncError}
                       </div>
                     ) : null}
@@ -1257,15 +1257,15 @@ export function AiControlPlane({
               ))}
 
               {!snapshot?.diagnostics.sources.length ? (
-                <article className="ai-soft-surface rounded-[1.6rem] px-4 py-4 text-sm leading-7 text-muted-foreground">
+                <article className="ai-soft-surface rounded-md px-4 py-4 text-sm leading-7 text-muted-foreground">
                   Diagnostics will populate once the first website source is added and synced.
                 </article>
               ) : null}
             </div>
 
             <div className="space-y-4">
-              <article className="rounded-[1.6rem] border border-border/80 bg-white/72 px-4 py-4">
-                <div className="flex items-center gap-2 text-[0.66rem] uppercase tracking-[0.16em] text-muted-foreground">
+              <article className="rounded-md border border-border/80 bg-card px-4 py-4">
+                <div className="flex items-center gap-2 text-[0.66rem] uppercase text-muted-foreground">
                   <CircleAlert className="size-4" />
                   Runtime posture
                 </div>
@@ -1282,22 +1282,22 @@ export function AiControlPlane({
                 </div>
               </article>
 
-              <article className="rounded-[1.6rem] border border-border/80 bg-white/72 px-4 py-4">
-                <div className="flex items-center gap-2 text-[0.66rem] uppercase tracking-[0.16em] text-muted-foreground">
+              <article className="rounded-md border border-border/80 bg-card px-4 py-4">
+                <div className="flex items-center gap-2 text-[0.66rem] uppercase text-muted-foreground">
                   <Bot className="size-4" />
                   Resource spread
                 </div>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-[1.1rem] bg-muted px-3 py-3">
-                    <p className="text-[0.66rem] uppercase tracking-[0.14em] text-muted-foreground">
+                  <div className="rounded-md bg-muted px-3 py-3">
+                    <p className="text-[0.66rem] uppercase  text-muted-foreground">
                       Channels
                     </p>
                     <p className="mt-2 text-sm font-semibold text-foreground">
                       {resources?.channels.length ?? 0}
                     </p>
                   </div>
-                  <div className="rounded-[1.1rem] bg-muted px-3 py-3">
-                    <p className="text-[0.66rem] uppercase tracking-[0.14em] text-muted-foreground">
+                  <div className="rounded-md bg-muted px-3 py-3">
+                    <p className="text-[0.66rem] uppercase  text-muted-foreground">
                       Roles
                     </p>
                     <p className="mt-2 text-sm font-semibold text-foreground">
@@ -1311,7 +1311,7 @@ export function AiControlPlane({
         </section>
 
         {isLoading ? (
-          <section className="ai-panel rounded-[2rem] px-5 py-10 text-sm text-muted-foreground">
+          <section className="ai-panel rounded-md px-5 py-10 text-sm text-muted-foreground">
             <div className="flex items-center justify-center gap-3">
               <LoaderCircle className="size-5 animate-spin text-primary" />
               Loading live guild state...

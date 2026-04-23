@@ -1,21 +1,22 @@
 import type { Metadata } from 'next';
-import { Space_Mono, Syncopate } from 'next/font/google';
+import { Fira_Code, Fira_Sans } from 'next/font/google';
 import type { ReactNode } from 'react';
 
 import { AI_APP_BRAND } from '@/lib/ai-design-tokens';
+import { TooltipProvider } from '@/components/ui/tooltip';
 
 import './globals.css';
 
-const bodyFont = Space_Mono({
+const bodyFont = Fira_Sans({
   subsets: ['latin'],
   variable: '--font-sans',
-  weight: ['400', '700'],
+  weight: ['300', '400', '500', '600', '700'],
 });
 
-const displayFont = Syncopate({
+const monoFont = Fira_Code({
   subsets: ['latin'],
-  variable: '--font-display',
-  weight: ['400', '700'],
+  variable: '--font-mono',
+  weight: ['400', '500', '600', '700'],
 });
 
 export const metadata: Metadata = {
@@ -27,9 +28,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body
-        className={`${bodyFont.variable} ${displayFont.variable} min-h-screen bg-background font-sans text-foreground antialiased`}
+        className={`${bodyFont.variable} ${monoFont.variable} min-h-screen bg-background font-sans text-foreground antialiased`}
       >
-        {children}
+        <TooltipProvider>{children}</TooltipProvider>
       </body>
     </html>
   );

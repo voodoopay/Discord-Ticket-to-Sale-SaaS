@@ -225,6 +225,7 @@ Copy `.env.example` to `.env` and fill values.
   - manual website sources with sync-on-save and manual re-sync
   - custom Q&A entries
   - activation state, bot presence, and diagnostics
+- The Voodoo AI dashboard uses a black-and-white interactive Three.js control surface with Framer Motion transitions, persisted dark/light mode, and shadcn controls around live bot configuration.
 - The AI runtime only answers in configured channels, only for roles allowed by the guild rule set, and only from grounded website/custom-Q&A evidence. If retrieval is weak, it refuses instead of falling back to general model knowledge.
 
 ## Ticket Sale Flow
