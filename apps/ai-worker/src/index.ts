@@ -9,7 +9,11 @@ import {
 import { getEnv, logger } from '@voodoo/core';
 
 import { activationCommand } from './commands/activation.js';
-import { createAiClientOptions, mapAiWorkerError } from './runtime.js';
+import {
+  createAiClientOptions,
+  mapAiWorkerError,
+  processIncomingMessage,
+} from './runtime.js';
 
 type Command = {
   data: { name: string };
@@ -72,6 +76,10 @@ client.once(Events.ClientReady, () => {
 
 client.on(Events.InteractionCreate, (interaction: Interaction) => {
   void handleInteraction(interaction);
+});
+
+client.on(Events.MessageCreate, (message) => {
+  void processIncomingMessage(client, message);
 });
 
 void client.login(resolveAiWorkerToken());

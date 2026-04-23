@@ -1,0 +1,348 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { PermissionFlagsBits, type Message } from 'discord.js';
+
+const { loggerWarn } = vi.hoisted(() => ({
+  loggerWarn: vi.fn(),
+}));
+
+vi.mock('@voodoo/core', () => {
+  class AiAccessService {
+    public async getGuildActivationState(): Promise<never> {
+      throw new Error('Mock getGuildActivationState not implemented');
+    }
+  }
+
+  class AiConfigService {
+    public async getGuildSettingsSnapshot(): Promise<never> {
+      throw new Error('Mock getGuildSettingsSnapshot not implemented');
+    }
+  }
+
+  class AiAnswerService {
+    public async answerMessage(): Promise<never> {
+      throw new Error('Mock answerMessage not implemented');
+    }
+  }
+
+  return {
+    AiAccessService,
+    AiConfigService,
+    AiAnswerService,
+    logger: {
+      warn: loggerWarn,
+    },
+  };
+});
+
+import { handleAiMessage, type AiMessageRuntimeDependencies } from './message-runtime.js';
+import { processIncomingMessage } from './runtime.js';
+
+function createOkResult<T>(value: T): { isErr: () => false; isOk: () => true; value: T } {
+  return {
+    isErr: () => false,
+    isOk: () => true,
+    value,
+  };
+}
+
+function createErrResult(message: string): {
+  isErr: () => true;
+  isOk: () => false;
+  error: Error;
+} {
+  return {
+    isErr: () => true,
+    isOk: () => false,
+    error: new Error(message),
+  };
+}
+
+function createGuildState(overrides?: Partial<Awaited<ReturnType<AiMessageRuntimeDependencies['loadGuildState']>>>) {
+  return {
+    activated: true,
+    enabled: true,
+    tonePreset: 'professional' as const,
+    toneInstructions: '',
+    roleMode: 'allowlist' as const,
+    defaultReplyMode: 'inline' as const,
+    replyChannels: [{ channelId: 'allowed-channel', replyMode: 'inline' as const }],
+    roleIds: ['role-1'],
+    ...overrides,
+  };
+}
+
+function createDependencies(input?: {
+  state?: Awaited<ReturnType<AiMessageRuntimeDependencies['loadGuildState']>>;
+  answerResult?: ReturnType<typeof createOkResult> | ReturnType<typeof createErrResult>;
+}): AiMessageRuntimeDependencies & {
+  loadGuildState: ReturnType<typeof vi.fn>;
+  answerMessage: ReturnType<typeof vi.fn>;
+} {
+  return {
+    loadGuildState: vi.fn().mockResolvedValue(input?.state ?? createGuildState()),
+    answerMessage: vi
+      .fn()
+      .mockResolvedValue(
+        input?.answerResult ??
+          createOkResult({
+            kind: 'answer',
+            content: 'Grounded answer',
+            evidenceCount: 1,
+            evidence: [],
+          }),
+      ),
+  };
+}
+
+function createMessage(input?: {
+  content?: string;
+  guildId?: string | null;
+  channelId?: string;
+  authorBot?: boolean;
+  memberRoleIds?: string[];
+  threadChannel?: boolean;
+  missingPermissions?: bigint[];
+}) {
+  const send = vi.fn(async () => undefined);
+  const startThread = vi.fn(async () => ({ send }));
+  const reply = vi.fn(async () => undefined);
+  const missingPermissions = new Set(input?.missingPermissions ?? []);
+
+  const message = {
+    id: 'msg-1',
+    guildId: input?.guildId ?? 'guild-1',
+    channelId: input?.channelId ?? 'allowed-channel',
+    author: {
+      bot: input?.authorBot ?? false,
+      id: 'user-1',
+    },
+    content: input?.content ?? 'What is the refund policy?',
+    member: {
+      roles: {
+        cache: (input?.memberRoleIds ?? ['role-1']).map((roleId) => ({ id: roleId })),
+      },
+    },
+    client: {
+      user: { id: 'bot-user' },
+    },
+    channel: {
+      isThread: () => input?.threadChannel ?? false,
+      permissionsFor: vi.fn(() => ({
+        has: (permission: bigint) => !missingPermissions.has(permission),
+      })),
+      send,
+    },
+    reply,
+    startThread,
+  } as unknown as Message;
+
+  return { message, reply, startThread, send };
+}
+
+describe('AI message runtime', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    loggerWarn.mockReset();
+  });
+
+  it('ignores bot and empty messages before loading guild state', async () => {
+    const dependencies = createDependencies();
+
+    const botResult = await handleAiMessage(
+      {
+        id: 'msg-1',
+        guildId: 'guild-1',
+        channelId: 'allowed-channel',
+        author: { bot: true, id: 'user-1' },
+        content: 'refund policy?',
+        memberRoleIds: ['role-1'],
+      },
+      dependencies,
+    );
+    const emptyResult = await handleAiMessage(
+      {
+        id: 'msg-2',
+        guildId: 'guild-1',
+        channelId: 'allowed-channel',
+        author: { bot: false, id: 'user-1' },
+        content: '   ',
+        memberRoleIds: ['role-1'],
+      },
+      dependencies,
+    );
+
+    expect(botResult).toEqual({ kind: 'ignored' });
+    expect(emptyResult).toEqual({ kind: 'ignored' });
+    expect(dependencies.loadGuildState).not.toHaveBeenCalled();
+  });
+
+  it('ignores messages when the guild is inactive or not enabled', async () => {
+    const inactiveDependencies = createDependencies({
+      state: createGuildState({ activated: false }),
+    });
+    const disabledDependencies = createDependencies({
+      state: createGuildState({ enabled: false }),
+    });
+
+    const inactiveResult = await handleAiMessage(
+      {
+        id: 'msg-1',
+        guildId: 'guild-1',
+        channelId: 'allowed-channel',
+        author: { bot: false, id: 'user-1' },
+        content: 'refund policy?',
+        memberRoleIds: ['role-1'],
+      },
+      inactiveDependencies,
+    );
+    const disabledResult = await handleAiMessage(
+      {
+        id: 'msg-2',
+        guildId: 'guild-1',
+        channelId: 'allowed-channel',
+        author: { bot: false, id: 'user-1' },
+        content: 'refund policy?',
+        memberRoleIds: ['role-1'],
+      },
+      disabledDependencies,
+    );
+
+    expect(inactiveResult).toEqual({ kind: 'ignored' });
+    expect(disabledResult).toEqual({ kind: 'ignored' });
+  });
+
+  it('ignores messages outside configured reply channels', async () => {
+    const dependencies = createDependencies();
+
+    const result = await handleAiMessage(
+      {
+        id: 'msg-1',
+        guildId: 'guild-1',
+        channelId: 'other-channel',
+        author: { bot: false, id: 'user-1' },
+        content: 'refund policy?',
+        memberRoleIds: ['role-1'],
+      },
+      dependencies,
+    );
+
+    expect(result).toEqual({ kind: 'ignored' });
+    expect(dependencies.answerMessage).not.toHaveBeenCalled();
+  });
+
+  it('applies allowlist and blocklist role rules', async () => {
+    const allowlistDependencies = createDependencies({
+      state: createGuildState({ roleIds: ['role-allowed'] }),
+    });
+    const blocklistDependencies = createDependencies({
+      state: createGuildState({
+        roleMode: 'blocklist',
+        roleIds: ['role-blocked'],
+      }),
+    });
+
+    const allowlistResult = await handleAiMessage(
+      {
+        id: 'msg-1',
+        guildId: 'guild-1',
+        channelId: 'allowed-channel',
+        author: { bot: false, id: 'user-1' },
+        content: 'refund policy?',
+        memberRoleIds: ['role-other'],
+      },
+      allowlistDependencies,
+    );
+    const blocklistResult = await handleAiMessage(
+      {
+        id: 'msg-2',
+        guildId: 'guild-1',
+        channelId: 'allowed-channel',
+        author: { bot: false, id: 'user-1' },
+        content: 'refund policy?',
+        memberRoleIds: ['role-blocked'],
+      },
+      blocklistDependencies,
+    );
+
+    expect(allowlistResult).toEqual({ kind: 'ignored' });
+    expect(blocklistResult).toEqual({ kind: 'ignored' });
+    expect(allowlistDependencies.answerMessage).not.toHaveBeenCalled();
+    expect(blocklistDependencies.answerMessage).not.toHaveBeenCalled();
+  });
+
+  it('returns the configured reply mode and uses trimmed message content for answers', async () => {
+    const dependencies = createDependencies({
+      state: createGuildState({
+        replyChannels: [{ channelId: 'allowed-channel', replyMode: 'thread' }],
+      }),
+    });
+
+    const result = await handleAiMessage(
+      {
+        id: 'msg-1',
+        guildId: 'guild-1',
+        channelId: 'allowed-channel',
+        author: { bot: false, id: 'user-1' },
+        content: '  refund policy?  ',
+        memberRoleIds: ['role-1'],
+      },
+      dependencies,
+    );
+
+    expect(result).toEqual({
+      kind: 'reply',
+      replyMode: 'thread',
+      content: 'Grounded answer',
+    });
+    expect(dependencies.answerMessage).toHaveBeenCalledWith({
+      guildId: 'guild-1',
+      question: 'refund policy?',
+      tonePreset: 'professional',
+      toneInstructions: '',
+    });
+  });
+
+  it('replies inline in the source channel when inline mode is configured', async () => {
+    const dependencies = createDependencies();
+    const { message, reply, startThread } = createMessage();
+
+    await processIncomingMessage({} as never, message, dependencies);
+
+    expect(reply).toHaveBeenCalledWith('Grounded answer');
+    expect(startThread).not.toHaveBeenCalled();
+  });
+
+  it('replies in a thread when thread mode is configured', async () => {
+    const dependencies = createDependencies({
+      state: createGuildState({
+        replyChannels: [{ channelId: 'allowed-channel', replyMode: 'thread' }],
+      }),
+    });
+    const { message, startThread, send } = createMessage();
+
+    await processIncomingMessage({} as never, message, dependencies);
+
+    expect(startThread).toHaveBeenCalledWith({ name: 'ai-msg-1' });
+    expect(send).toHaveBeenCalledWith('Grounded answer');
+  });
+
+  it('skips sending and logs when required Discord permissions are missing', async () => {
+    const dependencies = createDependencies();
+    const { message, reply } = createMessage({
+      missingPermissions: [PermissionFlagsBits.SendMessages],
+    });
+
+    await processIncomingMessage({} as never, message, dependencies);
+
+    expect(reply).not.toHaveBeenCalled();
+    expect(loggerWarn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        guildId: 'guild-1',
+        channelId: 'allowed-channel',
+        messageId: 'msg-1',
+        missingPermissions: ['SendMessages'],
+      }),
+      'ai-worker missing Discord permissions for passive reply',
+    );
+  });
+});
