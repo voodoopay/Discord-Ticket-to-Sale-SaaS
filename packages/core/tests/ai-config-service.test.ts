@@ -15,6 +15,7 @@ import {
 const ORIGINAL_VOODOO_ENV_FILE = process.env.VOODOO_ENV_FILE;
 const ORIGINAL_AI_DISCORD_TOKEN = process.env.AI_DISCORD_TOKEN;
 const ORIGINAL_AI_DISCORD_CLIENT_ID = process.env.AI_DISCORD_CLIENT_ID;
+const ORIGINAL_AI_DISCORD_CLIENT_SECRET = process.env.AI_DISCORD_CLIENT_SECRET;
 const ORIGINAL_AI_DISCORD_REDIRECT_URI = process.env.AI_DISCORD_REDIRECT_URI;
 const ORIGINAL_AI_WEB_PUBLIC_URL = process.env.AI_WEB_PUBLIC_URL;
 const ORIGINAL_OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -35,6 +36,7 @@ describe('AI env and schema foundation', () => {
     restoreEnv('VOODOO_ENV_FILE', ORIGINAL_VOODOO_ENV_FILE);
     restoreEnv('AI_DISCORD_TOKEN', ORIGINAL_AI_DISCORD_TOKEN);
     restoreEnv('AI_DISCORD_CLIENT_ID', ORIGINAL_AI_DISCORD_CLIENT_ID);
+    restoreEnv('AI_DISCORD_CLIENT_SECRET', ORIGINAL_AI_DISCORD_CLIENT_SECRET);
     restoreEnv('AI_DISCORD_REDIRECT_URI', ORIGINAL_AI_DISCORD_REDIRECT_URI);
     restoreEnv('AI_WEB_PUBLIC_URL', ORIGINAL_AI_WEB_PUBLIC_URL);
     restoreEnv('OPENAI_API_KEY', ORIGINAL_OPENAI_API_KEY);
@@ -45,6 +47,7 @@ describe('AI env and schema foundation', () => {
     process.env.VOODOO_ENV_FILE = '__missing_env_file__.env';
     process.env.AI_DISCORD_TOKEN = 'ai-token';
     process.env.AI_DISCORD_CLIENT_ID = 'ai-client';
+    process.env.AI_DISCORD_CLIENT_SECRET = 'ai-client-secret';
     process.env.AI_DISCORD_REDIRECT_URI = 'http://localhost:3100/api/auth/discord/callback';
     process.env.OPENAI_API_KEY = 'sk-test-key';
     process.env.OPENAI_MODEL = 'gpt-4o-mini';
@@ -54,6 +57,7 @@ describe('AI env and schema foundation', () => {
     const env = getEnv();
     expect(env.AI_DISCORD_TOKEN).toBe('ai-token');
     expect(env.AI_DISCORD_CLIENT_ID).toBe('ai-client');
+    expect(env.AI_DISCORD_CLIENT_SECRET).toBe('ai-client-secret');
     expect(env.AI_DISCORD_REDIRECT_URI).toBe('http://localhost:3100/api/auth/discord/callback');
     expect(env.OPENAI_API_KEY).toBe('sk-test-key');
     expect(env.OPENAI_MODEL).toBe('gpt-4o-mini');

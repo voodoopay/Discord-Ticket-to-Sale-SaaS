@@ -5,6 +5,7 @@ import { z } from 'zod';
 const envSchema = z.object({
   AI_DISCORD_TOKEN: z.string().default(''),
   AI_DISCORD_CLIENT_ID: z.string().default(''),
+  AI_DISCORD_CLIENT_SECRET: z.string().default(''),
   AI_WEB_PUBLIC_URL: z.string().url().default('http://localhost:3100'),
   AI_DISCORD_REDIRECT_URI: z
     .string()

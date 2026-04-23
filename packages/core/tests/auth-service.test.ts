@@ -66,6 +66,57 @@ describe('auth service', () => {
     expect(result.value.tenantIds).toEqual(['tenant-1']);
   });
 
+  it('uses an overridden Discord OAuth client for login URLs and token exchange', async () => {
+    const service = new AuthService({
+      discordClientId: 'ai-client-id',
+      discordClientSecret: 'ai-client-secret',
+    });
+    const redirectUri = 'https://www.voodooai.online/api/auth/discord/callback';
+
+    const loginUrl = new URL(service.buildLoginUrl('oauth-state', redirectUri));
+    expect(loginUrl.searchParams.get('client_id')).toBe('ai-client-id');
+    expect(loginUrl.searchParams.get('redirect_uri')).toBe(redirectUri);
+
+    vi.spyOn((service as any).userRepository, 'upsertDiscordUser').mockResolvedValue({
+      id: 'user-1',
+      discordUserId: 'discord-1',
+      username: 'merchant',
+      avatarUrl: null,
+    });
+    vi.spyOn((service as any).userRepository, 'ensureSuperAdmin').mockResolvedValue(undefined);
+    vi.spyOn((service as any).userRepository, 'isSuperAdmin').mockResolvedValue(false);
+    vi.spyOn((service as any).userRepository, 'getTenantIdsForUser').mockResolvedValue([]);
+
+    const fetchMock = vi.mocked(fetch);
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ access_token: 'discord-access-token' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: 'discord-1', username: 'merchant', avatar: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
+
+    const result = await service.exchangeCodeForSession({
+      code: 'oauth-code',
+      state: 'oauth-state',
+      expectedState: 'oauth-state',
+      redirectUri,
+    });
+
+    expect(result.isOk()).toBe(true);
+    const tokenRequestBody = fetchMock.mock.calls[0]?.[1]?.body;
+    expect(tokenRequestBody).toBeInstanceOf(URLSearchParams);
+    expect((tokenRequestBody as URLSearchParams).get('client_id')).toBe('ai-client-id');
+    expect((tokenRequestBody as URLSearchParams).get('client_secret')).toBe('ai-client-secret');
+  });
+
   it('fails login when the Discord profile fetch itself fails', async () => {
     const service = new AuthService();
 

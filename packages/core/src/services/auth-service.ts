@@ -22,6 +22,12 @@ export type AuthCallbackResult = {
   guilds: OAuthDiscordGuild[];
 };
 
+type AuthServiceOptions = {
+  discordClientId?: string;
+  discordClientSecret?: string;
+  discordRedirectUri?: string;
+};
+
 function avatarUrl(discordUser: OAuthDiscordUser): string | null {
   if (!discordUser.avatar) {
     return null;
@@ -49,6 +55,8 @@ export class AuthService {
   private readonly env = getEnv();
   private readonly userRepository = new UserRepository();
   private readonly tenantRepository = new TenantRepository();
+
+  public constructor(private readonly options: AuthServiceOptions = {}) {}
 
   private static readGuildCache(accessToken: string):
     | {
@@ -100,10 +108,10 @@ export class AuthService {
   }
 
   public buildLoginUrl(state: string, redirectUri?: string): string {
-    const resolvedRedirectUri = redirectUri ?? this.env.DISCORD_REDIRECT_URI;
+    const resolvedRedirectUri = redirectUri ?? this.options.discordRedirectUri ?? this.env.DISCORD_REDIRECT_URI;
     const scopes = ['identify', 'guilds'];
     const query = new URLSearchParams({
-      client_id: this.env.DISCORD_CLIENT_ID,
+      client_id: this.options.discordClientId ?? this.env.DISCORD_CLIENT_ID,
       response_type: 'code',
       redirect_uri: resolvedRedirectUri,
       scope: scopes.join(' '),
@@ -124,22 +132,25 @@ export class AuthService {
       return err(new AppError('OAUTH_STATE_MISMATCH', 'Invalid OAuth state', 400));
     }
 
-    if (!this.env.DISCORD_CLIENT_SECRET) {
+    const clientSecret = this.options.discordClientSecret ?? this.env.DISCORD_CLIENT_SECRET;
+
+    if (!clientSecret) {
       return err(
         new AppError('MISSING_DISCORD_CLIENT_SECRET', 'DISCORD_CLIENT_SECRET is not configured', 500),
       );
     }
 
     try {
-      const resolvedRedirectUri = input.redirectUri ?? this.env.DISCORD_REDIRECT_URI;
+      const resolvedRedirectUri =
+        input.redirectUri ?? this.options.discordRedirectUri ?? this.env.DISCORD_REDIRECT_URI;
       const tokenRes = await fetch(`${this.env.DISCORD_API_BASE_URL}/oauth2/token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
         body: new URLSearchParams({
-          client_id: this.env.DISCORD_CLIENT_ID,
-          client_secret: this.env.DISCORD_CLIENT_SECRET,
+          client_id: this.options.discordClientId ?? this.env.DISCORD_CLIENT_ID,
+          client_secret: clientSecret,
           grant_type: 'authorization_code',
           code: input.code,
           redirect_uri: resolvedRedirectUri,

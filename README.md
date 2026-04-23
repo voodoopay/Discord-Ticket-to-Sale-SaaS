@@ -32,6 +32,7 @@ Multi-tenant Discord + Telegram bot stack with a web dashboard for ticket-based 
 - `JOIN_GATE_DISCORD_CLIENT_ID`
 - `AI_DISCORD_TOKEN`
 - `AI_DISCORD_CLIENT_ID`
+- `AI_DISCORD_CLIENT_SECRET`
 - `AI_WEB_PUBLIC_URL`
 - `AI_DISCORD_REDIRECT_URI`
 - `OPENAI_API_KEY`

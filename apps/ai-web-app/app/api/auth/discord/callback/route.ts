@@ -2,8 +2,17 @@ import { AppError, AuthService, getEnv, logger } from '../../../../../../../pack
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-const authService = new AuthService();
 const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
+
+function createAiAuthService(): AuthService {
+  const env = getEnv();
+
+  return new AuthService({
+    discordClientId: env.AI_DISCORD_CLIENT_ID,
+    discordClientSecret: env.AI_DISCORD_CLIENT_SECRET,
+    discordRedirectUri: env.AI_DISCORD_REDIRECT_URI,
+  });
+}
 
 function firstHeaderValue(value: string | null): string {
   if (!value) {
@@ -67,6 +76,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const redirectUri =
       request.cookies.get('vd_oauth_redirect_uri')?.value ??
       new URL('/api/auth/discord/callback', publicOrigin).toString();
+    const authService = createAiAuthService();
 
     if (!code || !state) {
       return NextResponse.json({ error: 'Missing code/state' }, { status: 400 });
