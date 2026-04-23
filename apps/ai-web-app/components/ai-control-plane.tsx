@@ -19,10 +19,10 @@ import {
   Waypoints,
 } from 'lucide-react';
 import { useEffect, useEffectEvent, useState, useTransition, type FormEvent, type ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
 
 import { AI_APP_BRAND } from '@/lib/ai-design-tokens';
 import type { AiDashboardGuild } from '@/lib/ai-session';
+import { buildDashboardGuildUrl } from '@/lib/dashboard-url';
 
 type TonePreset = 'professional' | 'standard' | 'witty' | 'cheeky';
 type RoleMode = 'allowlist' | 'blocklist';
@@ -226,7 +226,6 @@ export function AiControlPlane({
   guilds: AiDashboardGuild[];
   initialGuildId: string | null;
 }) {
-  const router = useRouter();
   const [selectedGuildId, setSelectedGuildId] = useState<string | null>(
     initialGuildId && guilds.some((guild) => guild.id === initialGuildId)
       ? initialGuildId
@@ -287,9 +286,13 @@ export function AiControlPlane({
       return;
     }
 
-    router.replace(`/dashboard?guildId=${selectedGuildId}`, { scroll: false });
+    const nextUrl = buildDashboardGuildUrl(window.location.href, selectedGuildId);
+    if (nextUrl !== `${window.location.pathname}${window.location.search}${window.location.hash}`) {
+      window.history.replaceState(window.history.state, '', nextUrl);
+    }
+
     void loadGuildPanel(selectedGuildId);
-  }, [loadGuildPanel, router, selectedGuildId]);
+  }, [selectedGuildId]);
 
   const preview = buildTonePreview(formState);
 
