@@ -4783,8 +4783,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false,
-          "default": "''"
+          "autoincrement": false
         },
         "role_mode": {
           "name": "role_mode",

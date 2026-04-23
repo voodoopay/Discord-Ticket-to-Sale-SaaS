@@ -16,7 +16,7 @@ CREATE TABLE `ai_guild_configs` (
 	`guild_id` varchar(32) NOT NULL,
 	`enabled` boolean NOT NULL DEFAULT true,
 	`tone_preset` enum('professional','standard','witty','cheeky') NOT NULL DEFAULT 'standard',
-	`tone_instructions` text NOT NULL DEFAULT '',
+	`tone_instructions` text NOT NULL,
 	`role_mode` enum('allowlist','blocklist') NOT NULL DEFAULT 'allowlist',
 	`default_reply_mode` enum('inline','thread') NOT NULL DEFAULT 'inline',
 	`created_at` timestamp NOT NULL DEFAULT (now()),

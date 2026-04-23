@@ -851,7 +851,7 @@ export const aiGuildConfigs = mysqlTable(
     tonePreset: mysqlEnum('tone_preset', ['professional', 'standard', 'witty', 'cheeky'])
       .notNull()
       .default('standard'),
-    toneInstructions: text('tone_instructions').notNull().default(''),
+    toneInstructions: text('tone_instructions').notNull(),
     roleMode: mysqlEnum('role_mode', ['allowlist', 'blocklist']).notNull().default('allowlist'),
     defaultReplyMode: mysqlEnum('default_reply_mode', ['inline', 'thread'])
       .notNull()
