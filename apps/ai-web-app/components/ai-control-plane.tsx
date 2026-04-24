@@ -956,15 +956,15 @@ export function AiControlPlane({
               </div>
             </div>
 
-            <div className="ai-gradient-signal rounded-md px-4 py-4 text-primary-foreground">
+            <div className="ai-gradient-signal rounded-md px-4 py-4 text-foreground">
               <div className="space-y-3">
-                <p className="text-[0.66rem] uppercase text-primary-foreground/70">
+                <p className="text-[0.66rem] uppercase text-foreground/70">
                   Invite posture
                 </p>
                 <h4 className="text-lg font-bold tracking-tight">
                   {resources?.botInGuild ? 'Runtime attached' : 'Bring the AI bot into the server'}
                 </h4>
-                <p className="text-xs leading-6 text-primary-foreground/78">
+                <p className="text-xs leading-6 text-foreground/75">
                   {resources?.botInGuild
                     ? 'Channels and roles are being read directly from Discord so the panel can stay aligned with live server state.'
                     : 'The panel can still be configured now, but the runtime cannot answer until the AI bot is invited to the guild.'}
@@ -1720,16 +1720,16 @@ export function AiControlPlane({
               </button>
             </div>
 
-            <div className="ai-gradient-signal rounded-md px-4 py-4 text-primary-foreground">
+            <div className="ai-gradient-signal rounded-md px-4 py-4 text-foreground">
               <div className="space-y-4">
-                <div className="flex items-center gap-2 text-[0.66rem] uppercase text-primary-foreground/75">
+                <div className="flex items-center gap-2 text-[0.66rem] uppercase text-foreground/70">
                   <BadgeCheck className="size-4" />
                   Grounded preview
                 </div>
                 <p className="text-lg font-bold tracking-tight">
                   Sample answer posture
                 </p>
-                <p className="rounded-md border border-border bg-card/10 px-4 py-4 text-sm leading-7 text-primary-foreground/90">
+                <p className="rounded-md border border-border bg-card/10 px-4 py-4 text-sm leading-7 text-foreground/85">
                   {preview}
                 </p>
               </div>

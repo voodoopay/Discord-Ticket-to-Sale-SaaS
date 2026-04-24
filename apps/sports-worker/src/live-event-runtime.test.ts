@@ -2289,6 +2289,87 @@ describe('live event runtime', () => {
     });
   });
 
+  it('still runs pending cleanup when live reconciliation fails', async () => {
+    const { guild, channels } = createGuildFixture();
+    const cleanupChannel = createTextChannel({
+      id: 'live-cleanup-after-error-1',
+      name: 'live-rangers-vs-celtic',
+      parentId: 'live-category-1',
+    });
+    channels.set(cleanupChannel.id, cleanupChannel);
+    const client = createClientFixture(guild);
+
+    vi.spyOn(SportsAccessService.prototype, 'getGuildActivationState').mockResolvedValue(
+      createOkResult({
+        activated: true,
+      }) as Awaited<ReturnType<SportsAccessService['getGuildActivationState']>>,
+    );
+    vi.spyOn(SportsService.prototype, 'getGuildConfig').mockResolvedValue(
+      createOkResult({
+        configId: 'cfg-1',
+        guildId: 'guild-1',
+        enabled: true,
+        managedCategoryChannelId: 'category-1',
+        liveCategoryChannelId: 'live-category-1',
+        localTimeHhMm: '01:00',
+        timezone: 'Europe/London',
+        broadcastCountry: 'United Kingdom',
+        nextRunAtUtc: '2026-03-21T01:00:00.000Z',
+        lastRunAtUtc: null,
+        lastLocalRunDate: null,
+      }) as Awaited<ReturnType<SportsService['getGuildConfig']>>,
+    );
+    vi.spyOn(SportsService.prototype, 'listChannelBindings').mockResolvedValue(
+      createOkResult([]) as unknown as Awaited<ReturnType<SportsService['listChannelBindings']>>,
+    );
+    vi.spyOn(SportsDataService.prototype, 'listLiveEvents').mockResolvedValue(
+      createErrResult(new Error('live API unavailable')) as Awaited<
+        ReturnType<SportsDataService['listLiveEvents']>
+      >,
+    );
+    vi.spyOn(SportsLiveEventService.prototype, 'listRecoverableEvents').mockResolvedValue(
+      createOkResult([]) as unknown as Awaited<
+        ReturnType<SportsLiveEventService['listRecoverableEvents']>
+      >,
+    );
+    vi.spyOn(SportsLiveEventService.prototype, 'listTrackedEvents').mockResolvedValue(
+      createOkResult([
+        makeTrackedEvent({
+          eventId: 'evt-cleanup-after-error',
+          eventChannelId: 'live-cleanup-after-error-1',
+          status: 'cleanup_due',
+          finishedAtUtc: new Date('2026-03-20T15:00:00.000Z'),
+          deleteAfterUtc: new Date('2026-03-20T18:00:00.000Z'),
+          highlightsPosted: true,
+        }),
+      ]) as Awaited<ReturnType<SportsLiveEventService['listTrackedEvents']>>,
+    );
+    const markDeleted = vi
+      .spyOn(SportsLiveEventService.prototype, 'markDeleted')
+      .mockResolvedValue(
+        createOkResult(
+          makeTrackedEvent({
+            eventId: 'evt-cleanup-after-error',
+            eventChannelId: null,
+            status: 'deleted',
+            finishedAtUtc: new Date('2026-03-20T15:00:00.000Z'),
+            deleteAfterUtc: new Date('2026-03-20T18:00:00.000Z'),
+            highlightsPosted: true,
+          }),
+        ) as Awaited<ReturnType<SportsLiveEventService['markDeleted']>>,
+      );
+
+    startLiveEventScheduler(client as never, 60_000);
+    await flushAsyncWork();
+
+    expect(cleanupChannel.delete).toHaveBeenCalled();
+    expect(markDeleted).toHaveBeenCalledWith({
+      guildId: 'guild-1',
+      eventId: 'evt-cleanup-after-error',
+      deletedAtUtc: expect.any(Date),
+    });
+  });
+
   it('runs tracked-event recovery only on scheduler startup and not on later poll ticks', async () => {
     vi.useFakeTimers();
 

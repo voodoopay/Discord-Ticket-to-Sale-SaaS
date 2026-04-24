@@ -1338,11 +1338,21 @@ async function runLiveEventScheduler(client: Client): Promise<void> {
       }
 
       const guild = await client.guilds.fetch(guildPreview.id);
-      await reconcileLiveEventsForGuild({
-        guild,
-        timezone: configResult.value.timezone,
-        broadcastCountry: configResult.value.broadcastCountry,
-      });
+      try {
+        await reconcileLiveEventsForGuild({
+          guild,
+          timezone: configResult.value.timezone,
+          broadcastCountry: configResult.value.broadcastCountry,
+        });
+      } catch (error) {
+        logger.warn(
+          {
+            guildId: guildPreview.id,
+            errorMessage: error instanceof Error ? error.message : 'unknown',
+          },
+          'live event scheduler reconcile failed before cleanup',
+        );
+      }
       await runPendingLiveEventCleanup({ guild });
     } catch (error) {
       logger.warn(
