@@ -123,7 +123,7 @@ Discord knowledge channels are intended for read-only or announcement channels. 
 - Runs from separate worker/token (`apps/sports-worker`).
 - Creates and manages persistent sport channels under a managed category, but only posts daily listings for sports that actually have televised events that day.
 - Default schedule is `00:01` in `Europe/London`, and the worker clears the previous day’s managed posts before sending the new listings.
-- Televised live events now get temporary event channels with live status updates, optional highlight auto-posting, retention of the final score/state until cleanup, and automatic deletion 30 minutes after the event finishes.
+- Televised live events now get temporary event channels with live status updates, optional highlight auto-posting, retention of the final score/state until cleanup, and automatic deletion 30 minutes after the event finishes. If a live event stops receiving heartbeats for 12 hours, the worker treats it as stale and moves it through the same cleanup path so abandoned result channels do not linger.
 - Shared TV-lookup requests are now cached briefly across the sports worker so multiple guilds do not hammer TheSportsDB with duplicate `lookuptv.php` traffic during the same poll window.
 - Highlights can post automatically inside managed live event channels when available, and the same highlight data can also be requested on demand.
 - Uses TheSportsDB for sport, event, broadcaster, and image data. A paid API key is required for full daily coverage because the public `123` key is heavily truncated.

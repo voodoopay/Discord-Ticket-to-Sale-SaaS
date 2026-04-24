@@ -2387,4 +2387,102 @@ describe('live event runtime', () => {
       deletedAtUtc: new Date('2026-03-20T15:35:00.000Z'),
     });
   });
+
+  it('expires stale live event channels when no live heartbeat has refreshed them', async () => {
+    const { guild, channels } = createGuildFixture();
+    const eventChannel = createTextChannel({
+      id: 'live-stale-1',
+      name: 'live-rangers-vs-celtic',
+      parentId: 'live-category-1',
+    });
+    channels.set(eventChannel.id, eventChannel);
+    vi.spyOn(SportsLiveEventService.prototype, 'listTrackedEvents').mockResolvedValue(
+      createOkResult([
+        makeTrackedEvent({
+          eventId: 'evt-stale',
+          eventChannelId: 'live-stale-1',
+          status: 'live',
+          lastSyncedAtUtc: new Date('2026-03-20T00:00:00.000Z'),
+          updatedAt: new Date('2026-03-20T00:00:00.000Z'),
+        }),
+      ]) as Awaited<ReturnType<SportsLiveEventService['listTrackedEvents']>>,
+    );
+    const markFinished = vi
+      .spyOn(SportsLiveEventService.prototype, 'markFinished')
+      .mockResolvedValue(
+        createOkResult(
+          makeTrackedEvent({
+            eventId: 'evt-stale',
+            eventChannelId: 'live-stale-1',
+            status: 'cleanup_due',
+            finishedAtUtc: new Date('2026-03-20T12:00:00.000Z'),
+            deleteAfterUtc: new Date('2026-03-20T12:30:00.000Z'),
+          }),
+        ) as Awaited<ReturnType<SportsLiveEventService['markFinished']>>,
+      );
+    const markDeleted = vi
+      .spyOn(SportsLiveEventService.prototype, 'markDeleted')
+      .mockResolvedValue(
+        createOkResult(
+          makeTrackedEvent({
+            eventId: 'evt-stale',
+            eventChannelId: null,
+            status: 'deleted',
+            finishedAtUtc: new Date('2026-03-20T12:00:00.000Z'),
+            deleteAfterUtc: new Date('2026-03-20T12:30:00.000Z'),
+          }),
+        ) as Awaited<ReturnType<SportsLiveEventService['markDeleted']>>,
+      );
+
+    const result = await runPendingLiveEventCleanup({
+      guild,
+      now: new Date('2026-03-20T13:00:00.000Z'),
+    });
+
+    expect(result.deletedChannelCount).toBe(1);
+    expect(markFinished).toHaveBeenCalledWith({
+      guildId: 'guild-1',
+      eventId: 'evt-stale',
+      finishedAtUtc: new Date('2026-03-20T12:00:00.000Z'),
+    });
+    expect(eventChannel.delete).toHaveBeenCalled();
+    expect(markDeleted).toHaveBeenCalledWith({
+      guildId: 'guild-1',
+      eventId: 'evt-stale',
+      deletedAtUtc: new Date('2026-03-20T13:00:00.000Z'),
+    });
+  });
+
+  it('keeps recently refreshed live event channels out of cleanup', async () => {
+    const { guild, channels } = createGuildFixture();
+    const eventChannel = createTextChannel({
+      id: 'live-current-1',
+      name: 'live-rangers-vs-celtic',
+      parentId: 'live-category-1',
+    });
+    channels.set(eventChannel.id, eventChannel);
+    vi.spyOn(SportsLiveEventService.prototype, 'listTrackedEvents').mockResolvedValue(
+      createOkResult([
+        makeTrackedEvent({
+          eventId: 'evt-current',
+          eventChannelId: 'live-current-1',
+          status: 'live',
+          lastSyncedAtUtc: new Date('2026-03-20T11:30:00.000Z'),
+          updatedAt: new Date('2026-03-20T11:30:00.000Z'),
+        }),
+      ]) as Awaited<ReturnType<SportsLiveEventService['listTrackedEvents']>>,
+    );
+    const markFinished = vi.spyOn(SportsLiveEventService.prototype, 'markFinished');
+    const markDeleted = vi.spyOn(SportsLiveEventService.prototype, 'markDeleted');
+
+    const result = await runPendingLiveEventCleanup({
+      guild,
+      now: new Date('2026-03-20T13:00:00.000Z'),
+    });
+
+    expect(result.deletedChannelCount).toBe(0);
+    expect(markFinished).not.toHaveBeenCalled();
+    expect(eventChannel.delete).not.toHaveBeenCalled();
+    expect(markDeleted).not.toHaveBeenCalled();
+  });
 });

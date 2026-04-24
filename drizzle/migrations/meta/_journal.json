@@ -232,6 +232,13 @@
       "when": 1777024800000,
       "tag": "0032_ai_unanswered_learning",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "5",
+      "when": 1777039200000,
+      "tag": "0033_repair_sports_live_event_channels",
+      "breakpoints": true
     }
   ]
 }

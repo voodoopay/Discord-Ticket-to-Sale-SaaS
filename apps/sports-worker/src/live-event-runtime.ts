@@ -40,6 +40,7 @@ const LIVE_EVENT_QUEUE = new PQueue({
   interval: 1_000,
 });
 const DEFAULT_CATEGORY_NAME = 'Sports Listings';
+const SPORTS_LIVE_EVENT_STALE_TIMEOUT_MS = 12 * 60 * 60 * 1000;
 
 let liveEventSchedulerTimer: NodeJS.Timeout | null = null;
 let liveEventSchedulerInFlight = false;
@@ -803,9 +804,53 @@ type SportsLiveEventChannelSummaryLike = {
   sportName: string;
   eventChannelId: string | null;
   status: 'scheduled' | 'live' | 'finished' | 'cleanup_due' | 'deleted' | 'failed';
+  lastSyncedAtUtc: Date | null;
   deleteAfterUtc: Date | null;
   highlightsPosted: boolean;
 };
+
+function getStaleLiveEventFinishedAt(input: {
+  trackedEvent: SportsLiveEventChannelSummaryLike;
+  now: Date;
+}): Date | null {
+  if (input.trackedEvent.status !== 'live' || !input.trackedEvent.lastSyncedAtUtc) {
+    return null;
+  }
+
+  const staleFinishedAt = new Date(
+    input.trackedEvent.lastSyncedAtUtc.getTime() + SPORTS_LIVE_EVENT_STALE_TIMEOUT_MS,
+  );
+  if (Number.isNaN(staleFinishedAt.getTime()) || staleFinishedAt > input.now) {
+    return null;
+  }
+
+  return staleFinishedAt;
+}
+
+async function markStaleLiveEventFinishedIfDue(input: {
+  guild: Guild;
+  trackedEvent: SportsLiveEventChannelSummaryLike;
+  now: Date;
+}): Promise<SportsLiveEventChannelSummaryLike | null> {
+  const finishedAtUtc = getStaleLiveEventFinishedAt({
+    trackedEvent: input.trackedEvent,
+    now: input.now,
+  });
+  if (!finishedAtUtc) {
+    return null;
+  }
+
+  const finishedResult = await sportsLiveEventService.markFinished({
+    guildId: input.guild.id,
+    eventId: input.trackedEvent.eventId,
+    finishedAtUtc,
+  });
+  if (finishedResult.isErr()) {
+    throw finishedResult.error;
+  }
+
+  return finishedResult.value;
+}
 
 export async function resumeTrackedLiveEventsForGuild(input: {
   guild: Guild;
@@ -1223,7 +1268,7 @@ export async function runPendingLiveEventCleanup(input: {
   const now = input.now ?? new Date();
   const trackedEventsResult = await sportsLiveEventService.listTrackedEvents({
     guildId: input.guild.id,
-    statuses: ['cleanup_due'],
+    statuses: ['cleanup_due', 'live'],
   });
   if (trackedEventsResult.isErr()) {
     throw trackedEventsResult.error;
@@ -1231,24 +1276,33 @@ export async function runPendingLiveEventCleanup(input: {
   let deletedChannelCount = 0;
 
   for (const trackedEvent of trackedEventsResult.value) {
-    if (!trackedEvent.deleteAfterUtc) {
+    const cleanupCandidate =
+      trackedEvent.status === 'live'
+        ? await markStaleLiveEventFinishedIfDue({
+            guild: input.guild,
+            trackedEvent,
+            now,
+          })
+        : trackedEvent;
+
+    if (!cleanupCandidate?.deleteAfterUtc) {
       continue;
     }
 
-    const cleanupAt = trackedEvent.deleteAfterUtc;
+    const cleanupAt = cleanupCandidate.deleteAfterUtc;
     if (Number.isNaN(cleanupAt.getTime()) || cleanupAt > now) {
       continue;
     }
 
-    const channel = await fetchTrackedEventChannel(input.guild, trackedEvent.eventChannelId);
+    const channel = await fetchTrackedEventChannel(input.guild, cleanupCandidate.eventChannelId);
     if (channel) {
       await LIVE_EVENT_QUEUE.add(() =>
-        channel.delete(`Delete the finished live event channel for ${trackedEvent.eventName}.`),
+        channel.delete(`Delete the finished live event channel for ${cleanupCandidate.eventName}.`),
       );
     }
     const markDeletedResult = await sportsLiveEventService.markDeleted({
       guildId: input.guild.id,
-      eventId: trackedEvent.eventId,
+      eventId: cleanupCandidate.eventId,
       deletedAtUtc: now,
     });
     if (markDeletedResult.isErr()) {

@@ -206,6 +206,47 @@ export class SportsLiveEventRepository {
     highlightsPosted?: boolean;
   }): Promise<SportsLiveEventChannelRecord> {
     const now = new Date();
+    const existingRecord = await this.getTrackedEvent({
+      guildId: input.guildId,
+      eventId: input.eventId,
+    });
+
+    if (existingRecord) {
+      await this.db
+        .update(sportsLiveEventChannels)
+        .set({
+          sportName: input.sportName,
+          eventName: input.eventName,
+          sportChannelId: input.sportChannelId,
+          eventChannelId: input.eventChannelId,
+          scoreMessageId: input.scoreMessageId,
+          status: input.status,
+          kickoffAtUtc: input.kickoffAtUtc,
+          lastScoreSnapshot: input.lastScoreSnapshot,
+          lastStateSnapshot: input.lastStateSnapshot,
+          lastSyncedAtUtc: input.lastSyncedAtUtc,
+          finishedAtUtc: input.finishedAtUtc,
+          deleteAfterUtc: input.deleteAfterUtc,
+          highlightsPosted: input.highlightsPosted ?? false,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(sportsLiveEventChannels.guildId, input.guildId),
+            eq(sportsLiveEventChannels.eventId, input.eventId),
+          ),
+        );
+
+      const updatedRecord = await this.getTrackedEvent({
+        guildId: input.guildId,
+        eventId: input.eventId,
+      });
+      if (!updatedRecord) {
+        throw new Error('Failed to load sports live event channel');
+      }
+
+      return updatedRecord;
+    }
 
     await this.db
       .insert(sportsLiveEventChannels)

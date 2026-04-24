@@ -90,7 +90,10 @@ function makeRow(overrides: Partial<SportsLiveEventRow> = {}): SportsLiveEventRo
   };
 }
 
-function createStatefulMockDb(rows: SportsLiveEventRow[]): MockDb {
+function createStatefulMockDb(
+  rows: SportsLiveEventRow[],
+  options: { emulateMissingGuildEventUnique?: boolean } = {},
+): MockDb {
   let insertCalls = 0;
   let findFirstCalls = 0;
   let onDuplicateKeyUpdateCalls = 0;
@@ -134,6 +137,30 @@ function createStatefulMockDb(rows: SportsLiveEventRow[]): MockDb {
           onDuplicateKeyUpdate: async (input: { set: Partial<SportsLiveEventRow> }): Promise<void> => {
             onDuplicateKeyUpdateCalls += 1;
             const existing = rows.find((row) => row.guildId === key.guildId && row.eventId === key.eventId);
+
+            if (options.emulateMissingGuildEventUnique) {
+              rows.push({
+                id: String(value.id),
+                guildId: key.guildId,
+                sportName: String(value.sportName),
+                eventId: key.eventId,
+                eventName: String(value.eventName),
+                sportChannelId: String(value.sportChannelId),
+                eventChannelId: value.eventChannelId ?? null,
+                scoreMessageId: value.scoreMessageId ?? null,
+                status: (value.status ?? 'scheduled') as SportsLiveEventRow['status'],
+                kickoffAtUtc: value.kickoffAtUtc ?? new Date('1970-01-01T00:00:00.000Z'),
+                lastScoreSnapshot: (value.lastScoreSnapshot ?? null) as Record<string, unknown> | null,
+                lastStateSnapshot: (value.lastStateSnapshot ?? null) as Record<string, unknown> | null,
+                lastSyncedAtUtc: value.lastSyncedAtUtc ?? null,
+                finishedAtUtc: value.finishedAtUtc ?? null,
+                deleteAfterUtc: value.deleteAfterUtc ?? null,
+                highlightsPosted: value.highlightsPosted ?? false,
+                createdAt: value.createdAt ?? new Date('1970-01-01T00:00:00.000Z'),
+                updatedAt: value.updatedAt ?? new Date('1970-01-01T00:00:00.000Z'),
+              });
+              return;
+            }
 
             if (existing) {
               Object.assign(existing, {
@@ -264,8 +291,9 @@ describe('SportsLiveEventService', () => {
     });
 
     expect(rows).toHaveLength(2);
-    expect(mockDb.insertCalls).toBe(2);
-    expect(mockDb.onDuplicateKeyUpdateCalls).toBe(2);
+    expect(mockDb.insertCalls).toBe(1);
+    expect(mockDb.onDuplicateKeyUpdateCalls).toBe(1);
+    expect(mockDb.updateCalls).toBe(1);
     expect(mockDb.findFirstCalls).toBeGreaterThanOrEqual(2);
     expect(rows.filter((row) => row.guildId === 'guild-1' && row.eventId === 'evt-1')).toHaveLength(1);
     expect(first.id).toBe(second.id);
@@ -274,6 +302,45 @@ describe('SportsLiveEventService', () => {
     expect(rows.find((row) => row.guildId === 'guild-1' && row.eventId === 'evt-1')?.scoreMessageId).toBe(
       'msg-score-1',
     );
+  });
+
+  it('updates an existing tracked row instead of relying on a database duplicate-key constraint', async () => {
+    const rows: SportsLiveEventRow[] = [
+      makeRow({
+        id: '01J0SPORTSLIVE000000000020',
+        guildId: 'guild-1',
+        eventId: 'evt-1',
+        eventName: 'Rangers vs Celtic',
+        eventChannelId: 'event-channel-1',
+        scoreMessageId: 'msg-score-1',
+        status: 'live',
+      }),
+    ];
+    const mockDb = createStatefulMockDb(rows, { emulateMissingGuildEventUnique: true });
+    const repository = createRepositoryWithMockDb(mockDb);
+
+    const result = await repository.upsertTrackedEvent({
+      guildId: 'guild-1',
+      sportName: 'Soccer',
+      eventId: 'evt-1',
+      eventName: 'Rangers vs Celtic',
+      sportChannelId: 'sport-1',
+      eventChannelId: 'event-channel-1',
+      scoreMessageId: 'msg-score-2',
+      status: 'live',
+      kickoffAtUtc: new Date('2026-03-20T12:30:00.000Z'),
+      lastScoreSnapshot: { home: 2, away: 0 },
+      lastStateSnapshot: { phase: '2H' },
+      lastSyncedAtUtc: new Date('2026-03-20T12:50:00.000Z'),
+      finishedAtUtc: null,
+      deleteAfterUtc: null,
+    });
+
+    expect(result.id).toBe('01J0SPORTSLIVE000000000020');
+    expect(result.scoreMessageId).toBe('msg-score-2');
+    expect(rows).toHaveLength(1);
+    expect(mockDb.insertCalls).toBe(0);
+    expect(mockDb.updateCalls).toBe(1);
   });
 
   it('reads the tracked event for the requested guild and event', async () => {
