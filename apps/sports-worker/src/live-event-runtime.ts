@@ -1338,6 +1338,7 @@ async function runLiveEventScheduler(client: Client): Promise<void> {
       }
 
       const guild = await client.guilds.fetch(guildPreview.id);
+      await runPendingLiveEventCleanup({ guild });
       try {
         await reconcileLiveEventsForGuild({
           guild,
@@ -1350,7 +1351,7 @@ async function runLiveEventScheduler(client: Client): Promise<void> {
             guildId: guildPreview.id,
             errorMessage: error instanceof Error ? error.message : 'unknown',
           },
-          'live event scheduler reconcile failed before cleanup',
+          'live event scheduler reconcile failed after initial cleanup',
         );
       }
       await runPendingLiveEventCleanup({ guild });
