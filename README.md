@@ -72,7 +72,7 @@ Copy `.env.example` to `.env` and fill values.
 
 Voodoo AI separates where the bot replies from what the bot can use as evidence. Reply channels control where the bot answers. Website sources, custom Q&A, and Discord knowledge channels control what the bot can cite when generating answers.
 
-Discord knowledge channels are intended for read-only or announcement channels. Selecting one backfills the latest 500 messages, stores them as grounding material, refreshes selected channels four times per day, and removes deleted messages from stored knowledge when Discord emits a delete event. Website sources are also refreshed four times per day so updated docs or blogs are picked up automatically. If the AI cannot ground an answer in approved evidence, it stays silent instead of posting a fallback refusal.
+Discord knowledge channels are intended for read-only or announcement channels. Selecting one backfills the latest 500 messages, stores message text plus Discord embed text as grounding material, refreshes selected channels four times per day, and removes deleted messages from stored knowledge when Discord emits a delete event. Website sources are also refreshed four times per day so updated docs or blogs are picked up automatically. If the AI cannot ground an answer in approved evidence, it stays silent instead of posting a fallback refusal.
 
 ## Commands
 

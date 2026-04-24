@@ -250,6 +250,7 @@ export function AiControlPlane({
   const [websiteUrl, setWebsiteUrl] = useState('');
   const [newQaQuestion, setNewQaQuestion] = useState('');
   const [newQaAnswer, setNewQaAnswer] = useState('');
+  const [selectedReplyCategoryId, setSelectedReplyCategoryId] = useState<string | null>(null);
   const [selectedKnowledgeCategoryId, setSelectedKnowledgeCategoryId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState('');
   const [statusMessage, setStatusMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
@@ -622,7 +623,7 @@ export function AiControlPlane({
     const categoryId = channel.parentId ?? 'uncategorized';
     channelsByCategory.set(categoryId, [...(channelsByCategory.get(categoryId) ?? []), channel]);
   }
-  const knowledgeCategoryOptions = [
+  const channelCategoryOptions = [
     ...(resources?.categoryChannels ?? [])
       .filter((category) => (channelsByCategory.get(category.id)?.length ?? 0) > 0)
       .map((category) => ({
@@ -640,12 +641,51 @@ export function AiControlPlane({
         ]
       : []),
   ];
-  const effectiveKnowledgeCategoryId = selectedKnowledgeCategoryId && knowledgeCategoryOptions.some(
+  const effectiveReplyCategoryId = selectedReplyCategoryId && channelCategoryOptions.some(
+    (category) => category.id === selectedReplyCategoryId,
+  )
+    ? selectedReplyCategoryId
+    : channelCategoryOptions[0]?.id ?? 'uncategorized';
+  const visibleReplyChannels = channelsByCategory.get(effectiveReplyCategoryId) ?? [];
+  const visibleReplyChannelIds = new Set(visibleReplyChannels.map((channel) => channel.id));
+  const activeVisibleReplyChannelCount =
+    formState?.replyChannels.filter((channel) => visibleReplyChannelIds.has(channel.channelId)).length ?? 0;
+  const effectiveKnowledgeCategoryId = selectedKnowledgeCategoryId && channelCategoryOptions.some(
     (category) => category.id === selectedKnowledgeCategoryId,
   )
     ? selectedKnowledgeCategoryId
-    : knowledgeCategoryOptions[0]?.id ?? 'uncategorized';
+    : channelCategoryOptions[0]?.id ?? 'uncategorized';
   const visibleKnowledgeChannels = channelsByCategory.get(effectiveKnowledgeCategoryId) ?? [];
+
+  function selectVisibleReplyChannels() {
+    if (!formState || visibleReplyChannels.length === 0) {
+      return;
+    }
+
+    const selectedIds = new Set(formState.replyChannels.map((channel) => channel.channelId));
+    const additions = visibleReplyChannels
+      .filter((channel) => !selectedIds.has(channel.id))
+      .map((channel) => ({ channelId: channel.id, replyMode: formState.defaultReplyMode }));
+    if (additions.length === 0) {
+      return;
+    }
+
+    setFormState({
+      ...formState,
+      replyChannels: [...formState.replyChannels, ...additions],
+    });
+  }
+
+  function clearVisibleReplyChannels() {
+    if (!formState || visibleReplyChannels.length === 0) {
+      return;
+    }
+
+    setFormState({
+      ...formState,
+      replyChannels: formState.replyChannels.filter((channel) => !visibleReplyChannelIds.has(channel.channelId)),
+    });
+  }
 
   return (
     <section className="grid gap-4 xl:grid-cols-[18rem_minmax(0,1fr)]">
@@ -932,8 +972,45 @@ export function AiControlPlane({
                   </StatusPill>
                 </div>
 
+                {channelCategoryOptions.length > 0 ? (
+                  <div className="mt-4 grid gap-3">
+                    <label className="block text-xs font-semibold uppercase text-muted-foreground">
+                      Category
+                      <select
+                        value={effectiveReplyCategoryId}
+                        onChange={(event) => setSelectedReplyCategoryId(event.target.value)}
+                        className="mt-2 h-11 w-full rounded-md border border-input bg-card px-3 text-sm normal-case text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
+                      >
+                        {channelCategoryOptions.map((category) => (
+                          <option key={category.id} value={category.id}>
+                            {category.label} ({category.count})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <button
+                        type="button"
+                        onClick={selectVisibleReplyChannels}
+                        disabled={!formState || visibleReplyChannels.length === 0}
+                        className="inline-flex min-h-10 cursor-pointer items-center justify-center rounded-md bg-primary px-4 text-xs font-semibold uppercase text-primary-foreground transition hover:bg-secondary focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Select category
+                      </button>
+                      <button
+                        type="button"
+                        onClick={clearVisibleReplyChannels}
+                        disabled={!formState || activeVisibleReplyChannelCount === 0}
+                        className="inline-flex min-h-10 cursor-pointer items-center justify-center rounded-md bg-muted px-4 text-xs font-semibold uppercase text-foreground transition hover:bg-card focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Clear category
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+
                 <div className="mt-4 grid gap-3 lg:grid-cols-2">
-                  {(resources?.channels ?? []).map((channel) => {
+                  {visibleReplyChannels.map((channel) => {
                     const selectedChannel = formState?.replyChannels.find(
                       (replyChannel) => replyChannel.channelId === channel.id,
                     );
@@ -969,6 +1046,11 @@ export function AiControlPlane({
                       </article>
                     );
                   })}
+                  {resources?.botInGuild && visibleReplyChannels.length === 0 ? (
+                    <article className="ai-soft-surface rounded-md px-4 py-4 text-sm leading-7 text-muted-foreground lg:col-span-2">
+                      No text or announcement channels are available in this category.
+                    </article>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -1145,7 +1227,7 @@ export function AiControlPlane({
                   <MessagesSquare className="mt-1 size-5 text-primary" />
                 </div>
 
-                {knowledgeCategoryOptions.length > 0 ? (
+                {channelCategoryOptions.length > 0 ? (
                   <label className="mt-4 block text-xs font-semibold uppercase text-muted-foreground">
                     Category
                     <select
@@ -1153,7 +1235,7 @@ export function AiControlPlane({
                       onChange={(event) => setSelectedKnowledgeCategoryId(event.target.value)}
                       className="mt-2 h-11 w-full rounded-md border border-input bg-card px-3 text-sm normal-case text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
                     >
-                      {knowledgeCategoryOptions.map((category) => (
+                      {channelCategoryOptions.map((category) => (
                         <option key={category.id} value={category.id}>
                           {category.label} ({category.count})
                         </option>

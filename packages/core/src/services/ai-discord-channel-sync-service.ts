@@ -19,8 +19,34 @@ type DiscordMessagePayload = {
     bot?: boolean;
   };
   content?: string;
+  embeds?: DiscordEmbedPayload[];
+  attachments?: DiscordAttachmentPayload[];
   timestamp?: string;
   edited_timestamp?: string | null;
+};
+
+type DiscordEmbedPayload = {
+  title?: string | null;
+  description?: string | null;
+  url?: string | null;
+  author?: {
+    name?: string | null;
+    url?: string | null;
+  } | null;
+  fields?: Array<{
+    name?: string | null;
+    value?: string | null;
+  }>;
+  footer?: {
+    text?: string | null;
+  } | null;
+};
+
+type DiscordAttachmentPayload = {
+  filename?: string | null;
+  title?: string | null;
+  description?: string | null;
+  url?: string | null;
 };
 
 export type AiDiscordChannelSourceSummary = {
@@ -79,6 +105,40 @@ function mapChannelSourceSummary(source: AiDiscordChannelSourceRecord): AiDiscor
 
 function normalizeDiscordMessageContent(value: string): string {
   return value.trim().replace(/\r\n?/gu, '\n');
+}
+
+function pushNormalizedDiscordPart(parts: string[], value: string | null | undefined): void {
+  const normalized = normalizeDiscordMessageContent(value ?? '');
+  if (normalized) {
+    parts.push(normalized);
+  }
+}
+
+function extractDiscordMessageKnowledgeText(message: DiscordMessagePayload): string {
+  const parts: string[] = [];
+  pushNormalizedDiscordPart(parts, message.content);
+
+  for (const embed of message.embeds ?? []) {
+    pushNormalizedDiscordPart(parts, embed.author?.name);
+    pushNormalizedDiscordPart(parts, embed.author?.url);
+    pushNormalizedDiscordPart(parts, embed.title);
+    pushNormalizedDiscordPart(parts, embed.description);
+    pushNormalizedDiscordPart(parts, embed.url);
+    for (const field of embed.fields ?? []) {
+      pushNormalizedDiscordPart(parts, field.name);
+      pushNormalizedDiscordPart(parts, field.value);
+    }
+    pushNormalizedDiscordPart(parts, embed.footer?.text);
+  }
+
+  for (const attachment of message.attachments ?? []) {
+    pushNormalizedDiscordPart(parts, attachment.title);
+    pushNormalizedDiscordPart(parts, attachment.filename);
+    pushNormalizedDiscordPart(parts, attachment.description);
+    pushNormalizedDiscordPart(parts, attachment.url);
+  }
+
+  return parts.join('\n');
 }
 
 function parseDiscordTimestamp(value: string | null | undefined): Date | null {
@@ -223,7 +283,7 @@ export class AiDiscordChannelSyncService {
       const messages = await this.fetchChannelMessages(source.channelId);
       const syncMessages = messages
         .map((message) => {
-          const contentText = normalizeDiscordMessageContent(message.content ?? '');
+          const contentText = extractDiscordMessageKnowledgeText(message);
           return {
             message,
             contentText,
