@@ -341,6 +341,35 @@ describe('AI message runtime', () => {
     });
   });
 
+  it('allows replies through a selected parent forum channel for thread messages', async () => {
+    const dependencies = createDependencies({
+      state: createGuildState({
+        replyChannels: [{ channelId: 'forum-channel', replyMode: 'thread' }],
+        replyChannelCategories: [],
+      }),
+    });
+
+    const result = await handleAiMessage(
+      {
+        id: 'msg-1',
+        guildId: 'guild-1',
+        channelId: 'forum-thread',
+        parentChannelId: 'forum-channel',
+        parentCategoryId: 'category-1',
+        author: { bot: false, id: 'user-1' },
+        content: 'refund policy?',
+        memberRoleIds: ['role-1'],
+      },
+      dependencies,
+    );
+
+    expect(result).toEqual({
+      kind: 'reply',
+      replyMode: 'thread',
+      content: 'Grounded answer',
+    });
+  });
+
   it('returns ignored when grounded answering returns a refusal and unanswered logging is disabled', async () => {
     const dependencies = createDependencies({
       answerResult: createOkResult({

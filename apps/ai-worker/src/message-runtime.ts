@@ -19,6 +19,7 @@ export type AiRuntimeMessage = {
   };
   content: string;
   memberRoleIds: string[];
+  parentChannelId?: string | null;
   parentCategoryId?: string | null;
 };
 
@@ -158,10 +159,13 @@ export function createAiMessageRuntimeDependencies(input?: {
 function resolveReplyMode(input: {
   state: AiRuntimeGuildState;
   channelId: string;
+  parentChannelId?: string | null;
   parentCategoryId?: string | null;
 }): AiReplyMode | null {
   const replyChannel = input.state.replyChannels.find(
-    (channel) => channel.channelId === input.channelId,
+    (channel) =>
+      channel.channelId === input.channelId ||
+      (input.parentChannelId ? channel.channelId === input.parentChannelId : false),
   );
 
   if (replyChannel) {
@@ -235,6 +239,7 @@ export async function handleAiMessage(
   const replyMode = resolveReplyMode({
     state,
     channelId: message.channelId,
+    parentChannelId: message.parentChannelId,
     parentCategoryId: message.parentCategoryId,
   });
   if (!replyMode) {

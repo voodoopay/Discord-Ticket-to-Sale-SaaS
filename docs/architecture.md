@@ -37,7 +37,7 @@
 - Runs as a separate Next.js product surface on its own domain.
 - Handles Discord OAuth on the AI panel domain, guild access filtering for owners/admins, and all AI bot configuration flows.
 - Exposes guild-scoped API routes for AI settings, website sources, custom Q&A entries, bot resource discovery, and diagnostics snapshots.
-- Supports category-level reply and Discord knowledge source rules so newly created channels can be picked up without reconfiguring the panel.
+- Supports category-level reply and Discord knowledge source rules so newly created text, announcement, forum, and media channels can be picked up without reconfiguring the panel.
 - Lets admins configure reply frequency and an unanswered-question log channel for turning missed answers into Custom Q&A.
 
 8. `ai-worker`
@@ -70,7 +70,7 @@
   - `ai_role_rules` for allowlist/blocklist role filtering
   - `ai_website_sources` for manual approved URLs and sync state
   - `ai_knowledge_documents` for normalized synced website content
-  - `ai_discord_channel_sources` and `ai_discord_channel_category_sources` for synced Discord knowledge channels and category auto-select rules
+  - `ai_discord_channel_sources` and `ai_discord_channel_category_sources` for synced Discord knowledge channels, forum/media post threads, and category auto-select rules
   - `ai_custom_qas` for admin-authored grounded Q&A pairs
 
 ## Security and Reliability

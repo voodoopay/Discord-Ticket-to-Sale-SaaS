@@ -57,6 +57,19 @@ type DiscordGuildChannelPayload = {
   parent_id?: string | null;
 };
 
+type DiscordThreadPayload = {
+  id: string;
+  name?: string | null;
+  thread_metadata?: {
+    archive_timestamp?: string | null;
+  } | null;
+};
+
+type DiscordThreadListPayload = {
+  threads?: DiscordThreadPayload[];
+  has_more?: boolean;
+};
+
 export type AiDiscordChannelSourceSummary = {
   sourceId: string;
   guildId: string;
@@ -485,7 +498,7 @@ export class AiDiscordChannelSyncService {
         updatedByDiscordUserId: input.actorDiscordUserId ?? null,
       });
 
-      const messages = await this.fetchChannelMessages(source.channelId);
+      const messages = await this.fetchKnowledgeMessages(source.channelId);
       const syncMessages = messages
         .map((message) => {
           const contentText = extractDiscordMessageKnowledgeText(message);
@@ -497,7 +510,7 @@ export class AiDiscordChannelSyncService {
         .filter((entry) => entry.contentText.length > 0)
         .map((entry) => ({
           messageId: entry.message.id,
-          channelId: source.channelId,
+          channelId: entry.message.channel_id ?? source.channelId,
           authorId: entry.message.author?.id ?? null,
           contentText: entry.contentText,
           contentHash: createHash('sha256').update(entry.contentText).digest('hex'),
@@ -505,6 +518,7 @@ export class AiDiscordChannelSyncService {
           messageEditedAt: parseDiscordTimestamp(entry.message.edited_timestamp),
           metadataJson: {
             channelId: source.channelId,
+            messageChannelId: entry.message.channel_id ?? source.channelId,
             authorId: entry.message.author?.id ?? null,
             authorBot: Boolean(entry.message.author?.bot),
             discordTimestamp: entry.message.timestamp ?? null,
@@ -612,6 +626,123 @@ export class AiDiscordChannelSyncService {
     return messages;
   }
 
+  private async fetchKnowledgeMessages(channelId: string): Promise<DiscordMessagePayload[]> {
+    try {
+      return await this.fetchChannelMessages(channelId);
+    } catch (error) {
+      if (!(error instanceof AppError) || error.code !== 'AI_DISCORD_CHANNEL_HISTORY_FAILED') {
+        throw error;
+      }
+
+      const channel = await this.fetchChannel(channelId);
+      if (!isForumLikeKnowledgeChannel(channel)) {
+        throw error;
+      }
+
+      return this.fetchForumLikeChannelMessages(channelId);
+    }
+  }
+
+  private async fetchChannel(channelId: string): Promise<DiscordGuildChannelPayload> {
+    const env = getEnv();
+    const token = env.AI_DISCORD_TOKEN.trim();
+    if (!token) {
+      throw new AppError('AI_DISCORD_TOKEN_MISSING', 'AI bot token is not configured.', 500);
+    }
+
+    const response = await this.fetchImpl(`${env.DISCORD_API_BASE_URL}/channels/${channelId}`, {
+      headers: {
+        Authorization: `Bot ${token}`,
+      },
+    });
+    if (!response.ok) {
+      throw new AppError(
+        'AI_DISCORD_CHANNEL_LOOKUP_FAILED',
+        `Discord channel could not be loaded (${response.status}).`,
+        response.status === 403 || response.status === 404 ? 422 : 502,
+      );
+    }
+
+    return (await response.json()) as DiscordGuildChannelPayload;
+  }
+
+  private async fetchForumLikeChannelMessages(channelId: string): Promise<DiscordMessagePayload[]> {
+    const threads = await this.fetchForumLikeThreads(channelId);
+    const messages: DiscordMessagePayload[] = [];
+
+    for (const thread of threads) {
+      if (messages.length >= AI_DISCORD_CHANNEL_BACKFILL_LIMIT) {
+        break;
+      }
+
+      const threadMessages = await this.fetchChannelMessages(thread.id);
+      messages.push(
+        ...threadMessages.slice(0, AI_DISCORD_CHANNEL_BACKFILL_LIMIT - messages.length).map((message) => ({
+          ...message,
+          channel_id: message.channel_id ?? thread.id,
+        })),
+      );
+    }
+
+    return messages;
+  }
+
+  private async fetchForumLikeThreads(channelId: string): Promise<DiscordThreadPayload[]> {
+    const activeThreads = await this.fetchThreadList(`${getEnv().DISCORD_API_BASE_URL}/channels/${channelId}/threads/active`);
+    const threadById = new Map<string, DiscordThreadPayload>();
+    for (const thread of activeThreads.threads ?? []) {
+      threadById.set(thread.id, thread);
+    }
+
+    let before: string | null = null;
+    while (threadById.size < AI_DISCORD_CHANNEL_BACKFILL_LIMIT) {
+      const url = new URL(`${getEnv().DISCORD_API_BASE_URL}/channels/${channelId}/threads/archived/public`);
+      url.searchParams.set('limit', '100');
+      if (before) {
+        url.searchParams.set('before', before);
+      }
+
+      const page = await this.fetchThreadList(url);
+      for (const thread of page.threads ?? []) {
+        threadById.set(thread.id, thread);
+      }
+
+      if (!page.has_more || !page.threads?.length) {
+        break;
+      }
+
+      before = page.threads.at(-1)?.thread_metadata?.archive_timestamp ?? null;
+      if (!before) {
+        break;
+      }
+    }
+
+    return Array.from(threadById.values());
+  }
+
+  private async fetchThreadList(url: string | URL): Promise<DiscordThreadListPayload> {
+    const env = getEnv();
+    const token = env.AI_DISCORD_TOKEN.trim();
+    if (!token) {
+      throw new AppError('AI_DISCORD_TOKEN_MISSING', 'AI bot token is not configured.', 500);
+    }
+
+    const response = await this.fetchImpl(url, {
+      headers: {
+        Authorization: `Bot ${token}`,
+      },
+    });
+    if (!response.ok) {
+      throw new AppError(
+        'AI_DISCORD_FORUM_THREADS_FAILED',
+        `Discord forum threads could not be loaded (${response.status}).`,
+        response.status === 403 || response.status === 404 ? 422 : 502,
+      );
+    }
+
+    return (await response.json()) as DiscordThreadListPayload;
+  }
+
   private async reconcileCategorySource(
     categorySource: AiDiscordChannelCategorySourceRecord,
     actorDiscordUserId: string | null,
@@ -695,5 +826,9 @@ export class AiDiscordChannelSyncService {
 }
 
 function isSyncableKnowledgeChannel(channel: DiscordGuildChannelPayload): boolean {
-  return channel.type === 0 || channel.type === 5;
+  return channel.type === 0 || channel.type === 5 || isForumLikeKnowledgeChannel(channel);
+}
+
+function isForumLikeKnowledgeChannel(channel: DiscordGuildChannelPayload): boolean {
+  return channel.type === 15 || channel.type === 16;
 }

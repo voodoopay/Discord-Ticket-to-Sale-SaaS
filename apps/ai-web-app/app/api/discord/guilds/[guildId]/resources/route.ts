@@ -6,7 +6,7 @@ import { requireAiGuildAccess } from '@/lib/ai-guild-access';
 import { jsonError } from '@/lib/http';
 
 const env = getEnv();
-const DISCORD_TEXT_CHANNEL_TYPES = new Set([0, 5]);
+const DISCORD_SELECTABLE_CHANNEL_TYPES = new Set([0, 5, 15, 16]);
 const DISCORD_CATEGORY_CHANNEL_TYPE = 4;
 
 function buildAiBotInviteUrl(): string {
@@ -101,7 +101,7 @@ export async function GET(
     }>;
 
     const channels = rawChannels
-      .filter((channel) => DISCORD_TEXT_CHANNEL_TYPES.has(channel.type))
+      .filter((channel) => DISCORD_SELECTABLE_CHANNEL_TYPES.has(channel.type))
       .sort((left, right) => (left.position ?? 0) - (right.position ?? 0))
       .map((channel) => ({
         id: channel.id,
