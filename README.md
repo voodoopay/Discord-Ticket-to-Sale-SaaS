@@ -227,6 +227,8 @@ Discord knowledge channels are intended for read-only or announcement channels. 
 - `SUPER_ADMIN_DISCORD_IDS` can remotely grant, revoke, and list AI bot activation entries for a target guild without joining that guild.
 - Normal configuration happens only in the AI web app:
   - reply channels and category auto-select rules with inline/thread mode
+  - reply frequency controls for low, mid, or max answer aggressiveness
+  - unanswered-question logging to a server admin channel with Discord `Add Q&A` conversion
   - allowlist/blocklist role rules
   - tone preset plus custom instructions
   - manual website sources with sync-on-save and manual re-sync
@@ -234,7 +236,7 @@ Discord knowledge channels are intended for read-only or announcement channels. 
   - custom Q&A entries
   - activation state, bot presence, and diagnostics
 - The Voodoo AI dashboard uses a black-and-white interactive Three.js control surface with Framer Motion transitions, persisted dark/light mode, and shadcn controls around live bot configuration.
-- The AI runtime only answers in configured channels or auto-selected reply categories, only for roles allowed by the guild rule set, and only from grounded website/Discord/custom-Q&A evidence. If retrieval is weak, it stays silent instead of falling back to general model knowledge.
+- The AI runtime only answers in configured channels or auto-selected reply categories, only for roles allowed by the guild rule set, and only from grounded website/Discord/custom-Q&A evidence. If retrieval is weak, it stays silent instead of falling back to general model knowledge, and can log the unanswered question for administrators to turn into a saved Q&A.
 
 ## Ticket Sale Flow
 

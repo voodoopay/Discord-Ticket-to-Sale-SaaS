@@ -12,6 +12,7 @@ import { activationCommand } from './commands/activation.js';
 import { createAiKnowledgeRefreshScheduler } from './knowledge-refresh.js';
 import {
   createAiClientOptions,
+  handleAiUnansweredLearningInteraction,
   mapAiWorkerError,
   processIncomingMessage,
 } from './runtime.js';
@@ -52,6 +53,10 @@ async function sendInteractionFailure(interaction: Interaction, message: string)
 }
 
 async function handleInteraction(interaction: Interaction): Promise<void> {
+  if (await handleAiUnansweredLearningInteraction(interaction)) {
+    return;
+  }
+
   if (!interaction.isChatInputCommand()) {
     return;
   }

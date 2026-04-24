@@ -82,6 +82,15 @@ describe('AI env and schema foundation', () => {
     expect(aiDiscordChannelMessages).toBeDefined();
   });
 
+  it('defines unanswered learning and reply frequency settings on AI guild configs', () => {
+    const tableConfig = getTableConfig(aiGuildConfigs);
+    const columnNames = tableConfig.columns.map((column) => column.name);
+
+    expect(columnNames).toContain('reply_frequency');
+    expect(columnNames).toContain('unanswered_logging_enabled');
+    expect(columnNames).toContain('unanswered_log_channel_id');
+  });
+
   it('enforces website source linkage and source-content deduplication for knowledge documents', () => {
     const tableConfig = getTableConfig(aiKnowledgeDocuments);
     const indexSummary = tableConfig.indexes.map((index) => ({

@@ -27,6 +27,7 @@ import { buildDashboardGuildUrl } from '@/lib/dashboard-url';
 type TonePreset = 'professional' | 'standard' | 'witty' | 'cheeky';
 type RoleMode = 'allowlist' | 'blocklist';
 type ReplyMode = 'inline' | 'thread';
+type ReplyFrequency = 'low' | 'mid' | 'max';
 
 type SnapshotPayload = {
   guild: AiDashboardGuild;
@@ -41,6 +42,9 @@ type SnapshotPayload = {
     toneInstructions: string;
     roleMode: RoleMode;
     defaultReplyMode: ReplyMode;
+    replyFrequency: ReplyFrequency;
+    unansweredLoggingEnabled: boolean;
+    unansweredLogChannelId: string | null;
     replyChannels: Array<{
       channelId: string;
       replyMode: ReplyMode;
@@ -1032,6 +1036,27 @@ export function AiControlPlane({
 
                 <label className="rounded-md border border-border/80 bg-card px-4 py-4">
                   <span className="text-[0.66rem] uppercase text-muted-foreground">
+                    Reply frequency
+                  </span>
+                  <select
+                    value={formState?.replyFrequency ?? 'mid'}
+                    onChange={(event) =>
+                      formState &&
+                      setFormState({
+                        ...formState,
+                        replyFrequency: event.target.value as ReplyFrequency,
+                      })
+                    }
+                    className="mt-3 h-11 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
+                  >
+                    <option value="low">Low</option>
+                    <option value="mid">Mid</option>
+                    <option value="max">Max</option>
+                  </select>
+                </label>
+
+                <label className="rounded-md border border-border/80 bg-card px-4 py-4">
+                  <span className="text-[0.66rem] uppercase text-muted-foreground">
                     Role filter mode
                   </span>
                   <select
@@ -1044,6 +1069,58 @@ export function AiControlPlane({
                   >
                     <option value="allowlist">Allowlisted roles only</option>
                     <option value="blocklist">Everyone except blocked roles</option>
+                  </select>
+                </label>
+
+                <label className="rounded-md border border-border/80 bg-card px-4 py-4">
+                  <span className="text-[0.66rem] uppercase text-muted-foreground">
+                    Unanswered logging
+                  </span>
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <span className="text-sm font-semibold text-foreground">
+                      {formState?.unansweredLoggingEnabled ? 'Log unanswered' : 'Do not log'}
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={formState?.unansweredLoggingEnabled ?? false}
+                      onChange={(event) =>
+                        formState &&
+                        setFormState({
+                          ...formState,
+                          unansweredLoggingEnabled: event.target.checked,
+                        })
+                      }
+                      className="size-5 accent-primary"
+                    />
+                  </div>
+                </label>
+
+                <label className="rounded-md border border-border/80 bg-card px-4 py-4 sm:col-span-2 xl:col-span-2">
+                  <span className="text-[0.66rem] uppercase text-muted-foreground">
+                    Unanswered log channel
+                  </span>
+                  <select
+                    value={formState?.unansweredLogChannelId ?? ''}
+                    onChange={(event) =>
+                      formState &&
+                      setFormState({
+                        ...formState,
+                        unansweredLogChannelId: event.target.value || null,
+                      })
+                    }
+                    disabled={!formState?.unansweredLoggingEnabled}
+                    className="mt-3 h-11 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground outline-none transition disabled:cursor-not-allowed disabled:opacity-50 focus:border-primary focus:ring-4 focus:ring-primary/10"
+                  >
+                    <option value="">No log channel</option>
+                    {channelCategoryOptions.map((category) => (
+                      <optgroup key={category.id} label={category.label}>
+                        {(channelsByCategory.get(category.id) ?? []).map((channel) => (
+                          <option key={channel.id} value={channel.id}>
+                            #{channel.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
                   </select>
                 </label>
               </div>

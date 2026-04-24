@@ -24,10 +24,17 @@ vi.mock('@voodoo/core', () => {
     }
   }
 
+  class AiKnowledgeManagementService {
+    public async createCustomQa(): Promise<never> {
+      throw new Error('Mock createCustomQa not implemented');
+    }
+  }
+
   return {
     AiAccessService,
     AiConfigService,
     AiAnswerService,
+    AiKnowledgeManagementService,
     logger: {
       warn: loggerWarn,
     },
@@ -35,7 +42,12 @@ vi.mock('@voodoo/core', () => {
 });
 
 import { handleAiMessage, type AiMessageRuntimeDependencies } from './message-runtime.js';
-import { processIncomingMessage } from './runtime.js';
+import {
+  AI_UNANSWERED_ADD_QA_CUSTOM_ID,
+  AI_UNANSWERED_MODAL_CUSTOM_ID,
+  handleAiUnansweredLearningInteraction,
+  processIncomingMessage,
+} from './runtime.js';
 
 function createOkResult<T>(value: T): { isErr: () => false; isOk: () => true; value: T } {
   return {
@@ -53,6 +65,9 @@ function createGuildState(overrides?: Partial<Awaited<ReturnType<AiMessageRuntim
     toneInstructions: '',
     roleMode: 'allowlist' as const,
     defaultReplyMode: 'inline' as const,
+    replyFrequency: 'mid' as const,
+    unansweredLoggingEnabled: false,
+    unansweredLogChannelId: null,
     replyChannels: [{ channelId: 'allowed-channel', replyMode: 'inline' as const }],
     replyChannelCategories: [],
     roleIds: ['role-1'],
@@ -294,6 +309,7 @@ describe('AI message runtime', () => {
       question: 'refund policy?',
       tonePreset: 'professional',
       toneInstructions: '',
+      replyFrequency: 'mid',
     });
   });
 
@@ -325,7 +341,7 @@ describe('AI message runtime', () => {
     });
   });
 
-  it('does not reply when grounded answering returns a refusal', async () => {
+  it('returns ignored when grounded answering returns a refusal and unanswered logging is disabled', async () => {
     const dependencies = createDependencies({
       answerResult: createOkResult({
         kind: 'refusal',
@@ -347,6 +363,42 @@ describe('AI message runtime', () => {
     );
 
     expect(result).toEqual({ kind: 'ignored' });
+  });
+
+  it('returns unanswered log intent when grounded answering returns a refusal and logging is configured', async () => {
+    const dependencies = createDependencies({
+      state: createGuildState({
+        unansweredLoggingEnabled: true,
+        unansweredLogChannelId: 'log-channel',
+      }),
+      answerResult: createOkResult({
+        kind: 'refusal',
+        content: 'I do not have enough approved information to answer that yet.',
+        evidenceCount: 0,
+      }),
+    });
+
+    const result = await handleAiMessage(
+      {
+        id: 'msg-1',
+        guildId: 'guild-1',
+        channelId: 'allowed-channel',
+        author: { bot: false, id: 'user-1' },
+        content: 'unknown question?',
+        memberRoleIds: ['role-1'],
+      },
+      dependencies,
+    );
+
+    expect(result).toEqual({
+      kind: 'unanswered',
+      logChannelId: 'log-channel',
+      guildId: 'guild-1',
+      sourceChannelId: 'allowed-channel',
+      authorId: 'user-1',
+      messageId: 'msg-1',
+      question: 'unknown question?',
+    });
   });
 
   it('replies inline in the source channel when inline mode is configured', async () => {
@@ -390,6 +442,147 @@ describe('AI message runtime', () => {
         missingPermissions: ['SendMessages'],
       }),
       'ai-worker missing Discord permissions for passive reply',
+    );
+  });
+
+  it('logs unanswered questions to the configured channel', async () => {
+    const dependencies = createDependencies({
+      state: createGuildState({
+        unansweredLoggingEnabled: true,
+        unansweredLogChannelId: 'log-channel',
+      }),
+      answerResult: createOkResult({
+        kind: 'refusal',
+        content: 'I do not have enough approved information to answer that yet.',
+        evidenceCount: 0,
+      }),
+    });
+    const { message, reply } = createMessage({ content: 'unknown question?' });
+    const logSend = vi.fn(async () => undefined);
+    const fetchChannel = vi.fn(async () => ({ send: logSend }));
+    const client = {
+      channels: {
+        fetch: fetchChannel,
+      },
+    } as never;
+
+    await processIncomingMessage(client, message, dependencies);
+
+    expect(reply).not.toHaveBeenCalled();
+    expect(fetchChannel).toHaveBeenCalledWith('log-channel');
+    expect(logSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        embeds: expect.any(Array),
+        components: expect.any(Array),
+      }),
+    );
+    const logSendCalls = logSend.mock.calls as unknown as Array<[
+      {
+        components: Array<{ components: Array<{ data: { custom_id: string } }> }>;
+      },
+    ]>;
+    const payload = logSendCalls[0]?.[0] as {
+      components: Array<{ components: Array<{ data: { custom_id: string } }> }>;
+    };
+    expect(payload.components[0]?.components[0]?.data.custom_id).toBe(
+      AI_UNANSWERED_ADD_QA_CUSTOM_ID,
+    );
+  });
+
+  it('rejects Add Q&A button clicks from non-admin members', async () => {
+    const reply = vi.fn(async () => undefined);
+    const interaction = {
+      isButton: () => true,
+      isModalSubmit: () => false,
+      customId: AI_UNANSWERED_ADD_QA_CUSTOM_ID,
+      guildId: 'guild-1',
+      memberPermissions: {
+        has: vi.fn(() => false),
+      },
+      reply,
+    } as never;
+
+    const handled = await handleAiUnansweredLearningInteraction(interaction);
+
+    expect(handled).toBe(true);
+    expect(reply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining('Administrator'),
+      }),
+    );
+  });
+
+  it('opens an Add Q&A modal for admin button clicks', async () => {
+    const showModal = vi.fn(async () => undefined);
+    const interaction = {
+      isButton: () => true,
+      isModalSubmit: () => false,
+      customId: AI_UNANSWERED_ADD_QA_CUSTOM_ID,
+      guildId: 'guild-1',
+      memberPermissions: {
+        has: vi.fn(() => true),
+      },
+      message: {
+        embeds: [
+          {
+            fields: [{ name: 'Question', value: 'unknown question?' }],
+          },
+        ],
+      },
+      showModal,
+    } as never;
+
+    const handled = await handleAiUnansweredLearningInteraction(interaction);
+
+    expect(handled).toBe(true);
+    expect(showModal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          custom_id: AI_UNANSWERED_MODAL_CUSTOM_ID,
+        }),
+      }),
+    );
+  });
+
+  it('saves a Custom Q&A entry from the unanswered modal submission', async () => {
+    const reply = vi.fn(async () => undefined);
+    const createCustomQa = vi.fn(async () =>
+      createOkResult({
+        customQaId: 'qa-1',
+        question: 'unknown question?',
+        answer: 'Use the setup guide.',
+        updatedAt: new Date().toISOString(),
+      }),
+    );
+    const interaction = {
+      isButton: () => false,
+      isModalSubmit: () => true,
+      customId: AI_UNANSWERED_MODAL_CUSTOM_ID,
+      guildId: 'guild-1',
+      user: { id: 'admin-1' },
+      fields: {
+        getTextInputValue: vi.fn((fieldId: string) =>
+          fieldId === 'question' ? 'unknown question?' : 'Use the setup guide.',
+        ),
+      },
+      reply,
+    } as never;
+
+    const handled = await handleAiUnansweredLearningInteraction(interaction, {
+      createCustomQa,
+    } as never);
+
+    expect(handled).toBe(true);
+    expect(createCustomQa).toHaveBeenCalledWith({
+      guildId: 'guild-1',
+      question: 'unknown question?',
+      answer: 'Use the setup guide.',
+      actorDiscordUserId: 'admin-1',
+    });
+    expect(reply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining('saved'),
+      }),
     );
   });
 });

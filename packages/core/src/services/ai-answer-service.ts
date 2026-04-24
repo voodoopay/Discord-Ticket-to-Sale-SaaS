@@ -10,7 +10,7 @@ import {
   AiKnowledgeRepository,
   type AiRetrievedEvidence,
 } from '../repositories/ai-knowledge-repository.js';
-import type { AiTonePreset } from '../repositories/ai-config-repository.js';
+import type { AiReplyFrequency, AiTonePreset } from '../repositories/ai-config-repository.js';
 
 const GROUNDED_REFUSAL_MESSAGE = 'I do not have enough approved information to answer that yet.';
 
@@ -110,6 +110,17 @@ function mapEvidenceSummary(evidence: AiRetrievedEvidence[]): AiAnswerEvidenceSu
   }));
 }
 
+function filterEvidenceForReplyFrequency(
+  evidence: AiRetrievedEvidence[],
+  replyFrequency: AiReplyFrequency,
+): AiRetrievedEvidence[] {
+  if (replyFrequency !== 'low') {
+    return evidence;
+  }
+
+  return evidence.filter((item) => item.sourceType === 'custom_qa' || item.score >= 4);
+}
+
 export class AiAnswerService {
   constructor(
     private readonly knowledgeRepository: AiAnswerRepositoryLike = new AiKnowledgeRepository(),
@@ -121,14 +132,19 @@ export class AiAnswerService {
     question: string;
     tonePreset: AiTonePreset;
     toneInstructions: string;
+    replyFrequency?: AiReplyFrequency;
   }): Promise<Result<AiAnswerResult, AppError>> {
     try {
       const evidence = await this.knowledgeRepository.retrieveEvidence({
         guildId: input.guildId,
         question: input.question,
       });
+      const qualifiedEvidence = filterEvidenceForReplyFrequency(
+        evidence,
+        input.replyFrequency ?? 'mid',
+      );
 
-      if (evidence.length === 0) {
+      if (qualifiedEvidence.length === 0) {
         return ok({
           kind: 'refusal',
           content: GROUNDED_REFUSAL_MESSAGE,
@@ -140,7 +156,7 @@ export class AiAnswerService {
         instructions: buildInstructions({
           tonePreset: input.tonePreset,
           toneInstructions: input.toneInstructions,
-          evidence,
+          evidence: qualifiedEvidence,
         }),
         question: input.question,
       });
@@ -157,8 +173,8 @@ export class AiAnswerService {
       return ok({
         kind: 'answer',
         content,
-        evidenceCount: evidence.length,
-        evidence: mapEvidenceSummary(evidence),
+        evidenceCount: qualifiedEvidence.length,
+        evidence: mapEvidenceSummary(qualifiedEvidence),
       });
     } catch (error) {
       return err(

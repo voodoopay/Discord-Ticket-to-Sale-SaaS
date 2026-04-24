@@ -1,17 +1,32 @@
 import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  EmbedBuilder,
   GatewayIntentBits,
+  MessageFlags,
+  ModalBuilder,
   PermissionFlagsBits,
+  TextInputBuilder,
+  TextInputStyle,
   type AnyThreadChannel,
   type Client,
   type ClientOptions,
+  type Interaction,
   type Message,
 } from 'discord.js';
-import { logger, type AiReplyMode } from '@voodoo/core';
+import { AiKnowledgeManagementService, logger, type AiReplyMode } from '@voodoo/core';
 
 import {
   handleAiMessage,
   type AiMessageRuntimeDependencies,
+  type AiRuntimeUnanswered,
 } from './message-runtime.js';
+
+export const AI_UNANSWERED_ADD_QA_CUSTOM_ID = 'ai:unanswered:add-qa';
+export const AI_UNANSWERED_MODAL_CUSTOM_ID = 'ai:unanswered:qa-submit';
+const AI_UNANSWERED_QUESTION_FIELD_ID = 'question';
+const AI_UNANSWERED_ANSWER_FIELD_ID = 'answer';
 
 export function createAiClientOptions(): ClientOptions {
   return {
@@ -101,8 +116,171 @@ function getMissingPermissions(message: Message, replyMode: AiReplyMode): string
     .map(({ name }) => name);
 }
 
+function truncateModalValue(value: string): string {
+  return value.length > 4000 ? value.slice(0, 4000) : value;
+}
+
+function extractQuestionFromUnansweredLog(interaction: Interaction): string | null {
+  if (!interaction.isButton()) {
+    return null;
+  }
+
+  const field = interaction.message.embeds[0]?.fields.find((embedField) => embedField.name === 'Question');
+  const value = field?.value.trim();
+  return value && value.length > 0 ? value : null;
+}
+
+function buildUnansweredLogPayload(result: AiRuntimeUnanswered) {
+  const embed = new EmbedBuilder()
+    .setTitle('Unanswered AI question')
+    .setDescription('No approved answer was available for this message.')
+    .addFields(
+      { name: 'Question', value: result.question.slice(0, 1024) },
+      { name: 'Source', value: `<#${result.sourceChannelId}>`, inline: true },
+      { name: 'Asked by', value: `<@${result.authorId}>`, inline: true },
+      { name: 'Message ID', value: result.messageId, inline: true },
+    )
+    .setTimestamp(new Date());
+
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(AI_UNANSWERED_ADD_QA_CUSTOM_ID)
+      .setLabel('Add Q&A')
+      .setStyle(ButtonStyle.Primary),
+  );
+
+  return {
+    embeds: [embed],
+    components: [row],
+  };
+}
+
+async function postUnansweredLog(client: Client, result: AiRuntimeUnanswered): Promise<void> {
+  try {
+    const channel = await client.channels.fetch(result.logChannelId);
+    if (!channel || !('send' in channel)) {
+      logger.warn(
+        {
+          guildId: result.guildId,
+          logChannelId: result.logChannelId,
+          messageId: result.messageId,
+        },
+        'ai-worker unanswered log channel is unavailable',
+      );
+      return;
+    }
+
+    await (channel as { send(input: ReturnType<typeof buildUnansweredLogPayload>): Promise<unknown> }).send(
+      buildUnansweredLogPayload(result),
+    );
+  } catch (error) {
+    logger.warn(
+      {
+        err: error,
+        guildId: result.guildId,
+        logChannelId: result.logChannelId,
+        messageId: result.messageId,
+      },
+      'ai-worker failed to post unanswered log',
+    );
+  }
+}
+
+function buildAddQaModal(question: string): ModalBuilder {
+  const questionInput = new TextInputBuilder()
+    .setCustomId(AI_UNANSWERED_QUESTION_FIELD_ID)
+    .setLabel('Question')
+    .setStyle(TextInputStyle.Paragraph)
+    .setRequired(true)
+    .setValue(truncateModalValue(question));
+
+  const answerInput = new TextInputBuilder()
+    .setCustomId(AI_UNANSWERED_ANSWER_FIELD_ID)
+    .setLabel('Answer')
+    .setStyle(TextInputStyle.Paragraph)
+    .setRequired(true);
+
+  return new ModalBuilder()
+    .setCustomId(AI_UNANSWERED_MODAL_CUSTOM_ID)
+    .setTitle('Add AI Q&A')
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(questionInput),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(answerInput),
+    );
+}
+
+type AiCustomQaCreator = Pick<AiKnowledgeManagementService, 'createCustomQa'>;
+
+export async function handleAiUnansweredLearningInteraction(
+  interaction: Interaction,
+  knowledgeService: AiCustomQaCreator = new AiKnowledgeManagementService(),
+): Promise<boolean> {
+  if (interaction.isButton() && interaction.customId === AI_UNANSWERED_ADD_QA_CUSTOM_ID) {
+    if (!interaction.guildId) {
+      await interaction.reply({
+        content: 'This Q&A action can only be used inside a server.',
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
+
+    if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
+      await interaction.reply({
+        content: 'You need the Discord Administrator permission to add AI Q&A entries.',
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
+
+    const question = extractQuestionFromUnansweredLog(interaction);
+    if (!question) {
+      await interaction.reply({
+        content: 'This unanswered item is missing its original question. Add the Q&A from the dashboard instead.',
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
+
+    await interaction.showModal(buildAddQaModal(question));
+    return true;
+  }
+
+  if (interaction.isModalSubmit() && interaction.customId === AI_UNANSWERED_MODAL_CUSTOM_ID) {
+    if (!interaction.guildId) {
+      await interaction.reply({
+        content: 'This Q&A action can only be used inside a server.',
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
+
+    const result = await knowledgeService.createCustomQa({
+      guildId: interaction.guildId,
+      question: interaction.fields.getTextInputValue(AI_UNANSWERED_QUESTION_FIELD_ID),
+      answer: interaction.fields.getTextInputValue(AI_UNANSWERED_ANSWER_FIELD_ID),
+      actorDiscordUserId: interaction.user.id,
+    });
+
+    if (result.isErr()) {
+      await interaction.reply({
+        content: result.error.message,
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
+
+    await interaction.reply({
+      content: 'AI Q&A saved. Future matching questions can use this answer.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
+  return false;
+}
+
 export async function processIncomingMessage(
-  _client: Client,
+  client: Client,
   message: Message,
   dependencies?: AiMessageRuntimeDependencies,
 ): Promise<void> {
@@ -133,6 +311,11 @@ export async function processIncomingMessage(
       },
       'ai-worker passive message handling failed',
     );
+    return;
+  }
+
+  if (result.kind === 'unanswered') {
+    await postUnansweredLog(client, result);
     return;
   }
 

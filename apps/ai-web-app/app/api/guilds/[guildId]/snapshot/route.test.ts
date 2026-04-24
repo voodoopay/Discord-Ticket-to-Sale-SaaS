@@ -85,6 +85,9 @@ describe('ai guild snapshot route', () => {
         toneInstructions: 'Stay concise.',
         roleMode: 'allowlist',
         defaultReplyMode: 'inline',
+        replyFrequency: 'low',
+        unansweredLoggingEnabled: true,
+        unansweredLogChannelId: 'log-channel-1',
         replyChannels: [{ channelId: 'channel-1', replyMode: 'thread' }],
         replyChannelCategories: [{ categoryId: 'category-1', replyMode: 'inline' }],
         roleIds: ['role-1'],
@@ -137,7 +140,12 @@ describe('ai guild snapshot route', () => {
     const payload = (await response.json()) as {
       guild: { id: string };
       activation: { activated: boolean };
-      settings: { tonePreset: string };
+      settings: {
+        tonePreset: string;
+        replyFrequency: string;
+        unansweredLoggingEnabled: boolean;
+        unansweredLogChannelId: string | null;
+      };
       websiteSources: Array<{ sourceId: string }>;
       discordChannelSources: Array<{ sourceId: string }>;
       discordChannelCategorySources: Array<{ sourceId: string }>;
@@ -146,6 +154,9 @@ describe('ai guild snapshot route', () => {
     expect(payload.guild.id).toBe('guild-1');
     expect(payload.activation.activated).toBe(true);
     expect(payload.settings.tonePreset).toBe('professional');
+    expect(payload.settings.replyFrequency).toBe('low');
+    expect(payload.settings.unansweredLoggingEnabled).toBe(true);
+    expect(payload.settings.unansweredLogChannelId).toBe('log-channel-1');
     expect(payload.websiteSources[0]?.sourceId).toBe('source-1');
     expect(payload.discordChannelSources[0]?.sourceId).toBe('discord-source-1');
     expect(payload.discordChannelCategorySources[0]?.sourceId).toBe('discord-category-source-1');

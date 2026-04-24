@@ -1,4 +1,11 @@
-import { AiAccessService, AiConfigService, type AiReplyMode, type AiRoleMode, type AiTonePreset } from '@voodoo/core';
+import {
+  AiAccessService,
+  AiConfigService,
+  type AiReplyFrequency,
+  type AiReplyMode,
+  type AiRoleMode,
+  type AiTonePreset,
+} from '@voodoo/core';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
@@ -14,6 +21,9 @@ type SaveAiSettingsBody = {
   toneInstructions: string;
   roleMode: AiRoleMode;
   defaultReplyMode: AiReplyMode;
+  replyFrequency?: AiReplyFrequency;
+  unansweredLoggingEnabled?: boolean;
+  unansweredLogChannelId?: string | null;
   replyChannels: Array<{
     channelId: string;
     replyMode: AiReplyMode;
@@ -84,6 +94,9 @@ export async function PATCH(
       toneInstructions: body.toneInstructions ?? '',
       roleMode: body.roleMode,
       defaultReplyMode: body.defaultReplyMode,
+      replyFrequency: body.replyFrequency ?? 'mid',
+      unansweredLoggingEnabled: body.unansweredLoggingEnabled ?? false,
+      unansweredLogChannelId: body.unansweredLogChannelId ?? null,
       replyChannels: body.replyChannels ?? [],
       replyChannelCategories: body.replyChannelCategories ?? [],
       roleIds: body.roleIds ?? [],

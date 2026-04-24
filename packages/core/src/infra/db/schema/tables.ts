@@ -856,6 +856,9 @@ export const aiGuildConfigs = mysqlTable(
     defaultReplyMode: mysqlEnum('default_reply_mode', ['inline', 'thread'])
       .notNull()
       .default('inline'),
+    replyFrequency: mysqlEnum('reply_frequency', ['low', 'mid', 'max']).notNull().default('mid'),
+    unansweredLoggingEnabled: boolean('unanswered_logging_enabled').notNull().default(false),
+    unansweredLogChannelId: varchar('unanswered_log_channel_id', { length: 32 }),
     createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
   },

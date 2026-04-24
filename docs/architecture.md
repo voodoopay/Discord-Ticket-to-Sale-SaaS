@@ -38,11 +38,13 @@
 - Handles Discord OAuth on the AI panel domain, guild access filtering for owners/admins, and all AI bot configuration flows.
 - Exposes guild-scoped API routes for AI settings, website sources, custom Q&A entries, bot resource discovery, and diagnostics snapshots.
 - Supports category-level reply and Discord knowledge source rules so newly created channels can be picked up without reconfiguring the panel.
+- Lets admins configure reply frequency and an unanswered-question log channel for turning missed answers into Custom Q&A.
 
 8. `ai-worker`
 - Runs as a separate Discord application/token dedicated to the AI bot.
 - Keeps `/activation` as the only slash-command surface.
 - Processes passive message replies in configured channels, enforces role allowlist/blocklist rules, retrieves grounded evidence, and posts inline or thread replies.
+- Logs unanswered qualifying questions to the configured admin channel and handles the Discord Add Q&A button/modal flow for members with Administrator permission.
 
 ## Data Layer
 

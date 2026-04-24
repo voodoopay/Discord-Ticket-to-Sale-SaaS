@@ -12,6 +12,7 @@ import {
 export type AiTonePreset = 'professional' | 'standard' | 'witty' | 'cheeky';
 export type AiRoleMode = 'allowlist' | 'blocklist';
 export type AiReplyMode = 'inline' | 'thread';
+export type AiReplyFrequency = 'low' | 'mid' | 'max';
 
 export type AiGuildConfigRecord = {
   id: string;
@@ -21,6 +22,9 @@ export type AiGuildConfigRecord = {
   toneInstructions: string;
   roleMode: AiRoleMode;
   defaultReplyMode: AiReplyMode;
+  replyFrequency: AiReplyFrequency;
+  unansweredLoggingEnabled: boolean;
+  unansweredLogChannelId: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -58,6 +62,9 @@ export type AiGuildSettingsSnapshot = {
   toneInstructions: string;
   roleMode: AiRoleMode;
   defaultReplyMode: AiReplyMode;
+  replyFrequency: AiReplyFrequency;
+  unansweredLoggingEnabled: boolean;
+  unansweredLogChannelId: string | null;
   replyChannels: Array<{
     channelId: string;
     replyMode: AiReplyMode;
@@ -78,6 +85,9 @@ export type SaveAiGuildSettingsInput = {
   toneInstructions: string;
   roleMode: AiRoleMode;
   defaultReplyMode: AiReplyMode;
+  replyFrequency: AiReplyFrequency;
+  unansweredLoggingEnabled: boolean;
+  unansweredLogChannelId: string | null;
   replyChannels: Array<{
     channelId: string;
     replyMode: AiReplyMode;
@@ -99,6 +109,9 @@ function mapGuildConfigRow(row: typeof aiGuildConfigs.$inferSelect): AiGuildConf
     toneInstructions: row.toneInstructions,
     roleMode: row.roleMode,
     defaultReplyMode: row.defaultReplyMode,
+    replyFrequency: row.replyFrequency,
+    unansweredLoggingEnabled: row.unansweredLoggingEnabled,
+    unansweredLogChannelId: row.unansweredLogChannelId ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -176,6 +189,9 @@ function buildDefaultSnapshot(guildId: string): AiGuildSettingsSnapshot {
     toneInstructions: '',
     roleMode: 'allowlist',
     defaultReplyMode: 'inline',
+    replyFrequency: 'mid',
+    unansweredLoggingEnabled: false,
+    unansweredLogChannelId: null,
     replyChannels: [],
     replyChannelCategories: [],
     roleIds: [],
@@ -245,6 +261,9 @@ export class AiConfigRepository {
       toneInstructions: config.toneInstructions,
       roleMode: config.roleMode,
       defaultReplyMode: config.defaultReplyMode,
+      replyFrequency: config.replyFrequency,
+      unansweredLoggingEnabled: config.unansweredLoggingEnabled,
+      unansweredLogChannelId: config.unansweredLogChannelId,
       replyChannels: replyChannels.map((replyChannel) => ({
         channelId: replyChannel.channelId,
         replyMode: replyChannel.replyMode,
@@ -283,6 +302,9 @@ export class AiConfigRepository {
             toneInstructions: input.toneInstructions,
             roleMode: input.roleMode,
             defaultReplyMode: input.defaultReplyMode,
+            replyFrequency: input.replyFrequency,
+            unansweredLoggingEnabled: input.unansweredLoggingEnabled,
+            unansweredLogChannelId: input.unansweredLogChannelId,
             updatedAt: now,
           })
           .where(eq(aiGuildConfigs.id, existing.id));
@@ -295,6 +317,9 @@ export class AiConfigRepository {
           toneInstructions: input.toneInstructions,
           roleMode: input.roleMode,
           defaultReplyMode: input.defaultReplyMode,
+          replyFrequency: input.replyFrequency,
+          unansweredLoggingEnabled: input.unansweredLoggingEnabled,
+          unansweredLogChannelId: input.unansweredLogChannelId,
           createdAt: now,
           updatedAt: now,
         });
@@ -350,6 +375,9 @@ export class AiConfigRepository {
         toneInstructions: input.toneInstructions,
         roleMode: input.roleMode,
         defaultReplyMode: input.defaultReplyMode,
+        replyFrequency: input.replyFrequency,
+        unansweredLoggingEnabled: input.unansweredLoggingEnabled,
+        unansweredLogChannelId: input.unansweredLogChannelId,
         replyChannels: replyChannels.map((replyChannel) => ({
           channelId: replyChannel.channelId,
           replyMode: replyChannel.replyMode,

@@ -225,6 +225,13 @@
       "when": 1776991200000,
       "tag": "0031_ai_channel_category_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "5",
+      "when": 1777024800000,
+      "tag": "0032_ai_unanswered_learning",
+      "breakpoints": true
     }
   ]
 }

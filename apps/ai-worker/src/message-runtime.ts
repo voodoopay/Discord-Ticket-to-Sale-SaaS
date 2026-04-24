@@ -3,6 +3,7 @@ import {
   AiAnswerService,
   AiConfigService,
   type AiAnswerResult,
+  type AiReplyFrequency,
   type AiReplyMode,
   type AiRoleMode,
   type AiTonePreset,
@@ -28,6 +29,9 @@ export type AiRuntimeGuildState = {
   toneInstructions: string;
   roleMode: AiRoleMode;
   defaultReplyMode: AiReplyMode;
+  replyFrequency: AiReplyFrequency;
+  unansweredLoggingEnabled: boolean;
+  unansweredLogChannelId: string | null;
   replyChannels: Array<{
     channelId: string;
     replyMode: AiReplyMode;
@@ -45,7 +49,21 @@ export type AiRuntimeReply = {
   content: string;
 };
 
-export type AiRuntimeResult = { kind: 'ignored' } | { kind: 'failed'; message: string } | AiRuntimeReply;
+export type AiRuntimeUnanswered = {
+  kind: 'unanswered';
+  guildId: string;
+  logChannelId: string;
+  sourceChannelId: string;
+  authorId: string;
+  messageId: string;
+  question: string;
+};
+
+export type AiRuntimeResult =
+  | { kind: 'ignored' }
+  | { kind: 'failed'; message: string }
+  | AiRuntimeReply
+  | AiRuntimeUnanswered;
 
 export type AiMessageRuntimeDependencies = {
   loadGuildState(input: { guildId: string }): Promise<AiRuntimeGuildState>;
@@ -54,6 +72,7 @@ export type AiMessageRuntimeDependencies = {
     question: string;
     tonePreset: AiTonePreset;
     toneInstructions: string;
+    replyFrequency: AiReplyFrequency;
   }): ReturnType<AiAnswerService['answerMessage']>;
 };
 
@@ -116,17 +135,21 @@ export function createAiMessageRuntimeDependencies(input?: {
         toneInstructions: settingsResult.value.toneInstructions,
         roleMode: settingsResult.value.roleMode,
         defaultReplyMode: settingsResult.value.defaultReplyMode,
+        replyFrequency: settingsResult.value.replyFrequency,
+        unansweredLoggingEnabled: settingsResult.value.unansweredLoggingEnabled,
+        unansweredLogChannelId: settingsResult.value.unansweredLogChannelId,
         replyChannels: settingsResult.value.replyChannels,
         replyChannelCategories: settingsResult.value.replyChannelCategories,
         roleIds: settingsResult.value.roleIds,
       };
     },
-    answerMessage({ guildId, question, tonePreset, toneInstructions }) {
+    answerMessage({ guildId, question, tonePreset, toneInstructions, replyFrequency }) {
       return answerService.answerMessage({
         guildId,
         question,
         tonePreset,
         toneInstructions,
+        replyFrequency,
       });
     },
   };
@@ -157,10 +180,25 @@ function resolveReplyMode(input: {
 }
 
 function mapAnswerToReply(input: {
+  message: AiRuntimeMessage;
+  question: string;
+  state: AiRuntimeGuildState;
   replyMode: AiReplyMode;
   answer: AiAnswerResult;
-}): AiRuntimeReply | { kind: 'ignored' } {
+}): AiRuntimeReply | AiRuntimeUnanswered | { kind: 'ignored' } {
   if (input.answer.kind === 'refusal') {
+    if (input.state.unansweredLoggingEnabled && input.state.unansweredLogChannelId) {
+      return {
+        kind: 'unanswered',
+        guildId: input.message.guildId ?? '',
+        logChannelId: input.state.unansweredLogChannelId,
+        sourceChannelId: input.message.channelId,
+        authorId: input.message.author.id,
+        messageId: input.message.id,
+        question: input.question,
+      };
+    }
+
     return { kind: 'ignored' };
   }
 
@@ -218,6 +256,7 @@ export async function handleAiMessage(
     question: normalizedContent,
     tonePreset: state.tonePreset,
     toneInstructions: state.toneInstructions,
+    replyFrequency: state.replyFrequency,
   });
 
   if (answerResult.isErr()) {
@@ -228,6 +267,9 @@ export async function handleAiMessage(
   }
 
   return mapAnswerToReply({
+    message,
+    question: normalizedContent,
+    state,
     replyMode,
     answer: answerResult.value,
   });
