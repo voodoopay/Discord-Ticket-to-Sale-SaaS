@@ -72,7 +72,7 @@ Copy `.env.example` to `.env` and fill values.
 
 Voodoo AI separates where the bot replies from what the bot can use as evidence. Reply channels control where the bot answers. Website sources, custom Q&A, and Discord knowledge channels control what the bot can cite when generating answers.
 
-Discord knowledge channels are intended for read-only or announcement channels. Selecting one backfills the latest 500 messages, stores message text plus Discord embed text as grounding material, refreshes selected channels four times per day, and removes deleted messages from stored knowledge when Discord emits a delete event. Website sources are also refreshed four times per day so updated docs or blogs are picked up automatically. If the AI cannot ground an answer in approved evidence, it stays silent instead of posting a fallback refusal.
+Discord knowledge channels are intended for read-only or announcement channels. Selecting one backfills the latest 500 messages, stores message text plus Discord embed text as grounding material, refreshes selected channels four times per day, and removes deleted messages from stored knowledge when Discord emits a delete event. Categories can also be auto-selected so every current and future text or announcement channel inside the category is backfilled and refreshed automatically. Website sources are also refreshed four times per day so updated docs or blogs are picked up automatically. If the AI cannot ground an answer in approved evidence, it stays silent instead of posting a fallback refusal.
 
 ## Commands
 
@@ -226,14 +226,15 @@ Discord knowledge channels are intended for read-only or announcement channels. 
 - AI bot activation is isolated from sales, join-gate, nuke, sports, and channel-copy access.
 - `SUPER_ADMIN_DISCORD_IDS` can remotely grant, revoke, and list AI bot activation entries for a target guild without joining that guild.
 - Normal configuration happens only in the AI web app:
-  - reply channels and per-channel inline/thread mode
+  - reply channels and category auto-select rules with inline/thread mode
   - allowlist/blocklist role rules
   - tone preset plus custom instructions
   - manual website sources with sync-on-save and manual re-sync
+  - Discord knowledge channels and category auto-select rules for current/future channels
   - custom Q&A entries
   - activation state, bot presence, and diagnostics
 - The Voodoo AI dashboard uses a black-and-white interactive Three.js control surface with Framer Motion transitions, persisted dark/light mode, and shadcn controls around live bot configuration.
-- The AI runtime only answers in configured channels, only for roles allowed by the guild rule set, and only from grounded website/custom-Q&A evidence. If retrieval is weak, it refuses instead of falling back to general model knowledge.
+- The AI runtime only answers in configured channels or auto-selected reply categories, only for roles allowed by the guild rule set, and only from grounded website/Discord/custom-Q&A evidence. If retrieval is weak, it stays silent instead of falling back to general model knowledge.
 
 ## Ticket Sale Flow
 

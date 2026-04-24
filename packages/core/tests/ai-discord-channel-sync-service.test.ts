@@ -57,8 +57,11 @@ describe('AI Discord channel sync service', () => {
     const repository = {
       getDiscordChannelSource: vi.fn().mockResolvedValue(source),
       listDiscordChannelSources: vi.fn(),
+      listDiscordChannelCategorySources: vi.fn(),
       createDiscordChannelSource: vi.fn(),
+      createDiscordChannelCategorySource: vi.fn(),
       deleteDiscordChannelSource: vi.fn(),
+      deleteDiscordChannelCategorySource: vi.fn(),
       markDiscordChannelSyncStarted: vi.fn().mockResolvedValue(undefined),
       replaceDiscordChannelMessages: vi.fn().mockResolvedValue([]),
       markDiscordChannelSyncCompleted: vi.fn().mockResolvedValue(undefined),
@@ -140,8 +143,11 @@ describe('AI Discord channel sync service', () => {
     const repository = {
       getDiscordChannelSource: vi.fn().mockResolvedValue(source),
       listDiscordChannelSources: vi.fn(),
+      listDiscordChannelCategorySources: vi.fn(),
       createDiscordChannelSource: vi.fn(),
+      createDiscordChannelCategorySource: vi.fn(),
       deleteDiscordChannelSource: vi.fn(),
+      deleteDiscordChannelCategorySource: vi.fn(),
       markDiscordChannelSyncStarted: vi.fn().mockResolvedValue(undefined),
       replaceDiscordChannelMessages: vi.fn().mockResolvedValue([]),
       markDiscordChannelSyncCompleted: vi.fn().mockResolvedValue(undefined),
@@ -207,6 +213,104 @@ describe('AI Discord channel sync service', () => {
               'activation-guide.pdf',
               'Full activation checklist',
             ].join('\n'),
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('auto-creates and syncs channel sources for a selected knowledge category', async () => {
+    const categorySource = {
+      id: 'category-source-1',
+      guildId: 'guild-1',
+      categoryId: '111111111111111111',
+      createdByDiscordUserId: 'user-1',
+      updatedByDiscordUserId: 'user-1',
+      createdAt: new Date('2026-04-23T00:00:00.000Z'),
+      updatedAt: new Date('2026-04-23T00:00:00.000Z'),
+    };
+    const channelSource = {
+      id: 'source-1',
+      guildId: 'guild-1',
+      channelId: 'channel-1',
+      status: 'pending' as const,
+      lastSyncedAt: null,
+      lastSyncStartedAt: null,
+      lastSyncError: null,
+      lastMessageId: null,
+      messageCount: 0,
+      createdByDiscordUserId: 'user-1',
+      updatedByDiscordUserId: 'user-1',
+      createdAt: new Date('2026-04-23T00:00:00.000Z'),
+      updatedAt: new Date('2026-04-23T00:00:00.000Z'),
+    };
+    const repository = {
+      getDiscordChannelSource: vi.fn().mockResolvedValue(channelSource),
+      listDiscordChannelSources: vi.fn(),
+      listDiscordChannelCategorySources: vi.fn(),
+      createDiscordChannelSource: vi.fn().mockResolvedValue({ created: true, record: channelSource }),
+      createDiscordChannelCategorySource: vi.fn().mockResolvedValue({
+        created: true,
+        record: categorySource,
+      }),
+      deleteDiscordChannelSource: vi.fn(),
+      deleteDiscordChannelCategorySource: vi.fn(),
+      markDiscordChannelSyncStarted: vi.fn().mockResolvedValue(undefined),
+      replaceDiscordChannelMessages: vi.fn().mockResolvedValue([]),
+      markDiscordChannelSyncCompleted: vi.fn().mockResolvedValue(undefined),
+      markDiscordChannelSyncFailed: vi.fn().mockResolvedValue(undefined),
+      deleteDiscordChannelMessage: vi.fn(),
+    };
+    const fetchMock = vi.fn(async (url: string | URL) => {
+      const requestUrl = String(url);
+      if (requestUrl.endsWith('/guilds/guild-1/channels')) {
+        return new Response(
+          JSON.stringify([
+            { id: '111111111111111111', name: 'docs', type: 4 },
+            { id: 'channel-1', name: 'faq', type: 0, parent_id: '111111111111111111' },
+            { id: 'channel-2', name: 'chat', type: 0, parent_id: '222222222222222222' },
+          ]),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+
+      return new Response(
+        JSON.stringify([
+          {
+            id: 'msg-1',
+            author: { id: 'author-1', bot: false },
+            content: 'Category knowledge',
+            timestamp: '2026-04-23T12:00:00.000Z',
+            edited_timestamp: null,
+          },
+        ]),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    const service = new AiDiscordChannelSyncService(repository, fetchMock as typeof fetch);
+
+    const result = await service.createCategorySource({
+      guildId: 'guild-1',
+      categoryId: '111111111111111111',
+      actorDiscordUserId: 'user-1',
+    });
+
+    expect(result.isOk()).toBe(true);
+    expect(repository.createDiscordChannelSource).toHaveBeenCalledWith({
+      guildId: 'guild-1',
+      channelId: 'channel-1',
+      createdByDiscordUserId: 'user-1',
+    });
+    expect(repository.createDiscordChannelSource).toHaveBeenCalledTimes(1);
+    expect(repository.replaceDiscordChannelMessages).toHaveBeenCalledWith(
+      expect.objectContaining({
+        guildId: 'guild-1',
+        sourceId: 'source-1',
+        channelId: 'channel-1',
+        messages: [
+          expect.objectContaining({
+            messageId: 'msg-1',
+            contentText: 'Category knowledge',
           }),
         ],
       }),

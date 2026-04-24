@@ -8,6 +8,7 @@ const {
   listWebsiteSources,
   listCustomQas,
   listChannelSources,
+  listCategorySources,
 } = vi.hoisted(() => ({
   getGuildActivationState: vi.fn(),
   getGuildSettingsSnapshot: vi.fn(),
@@ -15,6 +16,7 @@ const {
   listWebsiteSources: vi.fn(),
   listCustomQas: vi.fn(),
   listChannelSources: vi.fn(),
+  listCategorySources: vi.fn(),
 }));
 
 const requireAiGuildAccess = vi.hoisted(() => vi.fn());
@@ -38,6 +40,7 @@ vi.mock('@voodoo/core', async (importOriginal) => {
     },
     AiDiscordChannelSyncService: class {
       public listChannelSources = listChannelSources;
+      public listCategorySources = listCategorySources;
     },
   };
 });
@@ -83,6 +86,7 @@ describe('ai guild snapshot route', () => {
         roleMode: 'allowlist',
         defaultReplyMode: 'inline',
         replyChannels: [{ channelId: 'channel-1', replyMode: 'thread' }],
+        replyChannelCategories: [{ categoryId: 'category-1', replyMode: 'inline' }],
         roleIds: ['role-1'],
         createdAt: '2026-04-23T10:00:00.000Z',
         updatedAt: '2026-04-23T10:10:00.000Z',
@@ -117,6 +121,10 @@ describe('ai guild snapshot route', () => {
       isErr: () => false,
       value: [{ sourceId: 'discord-source-1', channelId: 'channel-2', status: 'ready' }],
     });
+    listCategorySources.mockResolvedValue({
+      isErr: () => false,
+      value: [{ sourceId: 'discord-category-source-1', categoryId: 'category-1' }],
+    });
   });
 
   it('returns the aggregated panel snapshot for an accessible guild', async () => {
@@ -132,6 +140,7 @@ describe('ai guild snapshot route', () => {
       settings: { tonePreset: string };
       websiteSources: Array<{ sourceId: string }>;
       discordChannelSources: Array<{ sourceId: string }>;
+      discordChannelCategorySources: Array<{ sourceId: string }>;
       customQas: Array<{ customQaId: string }>;
     };
     expect(payload.guild.id).toBe('guild-1');
@@ -139,6 +148,7 @@ describe('ai guild snapshot route', () => {
     expect(payload.settings.tonePreset).toBe('professional');
     expect(payload.websiteSources[0]?.sourceId).toBe('source-1');
     expect(payload.discordChannelSources[0]?.sourceId).toBe('discord-source-1');
+    expect(payload.discordChannelCategorySources[0]?.sourceId).toBe('discord-category-source-1');
     expect(payload.customQas[0]?.customQaId).toBe('qa-1');
   });
 });

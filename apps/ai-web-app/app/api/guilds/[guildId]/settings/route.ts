@@ -18,6 +18,10 @@ type SaveAiSettingsBody = {
     channelId: string;
     replyMode: AiReplyMode;
   }>;
+  replyChannelCategories: Array<{
+    categoryId: string;
+    replyMode: AiReplyMode;
+  }>;
   roleIds: string[];
 };
 
@@ -81,6 +85,7 @@ export async function PATCH(
       roleMode: body.roleMode,
       defaultReplyMode: body.defaultReplyMode,
       replyChannels: body.replyChannels ?? [],
+      replyChannelCategories: body.replyChannelCategories ?? [],
       roleIds: body.roleIds ?? [],
       updatedByDiscordUserId: access.value.session.discordUserId,
     });

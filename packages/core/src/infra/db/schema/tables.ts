@@ -880,6 +880,25 @@ export const aiReplyChannels = mysqlTable(
   }),
 );
 
+export const aiReplyChannelCategories = mysqlTable(
+  'ai_reply_channel_categories',
+  {
+    id: varchar('id', { length: 26 }).primaryKey(),
+    guildId: varchar('guild_id', { length: 32 }).notNull(),
+    categoryId: varchar('category_id', { length: 32 }).notNull(),
+    replyMode: mysqlEnum('reply_mode', ['inline', 'thread']).notNull().default('inline'),
+    createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
+  },
+  (table) => ({
+    guildCategoryUnique: uniqueIndex('ai_reply_channel_categories_guild_category_uq').on(
+      table.guildId,
+      table.categoryId,
+    ),
+    guildIdx: index('ai_reply_channel_categories_guild_idx').on(table.guildId),
+  }),
+);
+
 export const aiRoleRules = mysqlTable(
   'ai_role_rules',
   {
@@ -992,6 +1011,26 @@ export const aiDiscordChannelSources = mysqlTable(
       table.guildId,
       table.status,
     ),
+  }),
+);
+
+export const aiDiscordChannelCategorySources = mysqlTable(
+  'ai_discord_channel_category_sources',
+  {
+    id: varchar('id', { length: 26 }).primaryKey(),
+    guildId: varchar('guild_id', { length: 32 }).notNull(),
+    categoryId: varchar('category_id', { length: 32 }).notNull(),
+    createdByDiscordUserId: varchar('created_by_discord_user_id', { length: 32 }),
+    updatedByDiscordUserId: varchar('updated_by_discord_user_id', { length: 32 }),
+    createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
+  },
+  (table) => ({
+    guildCategoryUnique: uniqueIndex('ai_discord_channel_category_sources_guild_category_uq').on(
+      table.guildId,
+      table.categoryId,
+    ),
+    guildIdx: index('ai_discord_channel_category_sources_guild_idx').on(table.guildId),
   }),
 );
 

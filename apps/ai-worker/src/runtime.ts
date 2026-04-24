@@ -40,6 +40,16 @@ function isThreadChannel(channel: Message['channel']): channel is AnyThreadChann
   return 'isThread' in channel && typeof channel.isThread === 'function' && channel.isThread();
 }
 
+function getParentCategoryId(message: Message): string | null {
+  if (isThreadChannel(message.channel)) {
+    return message.channel.parent && 'parentId' in message.channel.parent
+      ? message.channel.parent.parentId
+      : null;
+  }
+
+  return 'parentId' in message.channel ? message.channel.parentId : null;
+}
+
 function getRequiredPermissions(message: Message, replyMode: AiReplyMode): PermissionRequirement[] {
   const required: PermissionRequirement[] = [
     { bit: PermissionFlagsBits.ViewChannel, name: 'ViewChannel' },
@@ -101,6 +111,7 @@ export async function processIncomingMessage(
       id: message.id,
       guildId: message.guildId ?? null,
       channelId: message.channelId,
+      parentCategoryId: getParentCategoryId(message),
       author: { bot: message.author.bot, id: message.author.id },
       content: message.content,
       memberRoleIds: message.member?.roles.cache.map((role) => role.id) ?? [],

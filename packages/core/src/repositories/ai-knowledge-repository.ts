@@ -3,9 +3,10 @@ import { ulid } from 'ulid';
 
 import { getDb } from '../infra/db/client.js';
 import {
+  aiCustomQas,
+  aiDiscordChannelCategorySources,
   aiDiscordChannelMessages,
   aiDiscordChannelSources,
-  aiCustomQas,
   aiKnowledgeDocuments,
   aiWebsiteSources,
 } from '../infra/db/schema/index.js';
@@ -64,6 +65,16 @@ export type AiDiscordChannelSourceRecord = {
   lastSyncError: string | null;
   lastMessageId: string | null;
   messageCount: number;
+  createdByDiscordUserId: string | null;
+  updatedByDiscordUserId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type AiDiscordChannelCategorySourceRecord = {
+  id: string;
+  guildId: string;
+  categoryId: string;
   createdByDiscordUserId: string | null;
   updatedByDiscordUserId: string | null;
   createdAt: Date;
@@ -206,6 +217,20 @@ function mapDiscordChannelSourceRow(
     lastSyncError: row.lastSyncError ?? null,
     lastMessageId: row.lastMessageId ?? null,
     messageCount: row.messageCount,
+    createdByDiscordUserId: row.createdByDiscordUserId ?? null,
+    updatedByDiscordUserId: row.updatedByDiscordUserId ?? null,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function mapDiscordChannelCategorySourceRow(
+  row: typeof aiDiscordChannelCategorySources.$inferSelect,
+): AiDiscordChannelCategorySourceRecord {
+  return {
+    id: row.id,
+    guildId: row.guildId,
+    categoryId: row.categoryId,
     createdByDiscordUserId: row.createdByDiscordUserId ?? null,
     updatedByDiscordUserId: row.updatedByDiscordUserId ?? null,
     createdAt: row.createdAt,
@@ -523,6 +548,76 @@ export class AiKnowledgeRepository {
     });
 
     return rows.map(mapDiscordChannelSourceRow);
+  }
+
+  public async listDiscordChannelCategorySources(input: {
+    guildId?: string;
+  } = {}): Promise<AiDiscordChannelCategorySourceRecord[]> {
+    const rows = await this.db.query.aiDiscordChannelCategorySources.findMany({
+      where: input.guildId ? eq(aiDiscordChannelCategorySources.guildId, input.guildId) : undefined,
+      orderBy: (table, { asc }) => [asc(table.guildId), asc(table.categoryId), asc(table.id)],
+    });
+
+    return rows.map(mapDiscordChannelCategorySourceRow);
+  }
+
+  public async createDiscordChannelCategorySource(input: {
+    guildId: string;
+    categoryId: string;
+    createdByDiscordUserId?: string | null;
+  }): Promise<{ created: boolean; record: AiDiscordChannelCategorySourceRecord }> {
+    const existing = await this.db.query.aiDiscordChannelCategorySources.findFirst({
+      where: and(
+        eq(aiDiscordChannelCategorySources.guildId, input.guildId),
+        eq(aiDiscordChannelCategorySources.categoryId, input.categoryId),
+      ),
+    });
+
+    if (existing) {
+      return { created: false, record: mapDiscordChannelCategorySourceRow(existing) };
+    }
+
+    const now = new Date();
+    const sourceId = ulid();
+    await this.db.insert(aiDiscordChannelCategorySources).values({
+      id: sourceId,
+      guildId: input.guildId,
+      categoryId: input.categoryId,
+      createdByDiscordUserId: input.createdByDiscordUserId ?? null,
+      updatedByDiscordUserId: input.createdByDiscordUserId ?? null,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const created = await this.db.query.aiDiscordChannelCategorySources.findFirst({
+      where: eq(aiDiscordChannelCategorySources.id, sourceId),
+    });
+    if (!created) {
+      throw new Error('Failed to create AI Discord channel category source');
+    }
+
+    return { created: true, record: mapDiscordChannelCategorySourceRow(created) };
+  }
+
+  public async deleteDiscordChannelCategorySource(input: {
+    guildId: string;
+    categoryId: string;
+  }): Promise<boolean> {
+    const existing = await this.db.query.aiDiscordChannelCategorySources.findFirst({
+      where: and(
+        eq(aiDiscordChannelCategorySources.guildId, input.guildId),
+        eq(aiDiscordChannelCategorySources.categoryId, input.categoryId),
+      ),
+    });
+    if (!existing) {
+      return false;
+    }
+
+    await this.db
+      .delete(aiDiscordChannelCategorySources)
+      .where(eq(aiDiscordChannelCategorySources.id, existing.id));
+
+    return true;
   }
 
   public async createDiscordChannelSource(input: {

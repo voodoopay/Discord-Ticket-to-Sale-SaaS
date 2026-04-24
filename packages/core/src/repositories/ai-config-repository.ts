@@ -2,7 +2,12 @@ import { eq } from 'drizzle-orm';
 import { ulid } from 'ulid';
 
 import { getDb } from '../infra/db/client.js';
-import { aiGuildConfigs, aiReplyChannels, aiRoleRules } from '../infra/db/schema/index.js';
+import {
+  aiGuildConfigs,
+  aiReplyChannelCategories,
+  aiReplyChannels,
+  aiRoleRules,
+} from '../infra/db/schema/index.js';
 
 export type AiTonePreset = 'professional' | 'standard' | 'witty' | 'cheeky';
 export type AiRoleMode = 'allowlist' | 'blocklist';
@@ -29,6 +34,15 @@ export type AiReplyChannelRecord = {
   updatedAt: Date;
 };
 
+export type AiReplyChannelCategoryRecord = {
+  id: string;
+  guildId: string;
+  categoryId: string;
+  replyMode: AiReplyMode;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 export type AiRoleRuleRecord = {
   id: string;
   guildId: string;
@@ -48,6 +62,10 @@ export type AiGuildSettingsSnapshot = {
     channelId: string;
     replyMode: AiReplyMode;
   }>;
+  replyChannelCategories: Array<{
+    categoryId: string;
+    replyMode: AiReplyMode;
+  }>;
   roleIds: string[];
   createdAt: string | null;
   updatedAt: string | null;
@@ -62,6 +80,10 @@ export type SaveAiGuildSettingsInput = {
   defaultReplyMode: AiReplyMode;
   replyChannels: Array<{
     channelId: string;
+    replyMode: AiReplyMode;
+  }>;
+  replyChannelCategories: Array<{
+    categoryId: string;
     replyMode: AiReplyMode;
   }>;
   roleIds: string[];
@@ -93,6 +115,19 @@ function mapReplyChannelRow(row: typeof aiReplyChannels.$inferSelect): AiReplyCh
   };
 }
 
+function mapReplyChannelCategoryRow(
+  row: typeof aiReplyChannelCategories.$inferSelect,
+): AiReplyChannelCategoryRecord {
+  return {
+    id: row.id,
+    guildId: row.guildId,
+    categoryId: row.categoryId,
+    replyMode: row.replyMode,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
 function mapRoleRuleRow(row: typeof aiRoleRules.$inferSelect): AiRoleRuleRecord {
   return {
     id: row.id,
@@ -116,6 +151,19 @@ function dedupeReplyChannels(
   return [...deduped.values()];
 }
 
+function dedupeReplyChannelCategories(
+  replyChannelCategories: SaveAiGuildSettingsInput['replyChannelCategories'],
+): SaveAiGuildSettingsInput['replyChannelCategories'] {
+  const deduped = new Map<string, SaveAiGuildSettingsInput['replyChannelCategories'][number]>();
+  for (const replyChannelCategory of replyChannelCategories) {
+    if (!deduped.has(replyChannelCategory.categoryId)) {
+      deduped.set(replyChannelCategory.categoryId, replyChannelCategory);
+    }
+  }
+
+  return [...deduped.values()];
+}
+
 function dedupeRoleIds(roleIds: string[]): string[] {
   return [...new Set(roleIds)];
 }
@@ -129,6 +177,7 @@ function buildDefaultSnapshot(guildId: string): AiGuildSettingsSnapshot {
     roleMode: 'allowlist',
     defaultReplyMode: 'inline',
     replyChannels: [],
+    replyChannelCategories: [],
     roleIds: [],
     createdAt: null,
     updatedAt: null,
@@ -164,12 +213,24 @@ export class AiConfigRepository {
     return rows.map(mapRoleRuleRow);
   }
 
+  public async listReplyChannelCategories(input: {
+    guildId: string;
+  }): Promise<AiReplyChannelCategoryRecord[]> {
+    const rows = await this.db.query.aiReplyChannelCategories.findMany({
+      where: eq(aiReplyChannelCategories.guildId, input.guildId),
+      orderBy: (table, { asc }) => [asc(table.createdAt), asc(table.categoryId), asc(table.id)],
+    });
+
+    return rows.map(mapReplyChannelCategoryRow);
+  }
+
   public async getGuildSettingsSnapshot(input: {
     guildId: string;
   }): Promise<AiGuildSettingsSnapshot> {
-    const [config, replyChannels, roleRules] = await Promise.all([
+    const [config, replyChannels, replyChannelCategories, roleRules] = await Promise.all([
       this.getGuildConfig(input.guildId),
       this.listReplyChannels({ guildId: input.guildId }),
+      this.listReplyChannelCategories({ guildId: input.guildId }),
       this.listRoleRules({ guildId: input.guildId }),
     ]);
 
@@ -188,6 +249,10 @@ export class AiConfigRepository {
         channelId: replyChannel.channelId,
         replyMode: replyChannel.replyMode,
       })),
+      replyChannelCategories: replyChannelCategories.map((replyChannelCategory) => ({
+        categoryId: replyChannelCategory.categoryId,
+        replyMode: replyChannelCategory.replyMode,
+      })),
       roleIds: roleRules.map((roleRule) => roleRule.roleId),
       createdAt: config.createdAt.toISOString(),
       updatedAt: config.updatedAt.toISOString(),
@@ -199,6 +264,7 @@ export class AiConfigRepository {
   ): Promise<AiGuildSettingsSnapshot> {
     const now = new Date();
     const replyChannels = dedupeReplyChannels(input.replyChannels);
+    const replyChannelCategories = dedupeReplyChannelCategories(input.replyChannelCategories);
     const roleIds = dedupeRoleIds(input.roleIds);
 
     return this.db.transaction(async (tx) => {
@@ -248,6 +314,22 @@ export class AiConfigRepository {
         );
       }
 
+      await tx
+        .delete(aiReplyChannelCategories)
+        .where(eq(aiReplyChannelCategories.guildId, input.guildId));
+      if (replyChannelCategories.length > 0) {
+        await tx.insert(aiReplyChannelCategories).values(
+          replyChannelCategories.map((replyChannelCategory) => ({
+            id: ulid(),
+            guildId: input.guildId,
+            categoryId: replyChannelCategory.categoryId,
+            replyMode: replyChannelCategory.replyMode,
+            createdAt: now,
+            updatedAt: now,
+          })),
+        );
+      }
+
       await tx.delete(aiRoleRules).where(eq(aiRoleRules.guildId, input.guildId));
       if (roleIds.length > 0) {
         await tx.insert(aiRoleRules).values(
@@ -271,6 +353,10 @@ export class AiConfigRepository {
         replyChannels: replyChannels.map((replyChannel) => ({
           channelId: replyChannel.channelId,
           replyMode: replyChannel.replyMode,
+        })),
+        replyChannelCategories: replyChannelCategories.map((replyChannelCategory) => ({
+          categoryId: replyChannelCategory.categoryId,
+          replyMode: replyChannelCategory.replyMode,
         })),
         roleIds,
         createdAt: createdAt.toISOString(),

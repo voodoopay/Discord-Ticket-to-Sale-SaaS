@@ -28,13 +28,22 @@ export async function GET(
       return access.response;
     }
 
-    const [activation, settings, diagnostics, websiteSources, customQas, discordChannelSources] = await Promise.all([
+    const [
+      activation,
+      settings,
+      diagnostics,
+      websiteSources,
+      customQas,
+      discordChannelSources,
+      discordChannelCategorySources,
+    ] = await Promise.all([
       accessService.getGuildActivationState({ guildId }),
       configService.getGuildSettingsSnapshot({ guildId }),
       diagnosticsService.getGuildDiagnostics({ guildId }),
       knowledgeManagementService.listWebsiteSources({ guildId }),
       knowledgeManagementService.listCustomQas({ guildId }),
       discordChannelSyncService.listChannelSources({ guildId }),
+      discordChannelSyncService.listCategorySources({ guildId }),
     ]);
 
     if (activation.isErr()) {
@@ -73,6 +82,15 @@ export async function GET(
         { status: discordChannelSources.error.statusCode },
       );
     }
+    if (discordChannelCategorySources.isErr()) {
+      return NextResponse.json(
+        {
+          error: discordChannelCategorySources.error.message,
+          code: discordChannelCategorySources.error.code,
+        },
+        { status: discordChannelCategorySources.error.statusCode },
+      );
+    }
 
     return NextResponse.json({
       guild: access.value.guild,
@@ -82,6 +100,7 @@ export async function GET(
       websiteSources: websiteSources.value,
       customQas: customQas.value,
       discordChannelSources: discordChannelSources.value,
+      discordChannelCategorySources: discordChannelCategorySources.value,
     });
   } catch (error) {
     return jsonError(error);

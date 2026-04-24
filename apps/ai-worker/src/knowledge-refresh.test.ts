@@ -37,6 +37,7 @@ describe('AI knowledge refresh scheduler', () => {
         ]),
       ),
       syncChannelSource: vi.fn().mockResolvedValue(ok({ sourceId: 'channel-source-1' })),
+      reconcileCategorySources: vi.fn().mockResolvedValue(ok({ createdCount: 0, syncedCount: 0 })),
     };
     const scheduler = createAiKnowledgeRefreshScheduler({ websiteService, channelService });
 
@@ -52,5 +53,24 @@ describe('AI knowledge refresh scheduler', () => {
       sourceId: 'channel-source-1',
       actorDiscordUserId: 'user-2',
     });
+  });
+
+  it('reconciles auto-selected Discord knowledge categories before channel refresh', async () => {
+    const websiteService = {
+      listAllWebsiteSources: vi.fn().mockResolvedValue(ok([])),
+      syncWebsiteSource: vi.fn(),
+    };
+    const channelService = {
+      reconcileCategorySources: vi.fn().mockResolvedValue(ok({ createdCount: 1, syncedCount: 1 })),
+      listAllChannelSources: vi.fn().mockResolvedValue(ok([])),
+      syncChannelSource: vi.fn(),
+    };
+    const scheduler = createAiKnowledgeRefreshScheduler({ websiteService, channelService });
+
+    await scheduler.runOnce();
+
+    expect(channelService.reconcileCategorySources).toHaveBeenCalledBefore(
+      channelService.listAllChannelSources,
+    );
   });
 });

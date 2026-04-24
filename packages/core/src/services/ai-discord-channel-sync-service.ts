@@ -6,6 +6,7 @@ import { getEnv } from '../config/env.js';
 import { AppError, fromUnknownError } from '../domain/errors.js';
 import {
   AiKnowledgeRepository,
+  type AiDiscordChannelCategorySourceRecord,
   type AiDiscordChannelSourceRecord,
 } from '../repositories/ai-knowledge-repository.js';
 
@@ -49,6 +50,13 @@ type DiscordAttachmentPayload = {
   url?: string | null;
 };
 
+type DiscordGuildChannelPayload = {
+  id: string;
+  name?: string | null;
+  type: number;
+  parent_id?: string | null;
+};
+
 export type AiDiscordChannelSourceSummary = {
   sourceId: string;
   guildId: string;
@@ -65,6 +73,16 @@ export type AiDiscordChannelSourceSummary = {
   updatedAt: string;
 };
 
+export type AiDiscordChannelCategorySourceSummary = {
+  sourceId: string;
+  guildId: string;
+  categoryId: string;
+  createdByDiscordUserId: string | null;
+  updatedByDiscordUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type AiDiscordChannelSyncResult = {
   sourceId: string;
   channelId: string;
@@ -72,12 +90,23 @@ export type AiDiscordChannelSyncResult = {
   lastMessageId: string | null;
 };
 
+export type AiDiscordChannelCategoryReconcileResult = {
+  categoryCount: number;
+  channelCount: number;
+  createdCount: number;
+  syncedCount: number;
+  failedCount: number;
+};
+
 export type AiDiscordChannelSyncRepositoryLike = Pick<
   AiKnowledgeRepository,
   | 'getDiscordChannelSource'
   | 'listDiscordChannelSources'
+  | 'listDiscordChannelCategorySources'
   | 'createDiscordChannelSource'
+  | 'createDiscordChannelCategorySource'
   | 'deleteDiscordChannelSource'
+  | 'deleteDiscordChannelCategorySource'
   | 'markDiscordChannelSyncStarted'
   | 'replaceDiscordChannelMessages'
   | 'markDiscordChannelSyncCompleted'
@@ -96,6 +125,20 @@ function mapChannelSourceSummary(source: AiDiscordChannelSourceRecord): AiDiscor
     lastSyncError: source.lastSyncError,
     lastMessageId: source.lastMessageId,
     messageCount: source.messageCount,
+    createdByDiscordUserId: source.createdByDiscordUserId,
+    updatedByDiscordUserId: source.updatedByDiscordUserId,
+    createdAt: source.createdAt.toISOString(),
+    updatedAt: source.updatedAt.toISOString(),
+  };
+}
+
+function mapChannelCategorySourceSummary(
+  source: AiDiscordChannelCategorySourceRecord,
+): AiDiscordChannelCategorySourceSummary {
+  return {
+    sourceId: source.id,
+    guildId: source.guildId,
+    categoryId: source.categoryId,
     createdByDiscordUserId: source.createdByDiscordUserId,
     updatedByDiscordUserId: source.updatedByDiscordUserId,
     createdAt: source.createdAt.toISOString(),
@@ -188,6 +231,23 @@ export class AiDiscordChannelSyncService {
     }
   }
 
+  public async listCategorySources(input: {
+    guildId: string;
+  }): Promise<Result<AiDiscordChannelCategorySourceSummary[], AppError>> {
+    try {
+      const sources = await this.repository.listDiscordChannelCategorySources({ guildId: input.guildId });
+      return ok(sources.map(mapChannelCategorySourceSummary));
+    } catch {
+      return err(
+        new AppError(
+          'AI_DISCORD_CHANNEL_CATEGORY_SOURCES_READ_FAILED',
+          'Discord channel category sources could not be loaded due to an internal error.',
+          500,
+        ),
+      );
+    }
+  }
+
   public async createChannelSource(input: {
     guildId: string;
     channelId: string;
@@ -236,6 +296,50 @@ export class AiDiscordChannelSyncService {
     }
   }
 
+  public async createCategorySource(input: {
+    guildId: string;
+    categoryId: string;
+    actorDiscordUserId: string;
+  }): Promise<
+    Result<
+      { source: AiDiscordChannelCategorySourceSummary; reconcileResult: AiDiscordChannelCategoryReconcileResult },
+      AppError
+    >
+  > {
+    try {
+      const categoryId = input.categoryId.trim();
+      if (!/^\d{5,32}$/u.test(categoryId)) {
+        return err(new AppError('AI_DISCORD_CHANNEL_CATEGORY_INVALID', 'Discord category ID is invalid.', 422));
+      }
+
+      const created = await this.repository.createDiscordChannelCategorySource({
+        guildId: input.guildId,
+        categoryId,
+        createdByDiscordUserId: input.actorDiscordUserId,
+      });
+      const reconcileResult = await this.reconcileCategorySource(created.record, input.actorDiscordUserId);
+
+      if (reconcileResult.isErr()) {
+        return err(reconcileResult.error);
+      }
+
+      return ok({
+        source: mapChannelCategorySourceSummary(created.record),
+        reconcileResult: reconcileResult.value,
+      });
+    } catch (error) {
+      return err(
+        error instanceof AppError
+          ? error
+          : new AppError(
+              'AI_DISCORD_CHANNEL_CATEGORY_SOURCE_WRITE_FAILED',
+              'Discord channel category source could not be saved due to an internal error.',
+              500,
+            ),
+      );
+    }
+  }
+
   public async deleteChannelSource(input: {
     guildId: string;
     sourceId: string;
@@ -254,6 +358,107 @@ export class AiDiscordChannelSyncService {
           : new AppError(
               'AI_DISCORD_CHANNEL_SOURCE_WRITE_FAILED',
               'Discord channel source could not be deleted due to an internal error.',
+              500,
+            ),
+      );
+    }
+  }
+
+  public async deleteCategorySource(input: {
+    guildId: string;
+    categoryId: string;
+  }): Promise<Result<{ deleted: boolean; removedChannelSourceCount: number }, AppError>> {
+    try {
+      const categoryId = input.categoryId.trim();
+      if (!/^\d{5,32}$/u.test(categoryId)) {
+        return err(new AppError('AI_DISCORD_CHANNEL_CATEGORY_INVALID', 'Discord category ID is invalid.', 422));
+      }
+
+      const guildChannels = await this.fetchGuildChannels(input.guildId);
+      const channelIdsInCategory = new Set(
+        guildChannels
+          .filter((channel) => isSyncableKnowledgeChannel(channel) && channel.parent_id === categoryId)
+          .map((channel) => channel.id),
+      );
+
+      const deleted = await this.repository.deleteDiscordChannelCategorySource({
+        guildId: input.guildId,
+        categoryId,
+      });
+      if (!deleted) {
+        return err(
+          new AppError(
+            'AI_DISCORD_CHANNEL_CATEGORY_SOURCE_NOT_FOUND',
+            'Discord channel category source was not found.',
+            404,
+          ),
+        );
+      }
+
+      const channelSources = await this.repository.listDiscordChannelSources({ guildId: input.guildId });
+      let removedChannelSourceCount = 0;
+      for (const source of channelSources) {
+        if (!channelIdsInCategory.has(source.channelId)) {
+          continue;
+        }
+
+        const sourceDeleted = await this.repository.deleteDiscordChannelSource({
+          guildId: input.guildId,
+          sourceId: source.id,
+        });
+        if (sourceDeleted) {
+          removedChannelSourceCount += 1;
+        }
+      }
+
+      return ok({ deleted: true, removedChannelSourceCount });
+    } catch (error) {
+      return err(
+        error instanceof AppError
+          ? error
+          : new AppError(
+              'AI_DISCORD_CHANNEL_CATEGORY_SOURCE_WRITE_FAILED',
+              'Discord channel category source could not be deleted due to an internal error.',
+              500,
+            ),
+      );
+    }
+  }
+
+  public async reconcileCategorySources(input: {
+    guildId?: string;
+  } = {}): Promise<Result<AiDiscordChannelCategoryReconcileResult, AppError>> {
+    try {
+      const categorySources = await this.repository.listDiscordChannelCategorySources(input);
+      const totals: AiDiscordChannelCategoryReconcileResult = {
+        categoryCount: categorySources.length,
+        channelCount: 0,
+        createdCount: 0,
+        syncedCount: 0,
+        failedCount: 0,
+      };
+
+      for (const categorySource of categorySources) {
+        const result = await this.reconcileCategorySource(categorySource, null);
+        if (result.isErr()) {
+          totals.failedCount += 1;
+          continue;
+        }
+
+        totals.channelCount += result.value.channelCount;
+        totals.createdCount += result.value.createdCount;
+        totals.syncedCount += result.value.syncedCount;
+        totals.failedCount += result.value.failedCount;
+      }
+
+      return ok(totals);
+    } catch (error) {
+      return err(
+        error instanceof AppError
+          ? error
+          : new AppError(
+              'AI_DISCORD_CHANNEL_CATEGORY_RECONCILE_FAILED',
+              'Discord channel category sources could not be reconciled due to an internal error.',
               500,
             ),
       );
@@ -406,4 +611,89 @@ export class AiDiscordChannelSyncService {
 
     return messages;
   }
+
+  private async reconcileCategorySource(
+    categorySource: AiDiscordChannelCategorySourceRecord,
+    actorDiscordUserId: string | null,
+  ): Promise<Result<AiDiscordChannelCategoryReconcileResult, AppError>> {
+    try {
+      const guildChannels = await this.fetchGuildChannels(categorySource.guildId);
+      const channelIds = guildChannels
+        .filter(
+          (channel) =>
+            isSyncableKnowledgeChannel(channel) && channel.parent_id === categorySource.categoryId,
+        )
+        .map((channel) => channel.id);
+
+      const totals: AiDiscordChannelCategoryReconcileResult = {
+        categoryCount: 1,
+        channelCount: channelIds.length,
+        createdCount: 0,
+        syncedCount: 0,
+        failedCount: 0,
+      };
+
+      for (const channelId of channelIds) {
+        const channelSource = await this.repository.createDiscordChannelSource({
+          guildId: categorySource.guildId,
+          channelId,
+          createdByDiscordUserId: actorDiscordUserId,
+        });
+        if (channelSource.created) {
+          totals.createdCount += 1;
+        }
+
+        const syncResult = await this.syncChannelSource({
+          guildId: categorySource.guildId,
+          sourceId: channelSource.record.id,
+          actorDiscordUserId,
+        });
+        if (syncResult.isOk()) {
+          totals.syncedCount += 1;
+        } else {
+          totals.failedCount += 1;
+        }
+      }
+
+      return ok(totals);
+    } catch (error) {
+      return err(
+        error instanceof AppError
+          ? error
+          : new AppError(
+              'AI_DISCORD_CHANNEL_CATEGORY_RECONCILE_FAILED',
+              'Discord channel category source could not be reconciled due to an internal error.',
+              500,
+            ),
+      );
+    }
+  }
+
+  private async fetchGuildChannels(guildId: string): Promise<DiscordGuildChannelPayload[]> {
+    const env = getEnv();
+    const token = env.AI_DISCORD_TOKEN.trim();
+    if (!token) {
+      throw new AppError('AI_DISCORD_TOKEN_MISSING', 'AI bot token is not configured.', 500);
+    }
+
+    const response = await this.fetchImpl(`${env.DISCORD_API_BASE_URL}/guilds/${guildId}/channels`, {
+      headers: {
+        Authorization: `Bot ${token}`,
+      },
+    });
+    if (!response.ok) {
+      throw new AppError(
+        'AI_DISCORD_GUILD_CHANNELS_FAILED',
+        `Discord guild channels could not be loaded (${response.status}).`,
+        response.status === 403 || response.status === 404 ? 422 : 502,
+      );
+    }
+
+    const channels = (await response.json()) as DiscordGuildChannelPayload[];
+    return channels.filter((channel) => typeof channel.id === 'string');
+  }
+}
+
+function isSyncableKnowledgeChannel(channel: DiscordGuildChannelPayload): boolean {
+  return channel.type === 0 || channel.type === 5;
 }

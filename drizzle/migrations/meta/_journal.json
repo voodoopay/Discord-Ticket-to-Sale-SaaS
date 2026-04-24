@@ -218,6 +218,13 @@
       "when": 1776988800000,
       "tag": "0030_ai_discord_channel_sources",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "5",
+      "when": 1776991200000,
+      "tag": "0031_ai_channel_category_rules",
+      "breakpoints": true
     }
   ]
 }

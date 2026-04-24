@@ -8,7 +8,10 @@ export const AI_KNOWLEDGE_REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 export type AiKnowledgeRefreshDependencies = {
   websiteService: Pick<AiKnowledgeManagementService, 'listAllWebsiteSources' | 'syncWebsiteSource'>;
-  channelService: Pick<AiDiscordChannelSyncService, 'listAllChannelSources' | 'syncChannelSource'>;
+  channelService: Pick<
+    AiDiscordChannelSyncService,
+    'listAllChannelSources' | 'reconcileCategorySources' | 'syncChannelSource'
+  >;
 };
 
 export type AiKnowledgeRefreshScheduler = {
@@ -36,7 +39,16 @@ export function createAiKnowledgeRefreshScheduler(
     try {
       const [websiteSourcesResult, channelSourcesResult] = await Promise.all([
         dependencies.websiteService.listAllWebsiteSources(),
-        dependencies.channelService.listAllChannelSources(),
+        dependencies.channelService.reconcileCategorySources().then((result) => {
+          if (result.isErr()) {
+            logger.warn(
+              { errorMessage: result.error.message },
+              'ai knowledge Discord category source reconciliation failed',
+            );
+          }
+
+          return dependencies.channelService.listAllChannelSources();
+        }),
       ]);
 
       if (websiteSourcesResult.isErr()) {

@@ -45,6 +45,10 @@ type SnapshotPayload = {
       channelId: string;
       replyMode: ReplyMode;
     }>;
+    replyChannelCategories: Array<{
+      categoryId: string;
+      replyMode: ReplyMode;
+    }>;
     roleIds: string[];
     createdAt: string | null;
     updatedAt: string | null;
@@ -95,6 +99,12 @@ type SnapshotPayload = {
     lastSyncError: string | null;
     lastMessageId: string | null;
     messageCount: number;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+  discordChannelCategorySources: Array<{
+    sourceId: string;
+    categoryId: string;
     createdAt: string;
     updatedAt: string;
   }>;
@@ -527,6 +537,56 @@ export function AiControlPlane({
     });
   }
 
+  function addDiscordChannelCategorySource(categoryId: string) {
+    if (!selectedGuildId || categoryId === 'uncategorized') {
+      return;
+    }
+
+    runMutation(async () => {
+      setStatusMessage(null);
+
+      const response = await fetch(`/api/guilds/${selectedGuildId}/discord-channel-category-sources`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ categoryId }),
+      });
+
+      if (!response.ok) {
+        setStatusMessage({ kind: 'error', text: await readApiError(response) });
+        return;
+      }
+
+      setStatusMessage({
+        kind: 'success',
+        text: 'Knowledge category saved. Current and future channels in it will refresh automatically.',
+      });
+      await loadGuildPanel(selectedGuildId);
+    });
+  }
+
+  function deleteDiscordChannelCategorySource(categoryId: string) {
+    if (!selectedGuildId || categoryId === 'uncategorized') {
+      return;
+    }
+
+    runMutation(async () => {
+      const response = await fetch(
+        `/api/guilds/${selectedGuildId}/discord-channel-category-sources/${categoryId}`,
+        { method: 'DELETE' },
+      );
+
+      if (!response.ok) {
+        setStatusMessage({ kind: 'error', text: await readApiError(response) });
+        return;
+      }
+
+      setStatusMessage({ kind: 'success', text: 'Knowledge category removed.' });
+      await loadGuildPanel(selectedGuildId);
+    });
+  }
+
   function createCustomQa(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedGuildId || !newQaQuestion.trim() || !newQaAnswer.trim()) {
@@ -648,14 +708,21 @@ export function AiControlPlane({
     : channelCategoryOptions[0]?.id ?? 'uncategorized';
   const visibleReplyChannels = channelsByCategory.get(effectiveReplyCategoryId) ?? [];
   const visibleReplyChannelIds = new Set(visibleReplyChannels.map((channel) => channel.id));
+  const activeReplyCategoryRule = formState?.replyChannelCategories.find(
+    (category) => category.categoryId === effectiveReplyCategoryId,
+  );
   const activeVisibleReplyChannelCount =
     formState?.replyChannels.filter((channel) => visibleReplyChannelIds.has(channel.channelId)).length ?? 0;
+  const activeReplyCategoryCount = formState?.replyChannelCategories.length ?? 0;
   const effectiveKnowledgeCategoryId = selectedKnowledgeCategoryId && channelCategoryOptions.some(
     (category) => category.id === selectedKnowledgeCategoryId,
   )
     ? selectedKnowledgeCategoryId
     : channelCategoryOptions[0]?.id ?? 'uncategorized';
   const visibleKnowledgeChannels = channelsByCategory.get(effectiveKnowledgeCategoryId) ?? [];
+  const activeKnowledgeCategorySource = snapshot?.discordChannelCategorySources.find(
+    (source) => source.categoryId === effectiveKnowledgeCategoryId,
+  );
 
   function selectVisibleReplyChannels() {
     if (!formState || visibleReplyChannels.length === 0) {
@@ -677,13 +744,37 @@ export function AiControlPlane({
   }
 
   function clearVisibleReplyChannels() {
-    if (!formState || visibleReplyChannels.length === 0) {
+    if (!formState) {
       return;
     }
 
     setFormState({
       ...formState,
       replyChannels: formState.replyChannels.filter((channel) => !visibleReplyChannelIds.has(channel.channelId)),
+      replyChannelCategories: formState.replyChannelCategories.filter(
+        (category) => category.categoryId !== effectiveReplyCategoryId,
+      ),
+    });
+  }
+
+  function autoSelectVisibleReplyCategory() {
+    if (!formState || effectiveReplyCategoryId === 'uncategorized') {
+      return;
+    }
+
+    const existing = formState.replyChannelCategories.find(
+      (category) => category.categoryId === effectiveReplyCategoryId,
+    );
+    if (existing) {
+      return;
+    }
+
+    setFormState({
+      ...formState,
+      replyChannelCategories: [
+        ...formState.replyChannelCategories,
+        { categoryId: effectiveReplyCategoryId, replyMode: formState.defaultReplyMode },
+      ],
     });
   }
 
@@ -968,7 +1059,7 @@ export function AiControlPlane({
                     </p>
                   </div>
                   <StatusPill status="neutral">
-                    {formState?.replyChannels.length ?? 0} active
+                    {formState?.replyChannels.length ?? 0} channels / {activeReplyCategoryCount} categories
                   </StatusPill>
                 </div>
 
@@ -988,7 +1079,7 @@ export function AiControlPlane({
                         ))}
                       </select>
                     </label>
-                    <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="grid gap-2 sm:grid-cols-3">
                       <button
                         type="button"
                         onClick={selectVisibleReplyChannels}
@@ -999,8 +1090,20 @@ export function AiControlPlane({
                       </button>
                       <button
                         type="button"
+                        onClick={autoSelectVisibleReplyCategory}
+                        disabled={
+                          !formState ||
+                          effectiveReplyCategoryId === 'uncategorized' ||
+                          Boolean(activeReplyCategoryRule)
+                        }
+                        className="inline-flex min-h-10 cursor-pointer items-center justify-center rounded-md bg-card px-4 text-xs font-semibold uppercase text-foreground transition hover:bg-muted focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Auto-select category
+                      </button>
+                      <button
+                        type="button"
                         onClick={clearVisibleReplyChannels}
-                        disabled={!formState || activeVisibleReplyChannelCount === 0}
+                        disabled={!formState || (activeVisibleReplyChannelCount === 0 && !activeReplyCategoryRule)}
                         className="inline-flex min-h-10 cursor-pointer items-center justify-center rounded-md bg-muted px-4 text-xs font-semibold uppercase text-foreground transition hover:bg-card focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         Clear category
@@ -1014,6 +1117,12 @@ export function AiControlPlane({
                     const selectedChannel = formState?.replyChannels.find(
                       (replyChannel) => replyChannel.channelId === channel.id,
                     );
+                    const activeReplyMode =
+                      selectedChannel?.replyMode ??
+                      activeReplyCategoryRule?.replyMode ??
+                      formState?.defaultReplyMode ??
+                      'inline';
+                    const isCategoryActive = Boolean(activeReplyCategoryRule && !selectedChannel);
 
                     return (
                       <article key={channel.id} className="rounded-md bg-muted px-4 py-4">
@@ -1021,19 +1130,20 @@ export function AiControlPlane({
                           <div>
                             <p className="text-sm font-semibold text-foreground">#{channel.name}</p>
                             <p className="mt-1 text-[0.66rem] uppercase text-muted-foreground">
-                              {selectedChannel ? 'Active' : 'Ignored'}
+                              {selectedChannel ? 'Active' : isCategoryActive ? 'Auto active' : 'Ignored'}
                             </p>
                           </div>
                           <input
                             type="checkbox"
-                            checked={Boolean(selectedChannel)}
+                            checked={Boolean(selectedChannel || activeReplyCategoryRule)}
                             onChange={(event) => updateReplyChannel(channel.id, event.target.checked)}
+                            disabled={isCategoryActive}
                             className="size-5 accent-primary"
                           />
                         </div>
 
                         <select
-                          value={selectedChannel?.replyMode ?? formState?.defaultReplyMode ?? 'inline'}
+                          value={activeReplyMode}
                           onChange={(event) =>
                             updateReplyChannelMode(channel.id, event.target.value as ReplyMode)
                           }
@@ -1228,20 +1338,44 @@ export function AiControlPlane({
                 </div>
 
                 {channelCategoryOptions.length > 0 ? (
-                  <label className="mt-4 block text-xs font-semibold uppercase text-muted-foreground">
-                    Category
-                    <select
-                      value={effectiveKnowledgeCategoryId}
-                      onChange={(event) => setSelectedKnowledgeCategoryId(event.target.value)}
-                      className="mt-2 h-11 w-full rounded-md border border-input bg-card px-3 text-sm normal-case text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
-                    >
-                      {channelCategoryOptions.map((category) => (
-                        <option key={category.id} value={category.id}>
-                          {category.label} ({category.count})
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <div className="mt-4 grid gap-3">
+                    <label className="block text-xs font-semibold uppercase text-muted-foreground">
+                      Category
+                      <select
+                        value={effectiveKnowledgeCategoryId}
+                        onChange={(event) => setSelectedKnowledgeCategoryId(event.target.value)}
+                        className="mt-2 h-11 w-full rounded-md border border-input bg-card px-3 text-sm normal-case text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
+                      >
+                        {channelCategoryOptions.map((category) => (
+                          <option key={category.id} value={category.id}>
+                            {category.label} ({category.count})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <button
+                        type="button"
+                        onClick={() => addDiscordChannelCategorySource(effectiveKnowledgeCategoryId)}
+                        disabled={
+                          isMutating ||
+                          effectiveKnowledgeCategoryId === 'uncategorized' ||
+                          Boolean(activeKnowledgeCategorySource)
+                        }
+                        className="inline-flex min-h-10 cursor-pointer items-center justify-center rounded-md bg-primary px-4 text-xs font-semibold uppercase text-primary-foreground transition hover:bg-secondary focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Auto-select category
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteDiscordChannelCategorySource(effectiveKnowledgeCategoryId)}
+                        disabled={isMutating || !activeKnowledgeCategorySource}
+                        className="inline-flex min-h-10 cursor-pointer items-center justify-center rounded-md bg-muted px-4 text-xs font-semibold uppercase text-foreground transition hover:bg-card focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Clear category
+                      </button>
+                    </div>
+                  </div>
                 ) : null}
 
                 <div className="mt-4 grid gap-3">
@@ -1249,6 +1383,7 @@ export function AiControlPlane({
                     const source = snapshot?.discordChannelSources.find(
                       (channelSource) => channelSource.channelId === channel.id,
                     );
+                    const isAutoKnowledgeChannel = Boolean(activeKnowledgeCategorySource);
 
                     return (
                       <article key={channel.id} className="rounded-md bg-muted px-4 py-4">
@@ -1258,12 +1393,17 @@ export function AiControlPlane({
                             <p className="mt-1 text-[0.66rem] uppercase text-muted-foreground">
                               {source
                                 ? `${source.messageCount} synced messages`
-                                : 'Not used for knowledge'}
+                                : isAutoKnowledgeChannel
+                                  ? 'Auto-selected'
+                                  : 'Not used for knowledge'}
                             </p>
                           </div>
 
                           {source ? (
                             <div className="flex flex-wrap gap-2">
+                              {isAutoKnowledgeChannel ? (
+                                <StatusPill status="neutral">auto</StatusPill>
+                              ) : null}
                               <StatusPill
                                 status={
                                   source.status === 'ready'
@@ -1287,7 +1427,7 @@ export function AiControlPlane({
                               <button
                                 type="button"
                                 onClick={() => deleteDiscordChannelSource(source.sourceId)}
-                                disabled={isMutating}
+                                disabled={isMutating || isAutoKnowledgeChannel}
                                 className="inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-md bg-card px-3 text-xs font-semibold uppercase text-destructive transition hover:bg-background focus-visible:outline-2 focus-visible:outline-destructive disabled:cursor-not-allowed disabled:opacity-60"
                               >
                                 <Trash2 className="size-4" />
@@ -1298,11 +1438,11 @@ export function AiControlPlane({
                             <button
                               type="button"
                               onClick={() => addDiscordChannelSource(channel.id)}
-                              disabled={isMutating}
+                              disabled={isMutating || isAutoKnowledgeChannel}
                               className="inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-md bg-card px-3 text-xs font-semibold uppercase text-foreground transition hover:bg-background focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-60"
                             >
                               <Plus className="size-4" />
-                              Add
+                              {isAutoKnowledgeChannel ? 'Auto' : 'Add'}
                             </button>
                           )}
                         </div>

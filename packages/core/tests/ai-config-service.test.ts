@@ -5,11 +5,13 @@ import { getEnv, resetEnvForTests } from '../src/config/env.js';
 import {
   aiAuthorizedUsers,
   aiGuildConfigs,
+  aiReplyChannelCategories,
   aiReplyChannels,
   aiRoleRules,
   aiWebsiteSources,
   aiKnowledgeDocuments,
   aiCustomQas,
+  aiDiscordChannelCategorySources,
   aiDiscordChannelSources,
   aiDiscordChannelMessages,
 } from '../src/index.js';
@@ -69,11 +71,13 @@ describe('AI env and schema foundation', () => {
   it('exports AI schema tables', () => {
     expect(aiAuthorizedUsers).toBeDefined();
     expect(aiGuildConfigs).toBeDefined();
+    expect(aiReplyChannelCategories).toBeDefined();
     expect(aiReplyChannels).toBeDefined();
     expect(aiRoleRules).toBeDefined();
     expect(aiWebsiteSources).toBeDefined();
     expect(aiKnowledgeDocuments).toBeDefined();
     expect(aiCustomQas).toBeDefined();
+    expect(aiDiscordChannelCategorySources).toBeDefined();
     expect(aiDiscordChannelSources).toBeDefined();
     expect(aiDiscordChannelMessages).toBeDefined();
   });

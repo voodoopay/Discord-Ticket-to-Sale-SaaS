@@ -18,6 +18,7 @@ export type AiRuntimeMessage = {
   };
   content: string;
   memberRoleIds: string[];
+  parentCategoryId?: string | null;
 };
 
 export type AiRuntimeGuildState = {
@@ -29,6 +30,10 @@ export type AiRuntimeGuildState = {
   defaultReplyMode: AiReplyMode;
   replyChannels: Array<{
     channelId: string;
+    replyMode: AiReplyMode;
+  }>;
+  replyChannelCategories: Array<{
+    categoryId: string;
     replyMode: AiReplyMode;
   }>;
   roleIds: string[];
@@ -112,6 +117,7 @@ export function createAiMessageRuntimeDependencies(input?: {
         roleMode: settingsResult.value.roleMode,
         defaultReplyMode: settingsResult.value.defaultReplyMode,
         replyChannels: settingsResult.value.replyChannels,
+        replyChannelCategories: settingsResult.value.replyChannelCategories,
         roleIds: settingsResult.value.roleIds,
       };
     },
@@ -129,12 +135,25 @@ export function createAiMessageRuntimeDependencies(input?: {
 function resolveReplyMode(input: {
   state: AiRuntimeGuildState;
   channelId: string;
+  parentCategoryId?: string | null;
 }): AiReplyMode | null {
   const replyChannel = input.state.replyChannels.find(
     (channel) => channel.channelId === input.channelId,
   );
 
-  return replyChannel?.replyMode ?? null;
+  if (replyChannel) {
+    return replyChannel.replyMode;
+  }
+
+  if (!input.parentCategoryId) {
+    return null;
+  }
+
+  const replyChannelCategory = input.state.replyChannelCategories.find(
+    (category) => category.categoryId === input.parentCategoryId,
+  );
+
+  return replyChannelCategory?.replyMode ?? null;
 }
 
 function mapAnswerToReply(input: {
@@ -178,6 +197,7 @@ export async function handleAiMessage(
   const replyMode = resolveReplyMode({
     state,
     channelId: message.channelId,
+    parentCategoryId: message.parentCategoryId,
   });
   if (!replyMode) {
     return { kind: 'ignored' };

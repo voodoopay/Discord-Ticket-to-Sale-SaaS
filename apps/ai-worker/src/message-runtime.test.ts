@@ -54,6 +54,7 @@ function createGuildState(overrides?: Partial<Awaited<ReturnType<AiMessageRuntim
     roleMode: 'allowlist' as const,
     defaultReplyMode: 'inline' as const,
     replyChannels: [{ channelId: 'allowed-channel', replyMode: 'inline' as const }],
+    replyChannelCategories: [],
     roleIds: ['role-1'],
     ...overrides,
   };
@@ -293,6 +294,34 @@ describe('AI message runtime', () => {
       question: 'refund policy?',
       tonePreset: 'professional',
       toneInstructions: '',
+    });
+  });
+
+  it('allows replies through an auto-selected channel category', async () => {
+    const dependencies = createDependencies({
+      state: createGuildState({
+        replyChannels: [],
+        replyChannelCategories: [{ categoryId: 'category-1', replyMode: 'thread' }],
+      }),
+    });
+
+    const result = await handleAiMessage(
+      {
+        id: 'msg-1',
+        guildId: 'guild-1',
+        channelId: 'new-channel',
+        parentCategoryId: 'category-1',
+        author: { bot: false, id: 'user-1' },
+        content: 'refund policy?',
+        memberRoleIds: ['role-1'],
+      },
+      dependencies,
+    );
+
+    expect(result).toEqual({
+      kind: 'reply',
+      replyMode: 'thread',
+      content: 'Grounded answer',
     });
   });
 
