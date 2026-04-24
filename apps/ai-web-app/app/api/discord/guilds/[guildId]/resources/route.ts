@@ -89,6 +89,7 @@ export async function GET(
       id: string;
       name: string;
       type: number;
+      parent_id?: string | null;
       position?: number;
     }>;
     const rawRoles = (await rolesResponse.json()) as Array<{
@@ -106,6 +107,7 @@ export async function GET(
         id: channel.id,
         name: channel.name,
         type: channel.type,
+        parentId: channel.parent_id ?? null,
       }));
     const categoryChannels = rawChannels
       .filter((channel) => channel.type === DISCORD_CATEGORY_CHANNEL_TYPE)

@@ -50,7 +50,7 @@ describe('ai discord guild resources route', () => {
         new Response(
           JSON.stringify([
             { id: 'category-1', name: 'AI Ops', type: 4, position: 1 },
-            { id: 'channel-1', name: 'ask-ai', type: 0, position: 2 },
+            { id: 'channel-1', name: 'ask-ai', type: 0, parent_id: 'category-1', position: 2 },
           ]),
           { status: 200, headers: { 'Content-Type': 'application/json' } },
         ),
@@ -81,7 +81,7 @@ describe('ai discord guild resources route', () => {
     };
     expect(response.status).toBe(200);
     expect(payload.botInGuild).toBe(true);
-    expect(payload.channels).toEqual([{ id: 'channel-1', name: 'ask-ai', type: 0 }]);
+    expect(payload.channels).toEqual([{ id: 'channel-1', name: 'ask-ai', type: 0, parentId: 'category-1' }]);
     expect(payload.categoryChannels).toEqual([{ id: 'category-1', name: 'AI Ops', type: 4 }]);
     expect(payload.roles).toEqual([{ id: 'role-1', name: 'Premium', color: 123, position: 2 }]);
     expect(payload.inviteUrl).toContain('client_id=ai-client-id');

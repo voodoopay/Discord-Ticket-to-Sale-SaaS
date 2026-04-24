@@ -110,7 +110,7 @@ type ResourcesPayload = {
   botInGuild: boolean;
   inviteUrl: string;
   guild: AiDashboardGuild;
-  channels: Array<{ id: string; name: string; type: number }>;
+  channels: Array<{ id: string; name: string; type: number; parentId: string | null }>;
   categoryChannels: Array<{ id: string; name: string; type: number }>;
   roles: Array<{ id: string; name: string; color: number; position: number }>;
 };
@@ -250,6 +250,7 @@ export function AiControlPlane({
   const [websiteUrl, setWebsiteUrl] = useState('');
   const [newQaQuestion, setNewQaQuestion] = useState('');
   const [newQaAnswer, setNewQaAnswer] = useState('');
+  const [selectedKnowledgeCategoryId, setSelectedKnowledgeCategoryId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState('');
   const [statusMessage, setStatusMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -616,6 +617,35 @@ export function AiControlPlane({
   const currentGuild =
     guilds.find((guild) => guild.id === selectedGuildId) ??
     (snapshot ? snapshot.guild : guilds[0]);
+  const channelsByCategory = new Map<string, ResourcesPayload['channels']>();
+  for (const channel of resources?.channels ?? []) {
+    const categoryId = channel.parentId ?? 'uncategorized';
+    channelsByCategory.set(categoryId, [...(channelsByCategory.get(categoryId) ?? []), channel]);
+  }
+  const knowledgeCategoryOptions = [
+    ...(resources?.categoryChannels ?? [])
+      .filter((category) => (channelsByCategory.get(category.id)?.length ?? 0) > 0)
+      .map((category) => ({
+        id: category.id,
+        label: category.name,
+        count: channelsByCategory.get(category.id)?.length ?? 0,
+      })),
+    ...((channelsByCategory.get('uncategorized')?.length ?? 0) > 0
+      ? [
+          {
+            id: 'uncategorized',
+            label: 'Uncategorized',
+            count: channelsByCategory.get('uncategorized')?.length ?? 0,
+          },
+        ]
+      : []),
+  ];
+  const effectiveKnowledgeCategoryId = selectedKnowledgeCategoryId && knowledgeCategoryOptions.some(
+    (category) => category.id === selectedKnowledgeCategoryId,
+  )
+    ? selectedKnowledgeCategoryId
+    : knowledgeCategoryOptions[0]?.id ?? 'uncategorized';
+  const visibleKnowledgeChannels = channelsByCategory.get(effectiveKnowledgeCategoryId) ?? [];
 
   return (
     <section className="grid gap-4 xl:grid-cols-[18rem_minmax(0,1fr)]">
@@ -1115,8 +1145,25 @@ export function AiControlPlane({
                   <MessagesSquare className="mt-1 size-5 text-primary" />
                 </div>
 
+                {knowledgeCategoryOptions.length > 0 ? (
+                  <label className="mt-4 block text-xs font-semibold uppercase text-muted-foreground">
+                    Category
+                    <select
+                      value={effectiveKnowledgeCategoryId}
+                      onChange={(event) => setSelectedKnowledgeCategoryId(event.target.value)}
+                      className="mt-2 h-11 w-full rounded-md border border-input bg-card px-3 text-sm normal-case text-foreground outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
+                    >
+                      {knowledgeCategoryOptions.map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.label} ({category.count})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+
                 <div className="mt-4 grid gap-3">
-                  {(resources?.channels ?? []).map((channel) => {
+                  {visibleKnowledgeChannels.map((channel) => {
                     const source = snapshot?.discordChannelSources.find(
                       (channelSource) => channelSource.channelId === channel.id,
                     );
@@ -1192,6 +1239,11 @@ export function AiControlPlane({
                       </article>
                     );
                   })}
+                  {resources?.botInGuild && visibleKnowledgeChannels.length === 0 ? (
+                    <article className="ai-soft-surface rounded-md px-4 py-4 text-sm leading-7 text-muted-foreground">
+                      No text or announcement channels are available in this category.
+                    </article>
+                  ) : null}
                 </div>
               </div>
             </div>
